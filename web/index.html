@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoWhat? | Fleet Intelligence</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">Solofleet Auto Monitor</span>
+      <h1>Alert unit error otomatis untuk sensor temperature Solofleet.</h1>
+      <p>Backend lokal ini narik data Solofleet tiap menit, cek error `vtemp1/vtemp2 = 0` minimal 5 menit, lalu tampilkan live alert dan compile per day tanpa kamu cek unit satu-satu.</p>
+    </section>
+
+    <div id="banner" class="status-strip hidden"></div>
+
+    <section class="layout">
+      <aside class="panel controls">
+        <div>
+          <h2>Session Solofleet</h2>
+          <h3>Session Cookie</h3>
+          <textarea id="session-cookie" placeholder="Paste cookie dari browser Solofleet di sini kalau mau replace session yang lama..."></textarea>
+          <p id="cookie-preview" class="hint"></p>
+          <div class="button-row">
+            <button id="save-config" class="button-primary" type="button">Save config</button>
+            <button id="clear-cookie" class="button-secondary" type="button">Clear cookie</button>
+          </div>
+        </div>
+
+        <div>
+          <h2>Unit Monitor</h2>
+          <div class="button-row">
+            <button id="discover-units" class="button-secondary" type="button">Auto discover units</button>
+          </div>
+          <h3>Units</h3>
+          <textarea id="units-input" placeholder="Satu baris per unit. Format: col39|Truck A"></textarea>
+          <p class="hint">Kalau auto discover belum sukses, fallback tetap bisa isi manual `ddl|label`. Contoh: `col39|B 1234 XYZ`.</p>
+        </div>
+
+        <div>
+          <h2>Polling Config</h2>
+          <div class="two-up">
+            <div><h3>Base URL</h3><input id="base-url" type="text"></div>
+            <div><h3>Endpoint</h3><input id="endpoint-path" type="text"></div>
+          </div>
+          <div>
+            <h3>Referer Path</h3>
+            <input id="referer-path" type="text">
+          </div>
+          <div class="two-up">
+            <div><h3>Vehicle Page</h3><input id="vehicle-page-path" type="text"></div>
+            <div><h3>Discovery Path</h3><input id="discovery-endpoint-path" type="text"></div>
+          </div>
+          <div>
+            <h3>Vehicle Role ID</h3>
+            <input id="vehicle-role-id" type="text" placeholder="Auto kalau bisa dibaca dari halaman Vehicle">
+          </div>
+          <div class="two-up">
+            <div><h3>Poll Sec</h3><input id="poll-interval" type="number" min="15"></div>
+            <div><h3>Lookback Min</h3><input id="lookback-minutes" type="number" min="10"></div>
+          </div>
+          <div class="two-up">
+            <div><h3>Sample Sec</h3><input id="request-interval" type="number" min="30"></div>
+            <div><h3>Retention Day</h3><input id="retention-days" type="number" min="1"></div>
+          </div>
+          <div class="two-up">
+            <div><h3>Min Duration</h3><input id="min-duration" type="number" min="1"></div>
+            <div><h3>Max Gap</h3><input id="max-gap" type="number" min="1" placeholder="Auto"></div>
+          </div>
+          <div class="two-up">
+            <div><h3>Archive Type</h3><input id="archive-type" type="text"></div>
+            <div><h3>Temp Profile</h3><input id="temp-profile" type="text"></div>
+          </div>
+          <div>
+            <h3>Temperature Processing</h3>
+            <input id="temp-processing" type="text">
+          </div>
+          <label class="check-row"><input id="auto-start" type="checkbox"> Start polling otomatis saat server lokal dinyalakan</label>
+          <div class="button-row">
+            <button id="poll-now" class="button-secondary" type="button">Poll now</button>
+            <button id="toggle-polling" class="button-primary" type="button">Start auto polling</button>
+          </div>
+        </div>
+
+        <div>
+          <h2>Report Range</h2>
+          <div class="two-up">
+            <div><h3>Start Date</h3><input id="start-date" type="date"></div>
+            <div><h3>End Date</h3><input id="end-date" type="date"></div>
+          </div>
+          <div class="button-row">
+            <button id="refresh-dashboard" class="button-ghost" type="button">Refresh dashboard</button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="body-grid">
+        <section class="panel">
+          <h2>Overview</h2>
+          <div id="stats" class="stats-grid"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Runtime Status</h2>
+          <div id="runtime-summary" class="source-grid"></div>
+        </section>
+
+        <section class="panel table-panel">
+          <header>
+            <div>
+              <h2>Live Alert Unit Error</h2>
+              <p class="hint">Alert yang masih dianggap aktif dari poll terbaru.</p>
+            </div>
+            <button id="export-alerts" class="button-ghost" type="button">Export live CSV</button>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Unit Label</th>
+                  <th>Vehicle</th>
+                  <th>Type</th>
+                  <th>Start</th>
+                  <th>Last Seen</th>
+                  <th>Minutes</th>
+                  <th>Speed Range</th>
+                  <th>Sensor Context</th>
+                </tr>
+              </thead>
+              <tbody id="live-alerts-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <header>
+            <div>
+              <h2>Compile Unit Error Per Day</h2>
+              <p class="hint">Bisa ditarik pakai date range di kiri.</p>
+            </div>
+            <button id="export-compile" class="button-ghost" type="button">Export compile CSV</button>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Unit</th>
+                  <th>Incidents</th>
+                  <th>Temp1</th>
+                  <th>Temp2</th>
+                  <th>Both</th>
+                  <th>Total Minutes</th>
+                  <th>Longest Minutes</th>
+                </tr>
+              </thead>
+              <tbody id="compile-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <header>
+            <div>
+              <h2>Daily Totals</h2>
+              <p class="hint">Ringkasan harian semua unit.</p>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Units</th>
+                  <th>Incidents</th>
+                  <th>Critical</th>
+                  <th>Total Minutes</th>
+                </tr>
+              </thead>
+              <tbody id="daily-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <header>
+            <div>
+              <h2>Unit Poll Status</h2>
+              <p class="hint">Buat lihat unit mana yang datanya masuk dan mana yang error fetch.</p>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Label</th>
+                  <th>DDL</th>
+                  <th>Vehicle</th>
+                  <th>Last Success</th>
+                  <th>Last Record</th>
+                  <th>Records</th>
+                  <th>Incidents</th>
+                  <th>Live</th>
+                  <th>Fetch Status</th>
+                </tr>
+              </thead>
+              <tbody id="units-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
+
