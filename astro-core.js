@@ -1,5 +1,5 @@
 const MIN_VALID_STAY_MS = 3 * 60 * 1000;
-const EXPORT_TIMEZONE = String(process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
+const EXPORT_TIMEZONE = String(process.env.ASTRO_EXPORT_TIMEZONE || 'UTC').trim() || 'UTC';
 
 function formatDateParts(date) {
   const parts = new Intl.DateTimeFormat('en-GB', {

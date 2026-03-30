@@ -129,6 +129,11 @@ const fmtClock = (value) => {
   return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
 };
 const fmtStayDuration = (startValue, endValue) => formatStayText(startValue, endValue);
+const ASTRO_DISPLAY_TIMEZONE = 'UTC';
+const fmtAstroDateCompact = (value) => {
+  const parsed = parseDateValue(value);
+  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: ASTRO_DISPLAY_TIMEZONE }).format(parsed) : '-';
+};
 const toDateTimeLocalInput = (value) => {
   const parsed = parseDateValue(value);
   if (!parsed) return '';
@@ -398,7 +403,7 @@ export default function App() {
       row.rit,
       row.unitLabel || row.unitId,
       row.whName,
-      fmtDateCompact(row.whEta),
+      fmtAstroDateCompact(row.whEta),
       fmtNum(row.whArrivalTemp, 1),
       fmtNum(row.whDepartureTemp, 1),
       fmtStayDuration(row.whEta, row.whEtd),
@@ -406,7 +411,7 @@ export default function App() {
     for (let index = 0; index < astroReportMaxPods; index += 1) {
       const pod = row.pods?.[index];
       cells.push(
-        pod ? fmtDateCompact(pod.eta) : '-',
+        pod ? fmtAstroDateCompact(pod.eta) : '-',
         pod ? fmtNum(pod.arrivalTemp, 1) : '-',
         pod ? fmtNum(pod.departureTemp, 1) : '-',
         pod ? fmtStayDuration(pod.eta, pod.etd) : '-',
