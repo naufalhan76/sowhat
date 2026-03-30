@@ -3892,8 +3892,19 @@ async function buildAstroReportPayload(searchParams) {
           };
         });
       const routeRows = buildAstroDisplayRows(route, accountConfig, unitLabel, routeDiagnostics, startDate, endDate);
+      const completeServiceDates = new Set(routeDiagnostics.filter(function (row) {
+        return row.status === 'complete';
+      }).map(function (row) {
+        return String(row.serviceDate || '');
+      }).filter(Boolean));
       const incompleteRows = routeDiagnostics.filter(function (row) {
-        return row.status !== 'complete';
+        if (row.status === 'complete') {
+          return false;
+        }
+        if (row.status === 'outside_window' && completeServiceDates.has(String(row.serviceDate || ''))) {
+          return false;
+        }
+        return true;
       });
       if (!routeDiagnostics.length) {
         warnings.push(route.unitId + ' (' + (accountConfig.label || accountConfig.id) + '): historical ada, tapi belum ketemu visit Astro yang valid di range ini.');
