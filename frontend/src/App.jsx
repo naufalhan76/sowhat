@@ -1,4 +1,4 @@
-
+﻿
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
   Activity, ArrowRight, BarChart3, Box, ChevronLeft, ChevronRight,
@@ -119,6 +119,48 @@ const formatStayText = (startValue, endValue) => {
   if (hours && minutes) return `${hours}h ${minutes}m`;
   if (hours) return `${hours}h`;
   return `${minutes}m`;
+};
+const formatMinutesText = (totalMinutes) => {
+  if (!Number.isFinite(totalMinutes) || totalMinutes < 0) return '-';
+  const rounded = Math.round(totalMinutes);
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  if (hours && minutes) return `${hours}h ${minutes}m`;
+  if (hours) return `${hours}h`;
+  return `${minutes}m`;
+};
+const haversineKm = (leftLat, leftLng, rightLat, rightLng) => {
+  const lat1 = Number(leftLat);
+  const lng1 = Number(leftLng);
+  const lat2 = Number(rightLat);
+  const lng2 = Number(rightLng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0;
+  const toRad = (value) => value * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const calculateTripMetrics = (records = []) => {
+  const ordered = [...(records || [])]
+    .map((record) => ({ ...record, parsedTimestamp: parseDateValue(record.timestamp) }))
+    .filter((record) => record.parsedTimestamp)
+    .sort((left, right) => left.parsedTimestamp.getTime() - right.parsedTimestamp.getTime());
+  if (ordered.length < 2) return { distanceKm: 0, movingMinutes: 0, stoppedMinutes: 0 };
+  let distanceKm = 0;
+  let movingMinutes = 0;
+  let stoppedMinutes = 0;
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1];
+    const current = ordered[index];
+    const diffMinutes = (current.parsedTimestamp.getTime() - previous.parsedTimestamp.getTime()) / 60000;
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) continue;
+    distanceKm += haversineKm(previous.latitude, previous.longitude, current.latitude, current.longitude);
+    const moving = Number(previous.speed ?? current.speed ?? 0) > 0;
+    if (moving) movingMinutes += diffMinutes;
+    else stoppedMinutes += diffMinutes;
+  }
+  return { distanceKm, movingMinutes, stoppedMinutes };
 };
 const DISPLAY_TIMEZONE = 'Asia/Bangkok';
 const fmtDate = (value) => {
@@ -318,6 +360,8 @@ export default function App() {
   const [adminPodForm, setAdminPodForm] = useState(EMPTY_ADMIN_POD_FORM);
   const [astroLocationForm, setAstroLocationForm] = useState(EMPTY_ASTRO_LOCATION_FORM);
   const [astroRouteForm, setAstroRouteForm] = useState(EMPTY_ASTRO_ROUTE_FORM);
+  const [astroLocationSectionOpen, setAstroLocationSectionOpen] = useState(false);
+  const [astroRouteSectionOpen, setAstroRouteSectionOpen] = useState(false);
   const [astroCsvText, setAstroCsvText] = useState('');
   const [astroLocationExpanded, setAstroLocationExpanded] = useState({});
   const [astroRouteExpanded, setAstroRouteExpanded] = useState({});
@@ -358,6 +402,7 @@ export default function App() {
     return map;
   }, [astroRouteUnitOptions]);
   const astroRouteFilteredUnitOptions = useMemo(() => astroRouteUnitOptions.filter((unit) => unit.accountId === astroRouteForm.accountId).map((unit) => ({ value: unit.id, label: `${unit.accountLabel} | ${unit.label || unit.id}` })), [astroRouteUnitOptions, astroRouteForm.accountId]);
+  const historyTripMetrics = useMemo(() => calculateTripMetrics(unitDetail?.records || []), [unitDetail?.records]);
   const astroWhOptions = useMemo(() => astroWhLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label)), [astroWhLocations]);
   const astroPoolOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPoolLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPoolLocations]);
   const astroPodOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPodLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPodLocations]);
@@ -1074,6 +1119,7 @@ export default function App() {
   };
 
   const editAstroLocationEntry = (location) => {
+    setAstroLocationSectionOpen(true);
     setAstroLocationForm({
       id: location.id || '',
       name: location.name || '',
@@ -1123,6 +1169,7 @@ export default function App() {
   };
 
   const editAstroRouteEntry = (route) => {
+    setAstroRouteSectionOpen(true);
     setAstroRouteForm({
       id: route.id || '',
       accountId: route.accountId || 'primary',
@@ -1653,10 +1700,15 @@ export default function App() {
                   </div>
                   <div className="historical-summary">{historicalFleet.length} unit tersedia buat dipilih dari fleet live. Showing {historicalRangeApplied.startDate} to {historicalRangeApplied.endDate}.</div>
                   {selectedHistoricalRow ? <>
-                    <div className="focus-side-meta">
+                                        <div className="focus-side-meta">
                       <strong>{selectedHistoricalRow.id} | {selectedHistoricalRow.label}</strong>
                       <div className="subtle-line">{selectedHistoricalRow.accountLabel || selectedHistoricalRow.accountId}</div>
                       <div className="subtle-line">{selectedHistoricalRow.customerName || 'No customer profile'}</div>
+                    </div>
+                    <div className="unit-summary-grid historical-metrics-grid">
+                      <SummaryMetric label="Trip km" value={fmtNum(historyTripMetrics.distanceKm, 1)} />
+                      <SummaryMetric label="Moving" value={formatMinutesText(historyTripMetrics.movingMinutes)} />
+                      <SummaryMetric label="Stopped" value={formatMinutesText(historyTripMetrics.stoppedMinutes)} />
                     </div>
                     <TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
                     <div className="spacer-16" />
@@ -1673,14 +1725,12 @@ export default function App() {
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>API Monitor</h2><p>Trace ringan untuk lihat endpoint Solofleet API yang ditarik oleh backend, error, dan duration.</p></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Requests</span><strong>{apiMonitor?.totals?.requests ?? 0}</strong></div><div className="mini-metric"><span>Errors</span><strong>{apiMonitor?.totals?.errors ?? 0}</strong></div><div className="mini-metric"><span>Slow</span><strong>{apiMonitor?.totals?.slowRequests ?? 0}</strong></div><div className="mini-metric"><span>Endpoints</span><strong>{apiMonitor?.totals?.uniqueEndpoints ?? 0}</strong></div></div></CardContent></Card>
             <div className="split-panels split-panels-tall">
               <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Endpoint summary</h2><p>Hit count, error count, dan average duration per endpoint.</p></div></CardHeader><CardContent><DataTable columns={['Method', 'Path', 'Hits', 'Errors', 'Avg ms', 'Last status', 'Last at', 'Last error']} emptyMessage="Belum ada traffic API tercatat." rows={(apiMonitor?.endpointSummary || []).map((row) => [row.method, row.path, row.hits, row.errorCount, fmtNum(row.avgDurationMs, 1), row.lastStatusCode ?? '-', fmtDate(row.lastAt), row.lastError || '-'])} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Recent requests</h2><p>Request data terbaru ke Solofleet beserta status HTTP-nya.</p></div></CardHeader><CardContent><DataTable columns={['Time', 'Method', 'Path', 'Status', 'Duration', 'Error']} emptyMessage="Belum ada recent request." rows={(apiMonitor?.recent || []).slice(0, 60).map((row) => [fmtDate(row.timestamp), row.method, `${row.path}${row.query || ''}`, row.statusCode, `${fmtNum(row.durationMs, 0)} ms`, row.error || '-'])} /></CardContent></Card>
+              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Recent requests</h2><p>Request data terbaru ke Solofleet beserta status HTTP-nya.</p></div></CardHeader><CardContent><DataTable columns={['Time', 'Method', 'Path', 'Status', 'Duration', 'Error']} pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} emptyMessage="Belum ada recent request." rows={(apiMonitor?.recent || []).map((row) => [fmtDate(row.timestamp), row.method, `${row.path}${row.query || ''}`, row.statusCode, `${fmtNum(row.durationMs, 0)} ms`, row.error || '-'])} /></CardContent></Card>
             </div>
           </> : null}
                     {activePanel === 'config' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Masukin login Solofleet di sini kalau mau tambah account baru atau refresh session yang sudah ada. Kalau credential salah atau sesi gagal diverifikasi, modal error bakal langsung muncul.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Customer grouping + setpoint</h2><p>Format: <code>Customer|min|max|COL89,COL90</code></p></div></CardHeader><CardContent><label className="field"><span>Customer profiles</span><textarea rows="8" value={form.customerProfilesText} onChange={(event) => setForm((current) => ({ ...current, customerProfilesText: event.target.value }))} /></label></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>POD config</h2><p>Format: <code>POD|lat|lng|radiusMeter|maxSpeed|customer|COL89,COL90</code></p></div></CardHeader><CardContent><label className="field"><span>POD sites</span><textarea rows="8" value={form.podSitesText} onChange={(event) => setForm((current) => ({ ...current, podSitesText: event.target.value }))} /></label></CardContent></Card>
             <Card ref={astroLocationCardRef} className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
@@ -1688,10 +1738,11 @@ export default function App() {
                   <p>Master lokasi WH / POD / POOL buat report Astro. Bisa bulk import CSV atau manual satu per satu.</p>
                 </div>
                 <div className="inline-buttons">
-                  <Button color="primary" onPress={saveAstroLocationEntry}>{astroLocationForm.id ? 'Update location' : 'Save location'}</Button>
+                  <Button variant="bordered" onPress={() => setAstroLocationSectionOpen((current) => !current)}>{astroLocationSectionOpen ? 'Collapse' : 'Expand'}</Button>
+                  {astroLocationSectionOpen ? <Button color="primary" onPress={saveAstroLocationEntry}>{astroLocationForm.id ? 'Update location' : 'Save location'}</Button> : null}
                 </div>
               </CardHeader>
-              <CardContent>
+              {astroLocationSectionOpen ? <CardContent>
                 <div className="settings-stack">
                   <div className="form-grid astro-config-grid">
                     <label className="field"><span>Location name</span><input type="text" value={astroLocationForm.name} onChange={(event) => setAstroLocationForm((current) => ({ ...current, name: event.target.value }))} placeholder="Astro WH CBN" /></label>
@@ -1763,7 +1814,7 @@ export default function App() {
                     })}
                   </div> : <div className="empty-state">Belum ada Astro location.</div>}
                 </div>
-              </CardContent>
+              </CardContent> : null}
             </Card>
             <Card ref={astroRouteCardRef} className="panel-card">
               <CardHeader className="panel-card-header">
@@ -1772,10 +1823,11 @@ export default function App() {
                   <p>Mapping nopol Astro ke WH, POOL, urutan POD, dan window rit per unit.</p>
                 </div>
                 <div className="inline-buttons">
-                  <Button color="primary" onPress={saveAstroRouteEntry}>{astroRouteForm.id ? 'Update route' : 'Save route'}</Button>
+                  <Button variant="bordered" onPress={() => setAstroRouteSectionOpen((current) => !current)}>{astroRouteSectionOpen ? 'Collapse' : 'Expand'}</Button>
+                  {astroRouteSectionOpen ? <Button color="primary" onPress={saveAstroRouteEntry}>{astroRouteForm.id ? 'Update route' : 'Save route'}</Button> : null}
                 </div>
               </CardHeader>
-              <CardContent>
+              {astroRouteSectionOpen ? <CardContent>
                 <div className="settings-stack">
                   <div className="form-grid astro-config-grid">
                     <SearchableSelect label="Account" value={astroRouteForm.accountId} options={astroRouteAccountOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, accountId: nextValue || current.accountId, unitId: '' }))} placeholder="Search account..." />
@@ -1864,7 +1916,7 @@ export default function App() {
                     })}
                   </div> : <div className="empty-state">Belum ada Astro route config.</div>}
                 </div>
-              </CardContent>
+              </CardContent> : null}
             </Card>
           </> : null}
 
@@ -2167,6 +2219,7 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
   const state = health(row);
   const autoRefreshSeconds = 60;
   const routeRecords = detail?.records || [];
+  const tripMetrics = calculateTripMetrics(routeRecords);
   return <div className="fleet-expand-shell fleet-expand-shell-modal">
     <div className="fleet-expand-head">
       <div>
@@ -2188,11 +2241,14 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
         <Button variant="bordered" onPress={onSeeHistorical}>See historical</Button>
       </div>
     </div>
-    <div className="unit-summary-grid">
+        <div className="unit-summary-grid">
       <SummaryMetric label="Temp 1" value={fmtNum(row.liveTemp1)} danger={row.liveSensorFaultType === 'temp1' || row.liveSensorFaultType === 'temp1+temp2'} />
       <SummaryMetric label="Temp 2" value={fmtNum(row.liveTemp2)} danger={row.liveSensorFaultType === 'temp2' || row.liveSensorFaultType === 'temp1+temp2'} />
       <SummaryMetric label="Gap" value={fmtNum(row.liveTempDelta)} />
       <SummaryMetric label="Speed" value={fmtNum(row.speed, 0)} />
+      <SummaryMetric label="Trip km" value={fmtNum(tripMetrics.distanceKm, 1)} />
+      <SummaryMetric label="Moving" value={formatMinutesText(tripMetrics.movingMinutes)} />
+      <SummaryMetric label="Stopped" value={formatMinutesText(tripMetrics.stoppedMinutes)} />
       <SummaryMetric label="Customer setpoint" value={row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : 'Not set'} danger={rowHasSetpointIssue(row)} />
       <SummaryMetric label="Status" value={row.liveSensorFaultLabel || row.setpointLabel || (rowHasSensorError(row) ? state.label : 'Normal')} danger={rowHasSetpointIssue(row) || rowHasSensorError(row)} />
       <SummaryMetric label="GPS" value={row.errGps || 'OK'} danger={Boolean(row.errGps) || rowHasGpsLate(row)} />
@@ -2646,6 +2702,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 
