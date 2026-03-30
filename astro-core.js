@@ -1,5 +1,14 @@
 const MIN_VALID_STAY_MS = 3 * 60 * 1000;
+const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 const EXPORT_TIMEZONE = String(process.env.ASTRO_EXPORT_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
+
+function toSolofleetLocalDate(timestamp) {
+  const numeric = Number(timestamp);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return new Date(numeric + (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000));
+}
 
 function formatDateParts(date) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -392,17 +401,26 @@ function buildVisitEvents(records, location) {
 }
 
 function formatLocalDay(timestamp) {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const date = toSolofleetLocalDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
 function shiftDay(dayText, deltaDays) {
-  const date = new Date(`${dayText}T00:00:00`);
-  date.setDate(date.getDate() + deltaDays);
-  return formatLocalDay(date.getTime());
+  const match = String(dayText || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return '';
+  }
+  const [, year, month, day] = match;
+  const utcTimestamp = Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0)
+    - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000)
+    + (deltaDays * 24 * 60 * 60 * 1000);
+  return formatLocalDay(utcTimestamp);
 }
 
 function inferRitInfo(timestamp, route) {
@@ -411,8 +429,11 @@ function inferRitInfo(timestamp, route) {
     { key: 'rit2', label: 'Rit 2', window: route.rit2 },
   ].filter((entry) => entry.window && entry.window.enabled !== false);
 
-  const date = new Date(timestamp);
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const date = toSolofleetLocalDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
   const localDay = formatLocalDay(timestamp);
 
   for (const entry of windows) {
