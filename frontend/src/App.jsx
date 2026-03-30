@@ -5,6 +5,7 @@ import {
   Flag, LayoutDashboard, Map as MapIcon, Navigation,
   RefreshCw, Settings, ShieldAlert, Thermometer, Zap, Search
 } from 'lucide-react';
+import L from 'leaflet';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
   const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
   return <button type="button" className={`sf-btn ${baseClass} ${className}`} onClick={onPress} {...props}>{children}</button>;
@@ -2104,6 +2105,7 @@ export default function App() {
               row={expandedFleetRow}
               detail={activeDetailRow && unitRowKey(activeDetailRow) === unitRowKey(expandedFleetRow) ? unitDetail : { records: [] }}
               busy={activeDetailRow && unitRowKey(activeDetailRow) === unitRowKey(expandedFleetRow) ? detailBusy : false}
+              rangeLabel={`${range.startDate} to ${range.endDate}`}
               onOpenTempErrors={() => {
                 openUnit(expandedFleetRow.accountId || 'primary', expandedFleetRow.id, 'temp-errors');
                 setExpandedFleetRowKey('');
@@ -2149,10 +2151,11 @@ function SummaryMetric({ label, value, danger = false }) {
   return <div className={danger ? 'mini-metric mini-metric-danger' : 'mini-metric'}><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistorical }) {
+function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistorical, rangeLabel }) {
   if (!row) return null;
   const state = health(row);
   const autoRefreshSeconds = 60;
+  const routeRecords = detail?.records || [];
   return <div className="fleet-expand-shell fleet-expand-shell-modal">
     <div className="fleet-expand-head">
       <div>
@@ -2183,7 +2186,176 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
       <SummaryMetric label="Status" value={row.liveSensorFaultLabel || row.setpointLabel || (rowHasSensorError(row) ? state.label : 'Normal')} danger={rowHasSetpointIssue(row) || rowHasSensorError(row)} />
       <SummaryMetric label="GPS" value={row.errGps || 'OK'} danger={Boolean(row.errGps) || rowHasGpsLate(row)} />
     </div>
-    <TemperatureChart records={detail?.records || []} busy={busy} title="Temperature trend" description="Historical Solofleet dari unit yang sedang kamu buka. Hover line buat lihat suhu dan waktu, lalu pakai zoom controls kalau mau fokus ke window tertentu." compact />
+    <UnitRouteMap row={row} records={routeRecords} busy={busy} rangeLabel={rangeLabel} />
+    <TemperatureChart records={routeRecords} busy={busy} title="Temperature trend" description="Historical Solofleet dari unit yang sedang kamu buka. Hover line buat lihat suhu dan waktu, lalu pakai zoom controls kalau mau fokus ke window tertentu." compact />
+  </div>;
+}
+
+function UnitRouteMap({ row, records, busy, rangeLabel }) {
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const containerRef = useRef(null);
+  const [showRoute, setShowRoute] = useState(true);
+  const trackPoints = useMemo(() => {
+    const next = [];
+    let previousKey = '';
+    for (const record of (records || []).slice().sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0))) {
+      const latitude = Number(record?.latitude);
+      const longitude = Number(record?.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        continue;
+      }
+      const key = `${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
+      if (key === previousKey) {
+        continue;
+      }
+      previousKey = key;
+      next.push({
+        latitude,
+        longitude,
+        timestamp: record.timestamp || null,
+        locationSummary: record.locationSummary || '',
+      });
+    }
+    return next;
+  }, [records]);
+  const currentPoint = useMemo(() => {
+    const latitude = Number(row?.latitude);
+    const longitude = Number(row?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return {
+      latitude,
+      longitude,
+      timestamp: row?.lastUpdatedAt || null,
+      locationSummary: row?.locationSummary || '',
+    };
+  }, [row?.latitude, row?.longitude, row?.lastUpdatedAt, row?.locationSummary]);
+  const buildPopupHtml = (title, point) => [
+    `<strong>${title}</strong>`,
+    point?.timestamp ? fmtDate(point.timestamp) : '-',
+    point?.locationSummary || 'No location',
+    `${fmtCoord(point?.latitude)}, ${fmtCoord(point?.longitude)}`,
+  ].filter(Boolean).join('<br/>');
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) {
+      return undefined;
+    }
+    const map = L.map(containerRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+      preferCanvas: true,
+    }).setView([row?.latitude || -6.2, row?.longitude || 106.8], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    const layer = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    layerRef.current = layer;
+    window.setTimeout(() => map.invalidateSize(), 80);
+    return () => {
+      layer.clearLayers();
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
+  }, [row?.latitude, row?.longitude]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!map || !layer) {
+      return;
+    }
+
+    layer.clearLayers();
+    const bounds = [];
+    const lastTrackPoint = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
+    const currentMatchesLastTrack = currentPoint && lastTrackPoint
+      ? Math.abs(currentPoint.latitude - lastTrackPoint.latitude) < 0.00005
+        && Math.abs(currentPoint.longitude - lastTrackPoint.longitude) < 0.00005
+      : false;
+
+    if (showRoute && trackPoints.length > 1) {
+      const latLngs = trackPoints.map((point) => {
+        const latLng = [point.latitude, point.longitude];
+        bounds.push(latLng);
+        return latLng;
+      });
+      L.polyline(latLngs, {
+        color: '#ff7a2f',
+        weight: 4,
+        opacity: 0.92,
+      }).addTo(layer);
+    }
+
+    if (trackPoints.length) {
+      const startPoint = trackPoints[0];
+      bounds.push([startPoint.latitude, startPoint.longitude]);
+      L.circleMarker([startPoint.latitude, startPoint.longitude], {
+        radius: 6,
+        weight: 2,
+        color: '#0f172a',
+        fillColor: '#34d399',
+        fillOpacity: 1,
+      }).bindTooltip('Start point').bindPopup(buildPopupHtml('Start point', startPoint)).addTo(layer);
+
+      const endPoint = trackPoints[trackPoints.length - 1];
+      bounds.push([endPoint.latitude, endPoint.longitude]);
+      L.circleMarker([endPoint.latitude, endPoint.longitude], {
+        radius: 7,
+        weight: 2,
+        color: '#0f172a',
+        fillColor: currentMatchesLastTrack ? '#38bdf8' : '#fb923c',
+        fillOpacity: 1,
+      }).bindTooltip(currentMatchesLastTrack ? 'Current live position' : 'Last history point').bindPopup(buildPopupHtml(currentMatchesLastTrack ? 'Current live position' : 'Last history point', endPoint)).addTo(layer);
+    }
+
+    if (currentPoint && !currentMatchesLastTrack) {
+      bounds.push([currentPoint.latitude, currentPoint.longitude]);
+      L.circleMarker([currentPoint.latitude, currentPoint.longitude], {
+        radius: 8,
+        weight: 2,
+        color: '#0f172a',
+        fillColor: '#38bdf8',
+        fillOpacity: 1,
+      }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', currentPoint)).addTo(layer);
+    }
+
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 14);
+    } else if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+    }
+    window.setTimeout(() => map.invalidateSize(), 50);
+  }, [trackPoints, currentPoint, showRoute]);
+
+  const routePointCount = trackPoints.length;
+  const hasMapData = routePointCount > 0 || Boolean(currentPoint);
+
+  return <div className="unit-map-shell unit-map-shell-dark">
+    <div className="unit-map-head">
+      <div>
+        <strong>Route history map</strong>
+        <span>{rangeLabel ? `Track mengikuti date range ${rangeLabel}` : 'Track mengikuti historical data yang sedang ditarik.'}</span>
+      </div>
+      <div className="unit-map-actions">
+        <Button variant="bordered" onPress={() => setShowRoute((current) => !current)}>{showRoute ? 'Hide route' : 'Show route'}</Button>
+      </div>
+      <div className="chip-row unit-map-chip-row">
+        <Chip variant="flat">{routePointCount ? `${routePointCount} titik route` : 'Belum ada titik route'}</Chip>
+        <Chip variant="flat">OSM dark mode</Chip>
+        <Chip variant="flat">Start / current / end marker</Chip>
+      </div>
+    </div>
+    <div className="unit-map-frame">
+      <div ref={containerRef} className="unit-map-canvas" />
+      {busy ? <div className="unit-map-overlay">Loading route map...</div> : null}
+      {!busy && !hasMapData ? <div className="unit-map-overlay">Belum ada koordinat historis untuk digambar di map.</div> : null}
+    </div>
   </div>;
 }
 
@@ -2461,6 +2633,10 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
 
 
 
