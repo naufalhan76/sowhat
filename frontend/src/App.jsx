@@ -364,6 +364,7 @@ export default function App() {
   const [fleetAccountFilter, setFleetAccountFilter] = useState('all');
   const [mapSearch, setMapSearch] = useState('');
   const [mapAccountFilter, setMapAccountFilter] = useState('all');
+  const [mapRegionPage, setMapRegionPage] = useState(1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
@@ -538,6 +539,13 @@ export default function App() {
       rows: sortFleetRows(grouped.get(region) || []),
     })).filter((group) => group.rows.length > 0);
   }, [mapFleetRows]);
+  const mapRegionPageSize = 5;
+  const mapRegionTotalPages = Math.max(1, Math.ceil(mapRegionSummary.length / mapRegionPageSize));
+  const visibleMapRegions = useMemo(() => {
+    const safePage = Math.min(mapRegionTotalPages, Math.max(1, mapRegionPage));
+    const startIndex = (safePage - 1) * mapRegionPageSize;
+    return mapRegionSummary.slice(startIndex, startIndex + mapRegionPageSize);
+  }, [mapRegionSummary, mapRegionPage, mapRegionTotalPages]);
   const explicitSelectedFleetRow = useMemo(() => fleetRows.find((row) => row.id === selectedUnitId && row.accountId === selectedUnitAccountId) || null, [fleetRows, selectedUnitId, selectedUnitAccountId]);
   const selectedFleetRow = useMemo(() => explicitSelectedFleetRow || prioritizedFleet[0] || fleetRows[0] || null, [explicitSelectedFleetRow, prioritizedFleet, fleetRows]);
   const expandedFleetRow = useMemo(() => prioritizedFleet.find((row) => unitRowKey(row) === expandedFleetRowKey) || null, [prioritizedFleet, expandedFleetRowKey]);
@@ -562,6 +570,9 @@ export default function App() {
   const isAdmin = webSessionUser?.role === 'admin';
   const showOverviewChrome = activePanel === 'overview';
 
+  useEffect(() => {
+    setMapRegionPage((current) => Math.min(Math.max(1, current), mapRegionTotalPages));
+  }, [mapRegionTotalPages]);
   const stopBusy = () => {
     if (busyTimeoutRef.current) {
       window.clearTimeout(busyTimeoutRef.current);
@@ -1561,7 +1572,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Fleet live snapshot</h2>
-                  <p>Klik See graphic buat buka modal chart di tengah, jadi tabel fleet tetap rapi dan tidak nabrak.</p>
+                  <p>Buka grafik unit di modal terpisah agar tabel fleet tetap rapi dan mudah dibaca.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={exportFleet}>Export fleet CSV</Button>
@@ -1638,8 +1649,7 @@ export default function App() {
             <Card className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
-                  <h2>Fleet map overview</h2>
-                  <p>Titik unit live dengan warna status utama dan grouping wilayah berbasis keyword alamat Solofleet.</p>
+                  <h2>Fleet map overview</h2><p>Peta posisi unit live dengan warna marker berdasarkan status utama setiap unit.</p>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1669,31 +1679,41 @@ export default function App() {
             <Card className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
-                  <h2>Unit per wilayah</h2>
-                  <p>Grouping v1 berdasarkan keyword alamat di lokasi live Solofleet.</p>
+                  <h2>Unit per wilayah</h2><p>Ringkasan unit live per wilayah berdasarkan alamat yang terbaca dari Solofleet.</p>
                 </div>
               </CardHeader>
               <CardContent>
-                {mapRegionSummary.length ? <div className="region-summary-grid">
-                  {mapRegionSummary.map((group) => <div key={group.region} className="region-summary-card">
-                    <div className="region-summary-head">
-                      <strong>{group.region}</strong>
-                      <Chip variant="flat">{group.rows.length} unit</Chip>
+                {mapRegionSummary.length ? <>
+                  <div className="region-summary-grid">
+                    {visibleMapRegions.map((group) => <div key={group.region} className="region-summary-card">
+                      <div className="region-summary-head">
+                        <strong>{group.region}</strong>
+                        <Chip variant="flat">{group.rows.length} unit</Chip>
+                      </div>
+                      <div className="region-unit-list">
+                        {group.rows.map((row) => {
+                          const statusMeta = getMapStatusMeta(row);
+                          return <div key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`} className="region-unit-item">
+                            <span className="region-unit-dot" style={{ backgroundColor: statusMeta.color }} />
+                            <div>
+                              <strong>{row.label || row.id}</strong>
+                              <div className="subtle-line">{row.id} | {statusMeta.label}</div>
+                            </div>
+                          </div>;
+                        })}
+                      </div>
+                    </div>)}
+                  </div>
+                  {mapRegionSummary.length > mapRegionPageSize ? <div className="region-summary-pagination">
+                    <div className="table-pagination-meta">Page {Math.min(mapRegionPage, mapRegionTotalPages)} of {mapRegionTotalPages}</div>
+                    <div className="table-pagination-controls">
+                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage(1)} disabled={mapRegionPage <= 1}>{'<<'}</button>
+                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage((current) => Math.max(1, current - 1))} disabled={mapRegionPage <= 1}>{'<'}</button>
+                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage((current) => Math.min(mapRegionTotalPages, current + 1))} disabled={mapRegionPage >= mapRegionTotalPages}>{'>'}</button>
+                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage(mapRegionTotalPages)} disabled={mapRegionPage >= mapRegionTotalPages}>{'>>'}</button>
                     </div>
-                    <div className="region-unit-list">
-                      {group.rows.map((row) => {
-                        const statusMeta = getMapStatusMeta(row);
-                        return <div key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`} className="region-unit-item">
-                          <span className="region-unit-dot" style={{ backgroundColor: statusMeta.color }} />
-                          <div>
-                            <strong>{row.label || row.id}</strong>
-                            <div className="subtle-line">{row.id} | {statusMeta.label}</div>
-                          </div>
-                        </div>;
-                      })}
-                    </div>
-                  </div>)}
-                </div> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
+                  </div> : null}
+                </> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
               </CardContent>
             </Card>
           </> : null}
@@ -1702,7 +1722,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Astro delivery report</h2>
-                  <p>Summary rit Astro berbasis geofence radius, stay minimal 3 menit, dan historical Solofleet.</p>
+                  <p>Ringkasan rit Astro berdasarkan geofence lokasi dan data historical Solofleet.</p>
                 </div>
                 <div className="inline-buttons">
                   {astroDiagnostics.length ? <Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(true)}>Lihat tanggal error ({astroDiagnostics.length})</Button> : null}
@@ -1739,7 +1759,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="historical-summary astro-summary">Configured routes: {astroRoutes.length} | Locations: {astroLocations.length} | Report rows: {astroReport?.summary?.rows ?? 0} | Partial diagnostics: {astroReport?.summary?.partialRows ?? 0} | Warnings: {astroReport?.summary?.warnings ?? 0}</div>
-                {astroDiagnostics.length ? <div className="subtle-line astro-diagnostic-hint">Tanggal yang tidak complete tidak hilang. Buka tombol Lihat tanggal error buat lihat requirement yang belum terpenuhi.</div> : null}
+                {astroDiagnostics.length ? <div className="subtle-line astro-diagnostic-hint">Tanggal yang belum lengkap tetap bisa ditinjau melalui tombol Lihat tanggal error.</div> : null}
               </CardContent>
             </Card>
             <Card className="panel-card">
@@ -1751,15 +1771,15 @@ export default function App() {
               </CardHeader>
               <CardContent>
                 {astroReport?.warnings?.length ? <div className="astro-warning-list">{astroReport.warnings.map((warning, index) => <div key={`astro-warning-${index}`} className="subtle-line">{warning}</div>)}</div> : null}
-                <DataTable className="astro-report-table" shellClassName="astro-report-table-shell" pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={astroReportColumns} rows={astroReportTableRows} emptyMessage={astroReport?.warnings?.length ? 'Belum ada Astro rit yang complete di range ini. Cek warning di atas buat lihat penyebabnya.' : 'Belum ada Astro report. Set date lalu klik Generate report.'} />
+                <DataTable className="astro-report-table" shellClassName="astro-report-table-shell" pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={astroReportColumns} rows={astroReportTableRows} emptyMessage={astroReport?.warnings?.length ? 'Belum ada rit Astro lengkap di range ini. Lihat informasi di atas untuk penyebabnya.' : 'Belum ada Astro report. Pilih rentang tanggal lalu klik Generate report.'} />
               </CardContent>
             </Card>
           </> : null}
                     {activePanel === 'temp-errors' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Dedicated temp error page</h2><p>1 row = 1 nopol + 1 hari, jadi durasi error harian langsung kebaca tanpa pecah jadi banyak snapshot.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportAlerts}>Export temp error CSV</Button></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{errorOverview.alerts}</strong></div><div className="mini-metric"><span>Affected units</span><strong>{errorOverview.affectedUnits}</strong></div><div className="mini-metric"><span>Critical</span><strong>{errorOverview.criticalAlerts}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(errorOverview.totalMinutes, 1)}</strong></div></div></CardContent></Card>
+            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error overview</h2><p>Satu baris mewakili satu unit per hari agar durasi error lebih mudah dipantau.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportAlerts}>Export temp error CSV</Button></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{errorOverview.alerts}</strong></div><div className="mini-metric"><span>Affected units</span><strong>{errorOverview.affectedUnits}</strong></div><div className="mini-metric"><span>Critical</span><strong>{errorOverview.criticalAlerts}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(errorOverview.totalMinutes, 1)}</strong></div></div></CardContent></Card>
             <div className="split-panels split-panels-tall">
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error incidents</h2><p>Klik row buat buka unit itu di chart detail.</p></div></CardHeader><CardContent><DataTable className="temp-error-table" shellClassName="temp-error-table-shell" pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} columns={['Tanggal', 'Mulai', 'Selesai', 'Durasi', 'Account', 'Nopol', 'Severity', 'Temp 1', 'Temp 2', 'Speed']} emptyMessage="Belum ada temp error incident di range ini." rows={errorRows.map((row) => [row.day ? fmtDateOnly(row.day) : '-', row.startTime || '-', row.endTime || '-', row.durationMinutes != null ? fmtNum(row.durationMinutes, 1) : '-', row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId}</strong><div className="subtle-line">{row.unitId}</div></div>, <Chip className="wrap-chip" color={row.type === 'temp1+temp2' ? 'danger' : 'warning'} variant="flat">{row.label}</Chip>, `${fmtNum(row.temp1Min)} to ${fmtNum(row.temp1Max)}`, `${fmtNum(row.temp2Min)} to ${fmtNum(row.temp2Max)}`, `${fmtNum(row.minSpeed, 0)} - ${fmtNum(row.maxSpeed, 0)}`])} getRowProps={(row, rowIndex) => ({ key: `${errorRows[rowIndex]?.accountId || 'account'}-${errorRows[rowIndex]?.unitId || 'alert'}-${errorRows[rowIndex]?.day || rowIndex}`, className: errorRows[rowIndex]?.type === 'temp1+temp2' ? 'data-row data-row-danger' : 'data-row data-row-warning', onClick: () => openUnit(errorRows[rowIndex].accountId || 'primary', errorRows[rowIndex].unitId, 'temp-errors') })} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Selected unit chart</h2><p>Trend suhu unit yang dipilih dari panel error.</p></div></CardHeader><CardContent>{selectedFleetRow ? <><div className="focus-side-meta"><strong>{selectedFleetRow.id} | {selectedFleetRow.label}</strong><div className="subtle-line">{selectedFleetRow.accountLabel || selectedFleetRow.accountId}</div><div className="subtle-line">{selectedFleetRow.locationSummary || '-'}</div></div><TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Sensor trend" description="Kalau mau grafik 00:00 sampai sekarang, page ini tinggal pakai data historical Solofleet untuk hari aktif yang kamu pilih." compact /></> : <div className="empty-state">Klik salah satu incident buat lihat chart unit.</div>}</CardContent></Card>
+              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error incidents</h2><p>Klik baris untuk membuka detail grafik unit terkait.</p></div></CardHeader><CardContent><DataTable className="temp-error-table" shellClassName="temp-error-table-shell" pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} columns={['Tanggal', 'Mulai', 'Selesai', 'Durasi', 'Account', 'Nopol', 'Severity', 'Temp 1', 'Temp 2', 'Speed']} emptyMessage="Belum ada temp error incident di range ini." rows={errorRows.map((row) => [row.day ? fmtDateOnly(row.day) : '-', row.startTime || '-', row.endTime || '-', row.durationMinutes != null ? fmtNum(row.durationMinutes, 1) : '-', row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId}</strong><div className="subtle-line">{row.unitId}</div></div>, <Chip className="wrap-chip" color={row.type === 'temp1+temp2' ? 'danger' : 'warning'} variant="flat">{row.label}</Chip>, `${fmtNum(row.temp1Min)} to ${fmtNum(row.temp1Max)}`, `${fmtNum(row.temp2Min)} to ${fmtNum(row.temp2Max)}`, `${fmtNum(row.minSpeed, 0)} - ${fmtNum(row.maxSpeed, 0)}`])} getRowProps={(row, rowIndex) => ({ key: `${errorRows[rowIndex]?.accountId || 'account'}-${errorRows[rowIndex]?.unitId || 'alert'}-${errorRows[rowIndex]?.day || rowIndex}`, className: errorRows[rowIndex]?.type === 'temp1+temp2' ? 'data-row data-row-danger' : 'data-row data-row-warning', onClick: () => openUnit(errorRows[rowIndex].accountId || 'primary', errorRows[rowIndex].unitId, 'temp-errors') })} /></CardContent></Card>
+              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Selected unit chart</h2><p>Grafik suhu untuk unit yang dipilih dari daftar error.</p></div></CardHeader><CardContent>{selectedFleetRow ? <><div className="focus-side-meta"><strong>{selectedFleetRow.id} | {selectedFleetRow.label}</strong><div className="subtle-line">{selectedFleetRow.accountLabel || selectedFleetRow.accountId}</div><div className="subtle-line">{selectedFleetRow.locationSummary || '-'}</div></div><TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Sensor trend" description="Grafik menampilkan data historical Solofleet sesuai tanggal aktif yang dipilih." compact /></> : <div className="empty-state">Klik salah satu incident buat lihat chart unit.</div>}</CardContent></Card>
             </div>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Unit compile by day</h2><p>Section ini selalu 1 hari 1 row. Detail unit tetap dipakai waktu export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile error by day di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card>
           </> : null}
@@ -1769,7 +1789,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Historical temperature</h2>
-                  <p>Masuknya dari Fleet Live. Di sini kamu bisa cari unit, ganti unit, dan ubah date range tanpa balik ke page lain.</p>
+                  <p>Cari unit, ganti unit, dan ubah rentang tanggal langsung dari halaman ini.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setActivePanel('fleet')}>Back to Fleet Live</Button>
@@ -1810,7 +1830,7 @@ export default function App() {
                       <Button color="primary" onPress={pullHistoricalData}>Tarik Data</Button>
                     </div>
                   </div>
-                  <div className="historical-summary">{historicalFleet.length} unit tersedia buat dipilih dari fleet live. Showing {historicalRangeApplied.startDate} to {historicalRangeApplied.endDate}.</div>
+                  <div className="historical-summary">{historicalFleet.length} unit tersedia buat dipilih dari fleet live. Menampilkan {historicalRangeApplied.startDate} to {historicalRangeApplied.endDate}.</div>
                   {selectedHistoricalRow ? <>
                                         <div className="focus-side-meta">
                       <strong>{selectedHistoricalRow.id} | {selectedHistoricalRow.label}</strong>
@@ -1842,12 +1862,12 @@ export default function App() {
           </> : null}
                     {activePanel === 'config' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Masukin login Solofleet di sini kalau mau tambah account baru atau refresh session yang sudah ada. Kalau credential salah atau sesi gagal diverifikasi, modal error bakal langsung muncul.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>
+            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>
             <Card ref={astroLocationCardRef} className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Astro set location</h2>
-                  <p>Master lokasi WH / POD / POOL buat report Astro. Bisa bulk import CSV atau manual satu per satu.</p>
+                  <p>Kelola lokasi WH, POD, dan POOL untuk kebutuhan report Astro.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setAstroLocationSectionOpen((current) => !current)}>{astroLocationSectionOpen ? 'Collapse' : 'Expand'}</Button>
@@ -1932,7 +1952,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Astro route config</h2>
-                  <p>Mapping nopol Astro ke WH, POOL, urutan POD, dan window rit per unit.</p>
+                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, dan window rit.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setAstroRouteSectionOpen((current) => !current)}>{astroRouteSectionOpen ? 'Collapse' : 'Expand'}</Button>
@@ -2106,7 +2126,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Database tools</h2>
-                  <p>Edit data PostgreSQL langsung dari dashboard buat rollup temp error dan POD snapshot.</p>
+                  <p>Kelola data PostgreSQL penting langsung dari dashboard admin.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => loadAdminDatabase()}>Refresh DB</Button>
@@ -2125,7 +2145,7 @@ export default function App() {
                 <CardHeader className="panel-card-header">
                   <div>
                     <h2>Temp rollups</h2>
-                    <p>Raw rollup harian yang dipakai report temp error. Edit dengan hati-hati.</p>
+                    <p>Data rollup harian yang dipakai untuk report temp error.</p>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -2149,7 +2169,7 @@ export default function App() {
                 <CardHeader className="panel-card-header">
                   <div>
                     <h2>{adminRollupForm.id ? 'Edit temp rollup' : 'New temp rollup'}</h2>
-                    <p>Field minimum: day, account, unit, type, dan incidents. Timestamp pakai waktu lokal VPS/browser.</p>
+                    <p>Lengkapi field utama untuk menambah atau memperbarui temp rollup.</p>
                   </div>
                   <div className="inline-buttons">
                     <Button color="primary" onPress={saveAdminRollupEntry}>Save rollup</Button>
@@ -2221,7 +2241,7 @@ export default function App() {
                 <CardHeader className="panel-card-header">
                   <div>
                     <h2>{adminPodForm.id ? 'Edit POD snapshot' : 'New POD snapshot'}</h2>
-                    <p>Gunakan editor ini kalau mau koreksi snapshot POD langsung dari web.</p>
+                    <p>Gunakan editor ini untuk menambah atau mengoreksi snapshot POD.</p>
                   </div>
                   <div className="inline-buttons">
                     <Button color="primary" onPress={saveAdminPodEntry}>Save POD snapshot</Button>
@@ -2253,8 +2273,8 @@ export default function App() {
           </> : null}
 
           {activePanel === 'stop' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop / idle explorer</h2><p>On-demand ke endpoint ReportStop supaya nggak spam semua unit sekaligus, tapi tetap usable buat investigasi.</p></div></CardHeader><CardContent><div className="form-grid form-grid-stop"><label className="field"><span>Unit</span><select value={`${stopForm.accountId}::${stopForm.unitId}`} onChange={(event) => { const [accountId, unitId] = event.target.value.split('::'); setStopForm((current) => ({ ...current, accountId: accountId || 'primary', unitId: unitId || '' })); }}>{fleetRows.map((row) => <option key={row.rowKey || `${row.accountId}-${row.id}`} value={`${row.accountId || 'primary'}::${row.id}`}>{accountName({ id: row.accountId, label: row.accountLabel })} | {row.id} | {row.label}</option>)}</select></label><label className="field"><span>Report type</span><select value={stopForm.reportType} onChange={(event) => setStopForm((current) => ({ ...current, reportType: event.target.value }))}><option value="1">Stop Engine Report</option><option value="2">Idle Engine Report</option><option value="3">Speed-based idle/stop Report</option></select></label><label className="field"><span>Min duration (min)</span><input type="number" min="0" value={stopForm.minDuration} onChange={(event) => setStopForm((current) => ({ ...current, minDuration: event.target.value }))} /></label><div className="field field-actions"><Button color="primary" onPress={loadStopReport}>Analyze stop / idle</Button><Button variant="bordered" onPress={exportStop}>Export stop CSV</Button></div></div></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop/idle result</h2><p>Latitude, longitude, durasi, average temp, dan link ke map.</p></div></CardHeader><CardContent>{stopReport ? <><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{stopReport.summary?.incidents ?? '-'}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(stopReport.summary?.totalMinutes, 1)}</strong></div><div className="mini-metric"><span>Longest</span><strong>{fmtNum(stopReport.summary?.longestMinutes, 1)}</strong></div><div className="mini-metric"><span>With lat/lng</span><strong>{stopReport.summary?.withLocation ?? '-'}</strong></div></div><div className="spacer-16" /><DataTable columns={['Start', 'End', 'Minutes', 'Distance', 'Avg temp', 'Location', 'Lat', 'Lng', 'Zone', 'Engine', 'Maps']} emptyMessage="Belum ada row stop/idle di range ini." rows={stopReport.rows.map((row) => [fmtDate(row.startTimestamp), fmtDate(row.endTimestamp), fmtNum(row.durationMinutes, 1), fmtNum(row.movementDistance, 1), fmtNum(row.avgTemp, 1), row.locationSummary || '-', fmtCoord(row.latitude), fmtCoord(row.longitude), row.zoneName || row.zoneBoundary || '-', row.engineDetected === 1 ? 'idle' : row.engineDetected === 0 ? 'stop' : '-', row.googleMapsUrl ? <Link href={row.googleMapsUrl} target="_blank">Open map</Link> : '-'])} /></> : <div className="empty-state">Klik Analyze stop / idle buat ambil report dari Solofleet.</div>}</CardContent></Card>
+            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop / idle explorer</h2><p>Analisis stop dan idle berdasarkan report Solofleet untuk unit yang dipilih.</p></div></CardHeader><CardContent><div className="form-grid form-grid-stop"><label className="field"><span>Unit</span><select value={`${stopForm.accountId}::${stopForm.unitId}`} onChange={(event) => { const [accountId, unitId] = event.target.value.split('::'); setStopForm((current) => ({ ...current, accountId: accountId || 'primary', unitId: unitId || '' })); }}>{fleetRows.map((row) => <option key={row.rowKey || `${row.accountId}-${row.id}`} value={`${row.accountId || 'primary'}::${row.id}`}>{accountName({ id: row.accountId, label: row.accountLabel })} | {row.id} | {row.label}</option>)}</select></label><label className="field"><span>Report type</span><select value={stopForm.reportType} onChange={(event) => setStopForm((current) => ({ ...current, reportType: event.target.value }))}><option value="1">Stop Engine Report</option><option value="2">Idle Engine Report</option><option value="3">Speed-based idle/stop Report</option></select></label><label className="field"><span>Min duration (min)</span><input type="number" min="0" value={stopForm.minDuration} onChange={(event) => setStopForm((current) => ({ ...current, minDuration: event.target.value }))} /></label><div className="field field-actions"><Button color="primary" onPress={loadStopReport}>Analyze stop / idle</Button><Button variant="bordered" onPress={exportStop}>Export stop CSV</Button></div></div></CardContent></Card>
+            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop/idle result</h2><p>Lihat durasi, lokasi, suhu rata-rata, dan tautan peta untuk setiap hasil stop atau idle.</p></div></CardHeader><CardContent>{stopReport ? <><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{stopReport.summary?.incidents ?? '-'}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(stopReport.summary?.totalMinutes, 1)}</strong></div><div className="mini-metric"><span>Longest</span><strong>{fmtNum(stopReport.summary?.longestMinutes, 1)}</strong></div><div className="mini-metric"><span>With lat/lng</span><strong>{stopReport.summary?.withLocation ?? '-'}</strong></div></div><div className="spacer-16" /><DataTable columns={['Start', 'End', 'Minutes', 'Distance', 'Avg temp', 'Location', 'Lat', 'Lng', 'Zone', 'Engine', 'Maps']} emptyMessage="Belum ada row stop/idle di range ini." rows={stopReport.rows.map((row) => [fmtDate(row.startTimestamp), fmtDate(row.endTimestamp), fmtNum(row.durationMinutes, 1), fmtNum(row.movementDistance, 1), fmtNum(row.avgTemp, 1), row.locationSummary || '-', fmtCoord(row.latitude), fmtCoord(row.longitude), row.zoneName || row.zoneBoundary || '-', row.engineDetected === 1 ? 'idle' : row.engineDetected === 0 ? 'stop' : '-', row.googleMapsUrl ? <Link href={row.googleMapsUrl} target="_blank">Open map</Link> : '-'])} /></> : <div className="empty-state">Klik Analyze stop / idle buat ambil report dari Solofleet.</div>}</CardContent></Card>
           </> : null}
         </div>
 
@@ -2893,6 +2913,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 

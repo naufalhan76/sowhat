@@ -2715,3 +2715,23 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.region-summary-card {
+  min-height: 320px;
+}
+
+.region-unit-list {
+  align-content: start;
+}
+
+.region-summary-pagination {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.fleet-map-search-field {
+  flex: 1 1 320px;
+}
