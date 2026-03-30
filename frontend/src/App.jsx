@@ -51,7 +51,7 @@ const EMPTY_FORM = {
   autoStart: false,
 };
 
-const EMPTY_WEB_LOGIN_FORM = { username: 'admin', password: 'admin' };
+const EMPTY_WEB_LOGIN_FORM = { username: '', password: '' };
 const EMPTY_SOLOFLEET_LOGIN_FORM = { email: '', password: '', rememberMe: true, label: '' };
 const EMPTY_WEB_USER_FORM = { id: '', username: '', displayName: '', password: '', role: 'admin', isActive: true };
 const EMPTY_ASTRO_LOCATION_FORM = { id: '', name: '', latitude: '', longitude: '', radiusMeters: '150', type: 'POD', isActive: true, notes: '' };
