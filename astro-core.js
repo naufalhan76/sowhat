@@ -1,4 +1,25 @@
 const MIN_VALID_STAY_MS = 3 * 60 * 1000;
+const EXPORT_TIMEZONE = String(process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
+
+function formatDateParts(date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: EXPORT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    day: lookup.day || '',
+    month: lookup.month || '',
+    year: lookup.year || '',
+    hour: lookup.hour || '',
+    minute: lookup.minute || '',
+  };
+}
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') {
@@ -656,12 +677,8 @@ function formatExcelDate(dateVal) {
   if (!dateVal) return '';
   const date = new Date(dateVal);
   if (isNaN(date.getTime())) return '';
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const yyyy = date.getFullYear();
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  const parts = formatDateParts(date);
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
 function formatStayDuration(dateStart, dateEnd) {
