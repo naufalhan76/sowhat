@@ -2806,6 +2806,10 @@ textarea:focus {
   display: none;
 }
 
+.topbar-collapsible {
+  display: contents;
+}
+
 .topbar-icon-button {
   width: 42px;
   height: 42px;
@@ -2836,6 +2840,7 @@ textarea:focus {
   }
 
   .topbar-brand-row,
+  .topbar-collapsible,
   .topbar-controls,
   .topbar-actions {
     width: 100%;
@@ -2849,6 +2854,15 @@ textarea:focus {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .topbar-collapsible {
+    display: none;
+    gap: 12px;
+  }
+
+  .command-center.mobile-topbar-expanded .topbar-collapsible {
+    display: grid;
   }
 
   .topbar-controls {
@@ -2977,3 +2991,6 @@ textarea:focus {
     padding: 10px 12px;
   }
 }
+
+
+

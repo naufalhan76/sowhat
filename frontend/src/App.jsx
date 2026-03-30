@@ -1,7 +1,7 @@
 
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
-  Activity, ArrowRight, BarChart3, Box, ChevronLeft, ChevronRight,
+  Activity, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   Flag, LayoutDashboard, Map as MapIcon, Menu, Navigation,
   RefreshCw, Settings, ShieldAlert, Thermometer, X, Zap, Search
 } from 'lucide-react';
@@ -367,6 +367,7 @@ export default function App() {
   const [mapRegionPages, setMapRegionPages] = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileTopbarExpanded, setMobileTopbarExpanded] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -1017,6 +1018,7 @@ export default function App() {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setMobileTopbarExpanded(false);
   }, [activePanel]);
 
   useEffect(() => {
@@ -1024,6 +1026,9 @@ export default function App() {
     const handleChange = (event) => {
       if (event.matches) {
         setMobileNavOpen(false);
+        setMobileTopbarExpanded(true);
+      } else {
+        setMobileTopbarExpanded(false);
       }
     };
     handleChange(media);
@@ -1478,44 +1483,48 @@ export default function App() {
 
   return (
     
-    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''} ${mobileTopbarExpanded ? 'mobile-topbar-expanded' : ''}`}>
       <header className="topbar">
         <div className="topbar-brand-row">
           <div className="topbar-brand">
             <BrandLockup compact />
           </div>
           <div className="mobile-topbar-actions">
+            <button type="button" className="topbar-icon-button mobile-topbar-toggle" onClick={() => setMobileTopbarExpanded((current) => !current)} aria-label={mobileTopbarExpanded ? 'Collapse topbar controls' : 'Expand topbar controls'}>
+              {mobileTopbarExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
             <button type="button" className="topbar-icon-button mobile-nav-toggle" onClick={() => setMobileNavOpen((current) => !current)} aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}>
               {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
-        <div className="topbar-controls">
-          <div className="date-range-group">
-            <input type="date" value={range.startDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, startDate: event.target.value}))} />
-            <ArrowRight size={14} className="text-muted" />
-            <input type="date" value={range.endDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, endDate: event.target.value}))} />
+        <div className="topbar-collapsible">
+          <div className="topbar-controls">
+            <div className="date-range-group">
+              <input type="date" value={range.startDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, startDate: event.target.value}))} />
+              <ArrowRight size={14} className="text-muted" />
+              <input type="date" value={range.endDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, endDate: event.target.value}))} />
+            </div>
+            <div className="search-box">
+              <Search size={16} className="search-icon" />
+              <input type="text" placeholder="Search account, unit, location..." value={search} onChange={(event) => setSearch(event.target.value)} />
+            </div>
           </div>
-          <div className="search-box">
-            <Search size={16} className="search-icon" />
-            <input type="text" placeholder="Search account, unit, location..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          <div className="topbar-actions">
+            <div className="account-badge">
+              <Settings size={14} />
+              <span>Account</span>
+              <strong>{accountName(currentAccount)}</strong>
+            </div>
+            <div className="control-inline-actions">
+              <Button variant="bordered" onPress={exportFleet}><Navigation size={14} /> Live CSV</Button>
+              <Button variant="bordered" onPress={exportAlerts}><ShieldAlert size={14} /> Alerts CSV</Button>
+            </div>
+            <Button variant="bordered" onPress={() => loadDashboard(false, false)}><RefreshCw size={14} /> Refresh</Button>
+            <Button onPress={runPollNow}><Zap size={14} /> Poll Now</Button>
+            <Button variant="bordered" onPress={togglePolling}>{status?.runtime?.isPolling ? 'Stop polling' : 'Start polling'}</Button>
           </div>
-        </div>
-        <div className="topbar-actions">
-          <div className="account-badge">
-            <Settings size={14} />
-            <span>Account</span>
-            <strong>{accountName(currentAccount)}</strong>
-          </div>
-          <div className="control-inline-actions">
-            <Button variant="bordered" onPress={exportFleet}><Navigation size={14} /> Live CSV</Button>
-            <Button variant="bordered" onPress={exportAlerts}><ShieldAlert size={14} /> Alerts CSV</Button>
-          </div>
-          <Button variant="bordered" onPress={() => loadDashboard(false, false)}><RefreshCw size={14} /> Refresh</Button>
-          <Button onPress={runPollNow}><Zap size={14} /> Poll Now</Button>
-          <Button variant="bordered" onPress={togglePolling}>{status?.runtime?.isPolling ? 'Stop polling' : 'Start polling'}</Button>
-        </div>
-      </header>
+        </div>      </header>
 
       <button type="button" className="mobile-sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />
 
@@ -2953,6 +2962,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 
