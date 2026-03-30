@@ -29,10 +29,19 @@ const BrandLockup = ({ compact = false }) => <div className={`brand-lockup ${com
 </div>;
 // removed object import
 
+function formatInputDate(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${lookup.year || ''}-${lookup.month || ''}-${lookup.day || ''}`;
+}
+
 function today(offset = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().slice(0, 10);
+  return formatInputDate(new Date(Date.now() + (offset * 24 * 60 * 60 * 1000)));
 }
 
 const EMPTY_FORM = {
@@ -2325,7 +2334,9 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', currentPoint)).addTo(layer);
     }
 
-    if (bounds.length === 1) {
+    if (currentPoint) {
+      map.setView([currentPoint.latitude, currentPoint.longitude], 15);
+    } else if (bounds.length === 1) {
       map.setView(bounds[0], 14);
     } else if (bounds.length > 1) {
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
@@ -2633,6 +2644,11 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
 
 
 
