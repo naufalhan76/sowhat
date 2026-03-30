@@ -73,15 +73,33 @@ const api = async (url, options = {}) => {
   if (!response.ok || payload.ok === false) throw new Error(payload.error || `HTTP ${response.status}`);
   return payload;
 };
-const fmtDate = (value) => value ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '-';
-const fmtDateCompact = (value) => value ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '-';
-const fmtDateOnly = (value) => value ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit' }).format(new Date(`${value}T00:00:00`)) : '-';
-const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
-const fmtCoord = (value) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(6);
-const fmtClock = (value) => value ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '-';
-const fmtStayDuration = (startValue, endValue) => {
-  if (!startValue || !endValue) return '-';
-  const diffMs = new Date(endValue).getTime() - new Date(startValue).getTime();
+const parseDateValue = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number') return Number.isFinite(value) ? new Date(value) : null;
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  if (/^\d+$/.test(text)) {
+    const numeric = Number(text);
+    return Number.isFinite(numeric) ? new Date(numeric) : null;
+  }
+
+  const localMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (localMatch && !/(Z|[+\-]\d{2}:?\d{2})$/i.test(text)) {
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] = localMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const formatStayText = (startValue, endValue) => {
+  const start = parseDateValue(startValue);
+  const end = parseDateValue(endValue);
+  if (!start || !end) return '-';
+  const diffMs = end.getTime() - start.getTime();
   if (!Number.isFinite(diffMs) || diffMs < 0) return '-';
   const totalMinutes = Math.round(diffMs / 60000);
   const hours = Math.floor(totalMinutes / 60);
@@ -90,6 +108,25 @@ const fmtStayDuration = (startValue, endValue) => {
   if (hours) return `${hours}h`;
   return `${minutes}m`;
 };
+const fmtDate = (value) => {
+  const parsed = parseDateValue(value);
+  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+};
+const fmtDateCompact = (value) => {
+  const parsed = parseDateValue(value);
+  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+};
+const fmtDateOnly = (value) => {
+  const parsed = parseDateValue(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value} 00:00:00` : value);
+  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit' }).format(parsed) : '-';
+};
+const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
+const fmtCoord = (value) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(6);
+const fmtClock = (value) => {
+  const parsed = parseDateValue(value);
+  return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+};
+const fmtStayDuration = (startValue, endValue) => formatStayText(startValue, endValue);
 const fmtAgo = (minutes) => minutes === null || minutes === undefined ? '-' : `${fmtNum(minutes, 1)} min ago`;
 const unitsToText = (units) => (units || []).map((unit) => `${unit.id}|${unit.label}`).join('\n');
 const parseUnits = (text) => String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {

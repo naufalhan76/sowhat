@@ -664,6 +664,21 @@ function formatExcelDate(dateVal) {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
+function formatStayDuration(dateStart, dateEnd) {
+  if (!dateStart || !dateEnd) return '';
+  const start = new Date(dateStart);
+  const end = new Date(dateEnd);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return '';
+  const totalMinutes = Math.round(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours && minutes) return `${hours}h ${minutes}m`;
+  if (hours) return `${hours}h`;
+  return `${minutes}m`;
+}
+
 function flattenAstroRow(row, options) {
   const maxPods = options && options.maxPods ? options.maxPods : (row.pods || []).length;
   const next = {
@@ -678,6 +693,7 @@ function flattenAstroRow(row, options) {
     wh_arrival_temp: row.whArrivalTemp ?? '',
     wh_etd: formatExcelDate(row.whEtd),
     wh_departure_temp: row.whDepartureTemp ?? '',
+    wh_stay: formatStayDuration(row.whEta, row.whEtd),
   };
 
   for (let index = 0; index < maxPods; index += 1) {
@@ -688,11 +704,13 @@ function flattenAstroRow(row, options) {
     next[`pod_${order}_arrival_temp`] = pod?.arrivalTemp ?? '';
     next[`pod_${order}_etd`] = formatExcelDate(pod?.etd);
     next[`pod_${order}_departure_temp`] = pod?.departureTemp ?? '';
+    next[`pod_${order}_stay`] = formatStayDuration(pod?.eta, pod?.etd);
   }
 
   next.pool_name = row.poolName || '';
   next.pool_eta = formatExcelDate(row.poolEta);
   next.pool_departure_temp = row.poolDepartureTemp ?? '';
+  next.pool_stay = formatStayDuration(row.poolEta, row.poolEtd);
   next.status = row.status || 'complete';
   return next;
 }

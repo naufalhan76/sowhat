@@ -12,7 +12,7 @@ Pastikan VPS kamu sudah terinstall **Node.js** dan **npm**. Jika belum, jalankan
 sudo apt update
 
 # Install Node.js (Versi 20.x atau 22.x disarankan)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
@@ -29,8 +29,8 @@ Kamu bisa memindahkan file menggunakan **Git** (paling disarankan) ataupun **SCP
 ### Opsi A: Menggunakan Git (Disarankan)
 Jika project kamu sudah di-push ke GitHub/GitLab:
 ```bash
-git clone <URL_REPO_KAMU> solofleet
-cd solofleet
+git clone https://github.com/naufalhan76/sowhat.git
+cd sowhat
 ```
 
 ### Opsi B: Menggunakan SCP (Upload manual dari laptop lokal)
@@ -84,7 +84,7 @@ Agar aplikasi berjalan otomatis di background, otomatis restart jika terjadi err
 
 1. **Jalankan aplikasi:**
    ```bash
-   pm2 start server.js --name "solofleet"
+   pm2 start server.js --name "sowhat"
    ```
 
 2. **Periksa status jalannya aplikasi:**
@@ -150,7 +150,7 @@ Di terminal VPS kamu:
 
 3. **Buat file konfigurasi web kamu:**
    ```bash
-   sudo nano /etc/nginx/sites-available/solofleet
+   sudo nano /etc/nginx/sites-available/sowhat
    ```
 
 4. **Copy-paste konfigurasi (Reverse Proxy) berikut:**
@@ -158,7 +158,7 @@ Di terminal VPS kamu:
    ```nginx
    server {
        listen 80;
-       server_name domain-kamu.com;
+       server_name app.mabox.tech;
 
        location / {
            proxy_pass http://127.0.0.1:3000;
@@ -180,7 +180,7 @@ Di terminal VPS kamu:
 
 5. **Aktifkan konfigurasi baru:**
    ```bash
-   sudo ln -s /etc/nginx/sites-available/solofleet /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/sowhat /etc/nginx/sites-enabled/
    ```
 
 6. **Test syntax Nginx & Restart:**
