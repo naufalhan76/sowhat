@@ -1,4 +1,4 @@
-﻿/* Solofleet Command Center Theme */
+/* Solofleet Command Center Theme */
 
 :root {
   /* Colors */
@@ -2704,6 +2704,22 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.fleet-map-label {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.26);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 4px 8px;
+}
+
+.fleet-map-label:before {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .fleet-status-map-frame,
   .fleet-status-map-canvas {
@@ -2735,3 +2751,6 @@ textarea:focus {
 .fleet-map-search-field {
   flex: 1 1 320px;
 }
+
+
+
