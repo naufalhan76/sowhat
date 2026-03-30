@@ -1630,12 +1630,24 @@ async function initializeStorage() {
   state = normalizeState(rawState);
   syncUnitsWithConfig();
   recomputeAllAnalyses();
+  const repairedAstroRoutes = validateAstroRoutes(config.astroRoutes || [], config.astroLocations || []);
+  const astroRoutesChanged = JSON.stringify(repairedAstroRoutes) !== JSON.stringify(config.astroRoutes || []);
+  if (astroRoutesChanged) {
+    config = normalizeConfig({
+      ...config,
+      astroRoutes: repairedAstroRoutes,
+    });
+  }
+
 
   if (getPostgresConfig().enabled) {
     await migrateSupabaseDataToPostgres();
   }
   
   const migrationTasks = [];
+  if (astroRoutesChanged) {
+    migrationTasks.push(saveConfig());
+  }
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
     captureDailyErrorSnapshots(accountConfig, accountState);
@@ -3746,6 +3758,9 @@ function validateAstroRoutes(routes, locations) {
       throw new Error('Account Astro route tidak ditemukan: ' + normalized.accountId);
     }
     normalized.accountId = resolvedAccountId;
+    const accountConfig = getAccountConfigById(resolvedAccountId);
+    const resolvedUnitId = resolveAstroUnitId(accountConfig, normalized.unitId) || normalized.unitId;
+    normalized.unitId = resolvedUnitId;
     if (!normalized.whLocationId) {
       throw new Error('WH location wajib diisi untuk unit ' + normalized.unitId);
     }
@@ -3797,6 +3812,38 @@ function buildCsvText(rows) {
   })].join('\n');
 }
 
+function resolveAstroUnitId(accountConfig, unitReference) {
+  const target = String(unitReference || '').trim();
+  if (!target) {
+    return '';
+  }
+  const normalized = normalizeUnitKey(target);
+  const accountState = ensureAccountState(accountConfig?.id || 'primary');
+  const candidates = [
+    ...((accountConfig?.units || []).map(function (unit) {
+      return {
+        id: String(unit.id || '').trim(),
+        label: String(unit.label || unit.id || '').trim(),
+        vehicle: '',
+      };
+    })),
+    ...Object.entries(accountState?.units || {}).map(function ([id, unitState]) {
+      return {
+        id: String(id || '').trim(),
+        label: String(unitState?.label || '').trim(),
+        vehicle: String(unitState?.vehicle || '').trim(),
+      };
+    }),
+  ].filter(function (unit) {
+    return unit.id;
+  });
+  const matched = candidates.find(function (unit) {
+    return normalizeUnitKey(unit.id) === normalized
+      || normalizeUnitKey(unit.label) === normalized
+      || normalizeUnitKey(unit.vehicle) === normalized;
+  });
+  return matched?.id || '';
+}
 function resolveAstroUnitLabel(accountConfig, unitId) {
   const normalizedId = normalizeUnitKey(unitId);
   const configuredUnit = (accountConfig?.units || []).find(function (unit) {
@@ -3963,8 +4010,9 @@ async function buildAstroReportPayload(searchParams) {
     }
 
     try {
-      const history = await fetchUnitHistory(accountConfig, route.unitId, paddedStart, paddedEnd);
-      const unitLabel = resolveAstroUnitLabel(accountConfig, route.unitId);
+      const resolvedRouteUnitId = resolveAstroUnitId(accountConfig, route.unitId) || route.unitId;
+      const history = await fetchUnitHistory(accountConfig, resolvedRouteUnitId, paddedStart, paddedEnd);
+      const unitLabel = resolveAstroUnitLabel(accountConfig, resolvedRouteUnitId) || route.unitId;
       const routeDiagnostics = astroCore.buildRouteReportRows(route, config.astroLocations || [], history.records || [])
         .filter(function (row) {
           return row.serviceDate >= startDate && row.serviceDate <= endDate;
@@ -5706,6 +5754,7 @@ if (require.main === module) {
     }
   });
 }
+
 
 
 
