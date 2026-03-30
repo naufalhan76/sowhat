@@ -2439,7 +2439,7 @@ function FleetStatusMap({ rows }) {
         weight: 2,
       });
       marker.bindTooltip(row.label || row.id, { permanent: true, direction: 'top', offset: [0, -10], className: 'fleet-map-label' });
-      marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
+      marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Temp 1 ${fmtNum(row.temperature, 1)} C</div><div>Temp 2 ${fmtNum(row.temperature2, 1)} C</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
       marker.addTo(layer);
       bounds.push([latitude, longitude]);
     });
@@ -2909,6 +2909,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 
