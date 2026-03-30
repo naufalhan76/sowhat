@@ -86,6 +86,7 @@ const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
 const WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const webSessions = new Map();
 let postgresPool = null;
+const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 
 function recordApiMonitorEvent(entry) {
   apiMonitorLog.push(entry);
@@ -172,7 +173,30 @@ function toTimestampMaybe(value) {
     return null;
   }
 
-  const timestamp = Date.parse(value);
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+
+  const localMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (localMatch && !/(Z|[+\-]\d{2}:?\d{2})$/i.test(text)) {
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] = localMatch;
+    const utcTimestamp = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+    ) - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000);
+    return Number.isFinite(utcTimestamp) ? utcTimestamp : null;
+  }
+
+  const timestamp = Date.parse(text);
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 

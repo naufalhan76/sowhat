@@ -110,7 +110,7 @@ const formatStayText = (startValue, endValue) => {
   if (hours) return `${hours}h`;
   return `${minutes}m`;
 };
-const DISPLAY_TIMEZONE = 'UTC';
+const DISPLAY_TIMEZONE = 'Asia/Bangkok';
 const fmtDate = (value) => {
   const parsed = parseDateValue(value);
   return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
