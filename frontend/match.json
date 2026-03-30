@@ -1,0 +1,26 @@
+[
+  {
+    "no": 142,
+    "txt": "const rowHasGpsLate = (row) => row?.minutesSinceUpdate !== null && row?.minutesSinceUpdate > 30;"
+  },
+  {
+    "no": 598,
+    "txt": "{selectedFleetRow?.latitude !== null && selectedFleetRow?.longitude !== null ? <Link href={`https://www.google.com/maps?q=${selectedFleetRow.latitude},${selectedFleetRow.longitude}`} target=\"_blank\">Open map</Link> : null}"
+  },
+  {
+    "no": 621,
+    "txt": "<SummaryMetric label=\"Customer setpoint\" value={selectedFleetRow.targetTempMin !== null || selectedFleetRow.targetTempMax !== null ? `${fmtNum(selectedFleetRow.targetTempMin)} to ${fmtNum(selectedFleetRow.targetTempMax)}` : 'Not set'} danger={rowHasSetpointIssue(selectedFleetRow)} /><SummaryMetric label=\"Status\" value={selectedFleetRow.liveSensorFaultLabel || selectedFleetRow.setpointLabel || (rowHasSensorError(selectedFleetRow) ? health(selectedFleetRow).label : 'Normal')} danger={rowHasSetpointIssue(selectedFleetRow) || rowHasSensorError(selectedFleetRow)} />"
+  },
+  {
+    "no": 630,
+    "txt": "<Card className=\"panel-card\"><CardHeader className=\"panel-card-header\"><div><h2>Fleet live snapshot</h2><p>Unit temp error otomatis merah dan naik ke atas. Setpoint mismatch dan GPS telat juga langsung kelihatan.</p></div></CardHeader><CardContent><DataTable columns={['Health', 'Account', 'Unit', 'Customer', 'Setpoint', 'Location', 'Speed', 'Temp 1', 'Temp 2', 'Gap', 'Errors', 'Updated', 'Maps']} emptyMessage=\"Belum ada fleet snapshot. Save config lalu jalankan Poll now.\" rows={prioritizedFleet.map((row) => { const state = health(row); return [<Chip color={state.tone} variant=\"flat\">{state.label}</Chip>, row.accountLabel || row.accountId || '-', <div><strong>{row.id}</strong><div className=\"subtle-line\">{row.label}</div><div className=\"subtle-line\">{row.alias}</div></div>, <div><div>{row.customerName || row.group || '-'}</div><div className=\"subtle-line\">{row.group || 'No group'}</div></div>, <div><div>{row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : '-'}</div><div className=\"subtle-line\">{row.setpointLabel || 'No rule'}</div></div>, <div><div>{row.locationSummary || '-'}</div><div className=\"subtle-line\">{row.zoneName || 'No zone'}</div><div className=\"subtle-line\">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div>, fmtNum(row.speed, 0), fmtNum(row.liveTemp1), fmtNum(row.liveTemp2), row.liveTempDelta !== null ? <Chip color={row.liveTempDelta >= 5 ? 'warning' : 'default'} variant=\"flat\">{fmtNum(row.liveTempDelta)}</Chip> : '-', <div><div>{row.liveSensorFaultLabel || (row.recentAlertsCount ? `${row.recentAlertsCount} recent alert(s)` : row.errSensor || 'Sensor OK')}</div><div className=\"subtle-line\">{row.errGps || 'GPS OK'}</div></div>, <div><div>{fmtDate(row.lastUpdatedAt)}</div><div className=\"subtle-line\">{fmtAgo(row.minutesSinceUpdate)}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target=\"_blank\">Open map</Link> : '-']; })} getRowProps={(row, rowIndex) => ({ key: prioritizedFleet[rowIndex]?.rowKey || `fleet-${rowIndex}`, className: rowPriority(prioritizedFleet[rowIndex]) >= 5 ? 'data-row data-row-danger' : rowPriority(prioritizedFleet[rowIndex]) >= 3 ? 'data-row data-row-warning' : 'data-row', onClick: () => openUnit(prioritizedFleet[rowIndex].accountId || 'primary', prioritizedFleet[rowIndex].id, 'fleet') })} /></CardContent></Card>"
+  },
+  {
+    "no": 699,
+    "txt": "const series = useMemo(() => (records || []).filter((record) => record.temp1 !== null || record.temp2 !== null).slice(-120), [records]);"
+  },
+  {
+    "no": 707,
+    "txt": "const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined);"
+  }
+]

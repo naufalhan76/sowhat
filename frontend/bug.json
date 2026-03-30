@@ -1,0 +1,30 @@
+[
+  {
+    "no": 190,
+    "txt": "const [apiMonitor, setApiMonitor] = useState(null);"
+  },
+  {
+    "no": 267,
+    "txt": "setApiMonitor(nextMonitor);"
+  },
+  {
+    "no": 537,
+    "txt": "{ id: 'api-monitor', label: 'API Monitor', icon: Activity },"
+  },
+  {
+    "no": 555,
+    "txt": "{ label: 'Monitored Units', value: status?.overview?.monitoredUnits, note: 'Aktif di config' },"
+  },
+  {
+    "no": 648,
+    "txt": "<Card className=\"panel-card\"><CardHeader className=\"panel-card-header\"><div><h2>API Monitor</h2><p>Trace ringan untuk lihat endpoint Solofleet API yang ditarik oleh backend, error, dan duration.</p></div></CardHeader><CardContent><div className=\"metric-strip\"><div className=\"mini-metric\"><span>Requests</span><strong>{apiMonitor?.totals?.requests ?? 0}</strong></div><div className=\"mini-metric\"><span>Errors</span><strong>{apiMonitor?.totals?.errors ?? 0}</strong></div><div className=\"mini-metric\"><span>Slow</span><strong>{apiMonitor?.totals?.slowRequests ?? 0}</strong></div><div className=\"mini-metric\"><span>Endpoints</span><strong>{apiMonitor?.totals?.uniqueEndpoints ?? 0}</strong></div></div></CardContent></Card>"
+  },
+  {
+    "no": 650,
+    "txt": "<Card className=\"panel-card\"><CardHeader className=\"panel-card-header\"><div><h2>Endpoint summary</h2><p>Hit count, error count, dan average duration per endpoint.</p></div></CardHeader><CardContent><DataTable columns={['Method', 'Path', 'Hits', 'Errors', 'Avg ms', 'Last status', 'Last at', 'Last error']} emptyMessage=\"Belum ada traffic API tercatat.\" rows={(apiMonitor?.endpointSummary || []).map((row) => [row.method, row.path, row.hits, row.errorCount, fmtNum(row.avgDurationMs, 1), row.lastStatusCode ?? '-', fmtDate(row.lastAt), row.lastError || '-'])} /></CardContent></Card>"
+  },
+  {
+    "no": 651,
+    "txt": "<Card className=\"panel-card\"><CardHeader className=\"panel-card-header\"><div><h2>Recent requests</h2><p>Request data terbaru ke Solofleet beserta status HTTP-nya.</p></div></CardHeader><CardContent><DataTable columns={['Time', 'Method', 'Path', 'Status', 'Duration', 'Error']} emptyMessage=\"Belum ada recent request.\" rows={(apiMonitor?.recent || []).slice(0, 60).map((row) => [fmtDate(row.timestamp), row.method, `${row.path}${row.query || ''}`, row.statusCode, `${fmtNum(row.durationMs, 0)} ms`, row.error || '-'])} /></CardContent></Card>"
+  }
+]
