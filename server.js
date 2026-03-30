@@ -3,6 +3,7 @@ const http = require('http');
 const crypto = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
+const { Pool } = require('pg');
 const { URL } = require('url');
 const core = require('./web/report-core.js');
 const astroCore = require('./astro-core.js');
@@ -84,6 +85,7 @@ const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
 const WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const webSessions = new Map();
+let postgresPool = null;
 
 function recordApiMonitorEvent(entry) {
   apiMonitorLog.push(entry);
@@ -543,6 +545,14 @@ function saveJsonFile(filePath, value) {
 }
 
 async function saveConfig() {
+  if (getPostgresConfig().enabled) {
+    try {
+      await postgresUpsertJsonSetting('app_settings', 'config_data', config);
+      return;
+    } catch (error) {
+      console.error('Failed to save config to PostgreSQL:', error.message);
+    }
+  }
   if (!getSupabaseWebAuthConfig().enabled) {
     saveJsonFile(CONFIG_FILE, config);
     return;
@@ -556,6 +566,20 @@ async function saveConfig() {
     console.error('Failed to save config to Supabase:', error.message);
     saveJsonFile(CONFIG_FILE, config);
   }
+}
+
+function getPostgresConfig() {
+  const connectionString = String(
+    process.env.DATABASE_URL
+    || process.env.POSTGRES_URL
+    || process.env.POSTGRES_CONNECTION_STRING
+    || config?.postgresUrl
+    || '',
+  ).trim();
+  return {
+    connectionString,
+    enabled: Boolean(connectionString),
+  };
 }
 
 function getSupabaseWebAuthConfig() {
@@ -585,10 +609,11 @@ function sanitizeWebUserForClient(user) {
 }
 
 function buildWebAuthConfigForClient(sessionUser) {
-  const supabase = getSupabaseWebAuthConfig();
+  const provider = getStorageProvider();
   return {
-    provider: supabase.enabled ? 'supabase' : 'local-bootstrap',
-    usesSupabase: supabase.enabled,
+    provider,
+    usesSupabase: provider === 'supabase',
+    usesPostgres: provider === 'postgres',
     sessionUser: sessionUser ? sanitizeWebUserForClient(sessionUser) : null,
   };
 }
@@ -629,7 +654,7 @@ function buildBootstrapWebUser() {
 }
 
 function ensureLocalBootstrapWebUser() {
-  if (getSupabaseWebAuthConfig().enabled) {
+  if (getSupabaseWebAuthConfig().enabled || getPostgresConfig().enabled) {
     return;
   }
 
@@ -670,6 +695,27 @@ async function supabaseRestRequest(method, resource, options) {
   return text ? JSON.parse(text) : [];
 }
 
+async function supabaseFetchAll(resource, pageSize) {
+  const limit = Math.max(100, Number(pageSize || 1000));
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const separator = resource.includes('?') ? '&' : '?';
+    const page = await supabaseRestRequest('GET', `${resource}${separator}limit=${limit}&offset=${offset}`);
+    if (!Array.isArray(page) || !page.length) {
+      break;
+    }
+    rows.push(...page);
+    if (page.length < limit) {
+      break;
+    }
+    offset += page.length;
+  }
+
+  return rows;
+}
+
 function mapSupabaseWebUser(record) {
   return normalizeWebUser({
     id: record.id,
@@ -684,6 +730,38 @@ function mapSupabaseWebUser(record) {
 }
 
 async function ensureBootstrapWebUser() {
+  if (getPostgresConfig().enabled) {
+    try {
+      await ensurePostgresSchema();
+      const existing = await postgresQuery('select id from dashboard_web_users limit 1');
+      if (existing.rows.length) {
+        return;
+      }
+
+      const bootstrap = buildBootstrapWebUser();
+      await postgresQuery(
+        `insert into dashboard_web_users
+          (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          bootstrap.id,
+          bootstrap.username,
+          bootstrap.displayName,
+          bootstrap.passwordHash,
+          bootstrap.role,
+          bootstrap.isActive,
+          bootstrap.createdAt,
+          bootstrap.updatedAt,
+        ],
+      );
+      return;
+    } catch (error) {
+      console.error('Failed to ensure bootstrap PostgreSQL user:', error.message);
+      ensureLocalBootstrapWebUser();
+      return;
+    }
+  }
+
   const runtime = getSupabaseWebAuthConfig();
   if (!runtime.enabled) {
     ensureLocalBootstrapWebUser();
@@ -717,6 +795,22 @@ async function ensureBootstrapWebUser() {
 
 async function listWebUsers() {
   await ensureBootstrapWebUser();
+  if (getPostgresConfig().enabled) {
+    try {
+      const result = await postgresQuery(
+        `select id, username, display_name, password_hash, role, is_active, created_at, updated_at
+         from dashboard_web_users
+         order by username asc`,
+      );
+      return result.rows.map(mapSupabaseWebUser).filter(Boolean);
+    } catch (error) {
+      ensureLocalBootstrapWebUser();
+      return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
+        return left.username.localeCompare(right.username);
+      });
+    }
+  }
+
   if (!getSupabaseWebAuthConfig().enabled) {
     ensureLocalBootstrapWebUser();
     return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
@@ -742,6 +836,17 @@ async function findWebUserByUsername(username) {
   }
 
   await ensureBootstrapWebUser();
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, username, display_name, password_hash, role, is_active, created_at, updated_at
+       from dashboard_web_users
+       where username = $1
+       limit 1`,
+      [normalized],
+    );
+    return result.rows.length ? mapSupabaseWebUser(result.rows[0]) : null;
+  }
+
   if (!getSupabaseWebAuthConfig().enabled) {
     ensureLocalBootstrapWebUser();
     return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
@@ -785,6 +890,33 @@ async function saveWebUser(input) {
     createdAt: (existing && existing.createdAt) || now,
     updatedAt: now,
   });
+
+  if (getPostgresConfig().enabled) {
+    await postgresQuery(
+      `insert into dashboard_web_users
+        (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
+       on conflict (id) do update
+       set username = excluded.username,
+           display_name = excluded.display_name,
+           password_hash = excluded.password_hash,
+           role = excluded.role,
+           is_active = excluded.is_active,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at`,
+      [
+        nextUser.id,
+        nextUser.username,
+        nextUser.displayName,
+        nextUser.passwordHash,
+        nextUser.role,
+        nextUser.isActive,
+        nextUser.createdAt,
+        nextUser.updatedAt,
+      ],
+    );
+    return nextUser;
+  }
 
   if (!getSupabaseWebAuthConfig().enabled) {
     ensureLocalBootstrapWebUser();
@@ -836,6 +968,16 @@ async function deleteWebUser(userId) {
   const resolvedId = String(userId || '').trim();
   if (!resolvedId) {
     throw new Error('User id is required.');
+  }
+
+  if (getPostgresConfig().enabled) {
+    await ensureBootstrapWebUser();
+    await postgresQuery('delete from dashboard_web_users where id = $1', [resolvedId]);
+    const remaining = await postgresQuery('select count(*)::int as count from dashboard_web_users');
+    if (!remaining.rows[0] || !remaining.rows[0].count) {
+      await ensureBootstrapWebUser();
+    }
+    return true;
   }
 
   if (!getSupabaseWebAuthConfig().enabled) {
@@ -952,6 +1094,14 @@ function serializeStateForDisk() {
 
 async function saveState() {
   const payload = serializeStateForDisk();
+  if (getPostgresConfig().enabled) {
+    try {
+      await postgresUpsertJsonSetting('app_state', 'state_data', payload);
+      return;
+    } catch (error) {
+      console.error('Failed to save state to PostgreSQL:', error.message);
+    }
+  }
   if (!getSupabaseWebAuthConfig().enabled) {
     saveJsonFile(STATE_FILE, payload);
     return;
@@ -1393,21 +1543,44 @@ async function initializeStorage() {
   ensureDataFiles();
   let rawConfig = loadJsonFile(CONFIG_FILE, DEFAULT_CONFIG);
   let rawState = loadJsonFile(STATE_FILE, DEFAULT_STATE);
-  
+  let postgresHasConfig = false;
+  let postgresHasState = false;
   let supabaseHasConfig = false;
   let supabaseHasState = false;
 
-  if (getSupabaseWebAuthConfig().enabled) {
+  if (getPostgresConfig().enabled) {
     try {
-      const configRows = await supabaseRestRequest('GET', `app_settings?id=eq.default&limit=1`);
-      if (configRows && configRows.length > 0 && configRows[0].config_data) {
-        rawConfig = configRows[0].config_data;
-        supabaseHasConfig = true;
+      await ensurePostgresSchema();
+      const postgresConfig = await postgresLoadJsonSetting('app_settings', 'config_data');
+      if (postgresConfig) {
+        rawConfig = postgresConfig;
+        postgresHasConfig = true;
       }
-      const stateRows = await supabaseRestRequest('GET', `app_state?id=eq.default&limit=1`);
-      if (stateRows && stateRows.length > 0 && stateRows[0].state_data) {
-        rawState = stateRows[0].state_data;
-        supabaseHasState = true;
+      const postgresState = await postgresLoadJsonSetting('app_state', 'state_data');
+      if (postgresState) {
+        rawState = postgresState;
+        postgresHasState = true;
+      }
+    } catch (error) {
+      console.error('Failed to load storage from PostgreSQL:', error.message);
+    }
+  }
+
+  if ((!postgresHasConfig || !postgresHasState) && getSupabaseWebAuthConfig().enabled) {
+    try {
+      if (!postgresHasConfig) {
+        const configRows = await supabaseRestRequest('GET', `app_settings?id=eq.default&limit=1`);
+        if (configRows && configRows.length > 0 && configRows[0].config_data) {
+          rawConfig = configRows[0].config_data;
+          supabaseHasConfig = true;
+        }
+      }
+      if (!postgresHasState) {
+        const stateRows = await supabaseRestRequest('GET', `app_state?id=eq.default&limit=1`);
+        if (stateRows && stateRows.length > 0 && stateRows[0].state_data) {
+          rawState = stateRows[0].state_data;
+          supabaseHasState = true;
+        }
       }
     } catch (e) {
       console.error('Failed to load storage from Supabase:', e.message);
@@ -1419,6 +1592,10 @@ async function initializeStorage() {
   state = normalizeState(rawState);
   syncUnitsWithConfig();
   recomputeAllAnalyses();
+
+  if (getPostgresConfig().enabled) {
+    await migrateSupabaseDataToPostgres();
+  }
   
   const migrationTasks = [];
   for (const accountConfig of getAllAccountConfigs()) {
@@ -1426,7 +1603,7 @@ async function initializeStorage() {
     captureDailyErrorSnapshots(accountConfig, accountState);
     capturePodSnapshots(accountConfig, accountState, buildFleetRows(accountConfig, accountState, Date.now(), buildLiveAlerts(accountConfig, accountState, Date.now())));
     
-    if (getSupabaseWebAuthConfig().enabled) {
+    if (getPostgresConfig().enabled || getSupabaseWebAuthConfig().enabled) {
       if (accountState.dailySnapshots && accountState.dailySnapshots.length > 0) {
         migrationTasks.push(upsertDailyTempSnapshotsToSupabase(accountConfig, accountState));
       }
@@ -1439,7 +1616,27 @@ async function initializeStorage() {
   state.runtime.isPolling = false;
   state.runtime.nextRunAt = null;
 
-  if (getSupabaseWebAuthConfig().enabled) {
+  if (getPostgresConfig().enabled) {
+    const postgresUsers = await postgresQuery('select count(*)::int as count from dashboard_web_users');
+    if (!postgresUsers.rows[0] || !postgresUsers.rows[0].count) {
+      migrationTasks.push(migrateWebUsersToPostgres(config.webUsers || []));
+    }
+    if (!postgresHasConfig) {
+      console.log('Migrating config to PostgreSQL...');
+      migrationTasks.push(saveConfig());
+    }
+    if (!postgresHasState) {
+      console.log('Migrating state to PostgreSQL...');
+      migrationTasks.push(saveState());
+    }
+
+    if (migrationTasks.length > 0) {
+      await Promise.allSettled(migrationTasks);
+      console.log('Completed auto-migration of local/Supabase data to PostgreSQL.');
+    } else {
+      await saveState();
+    }
+  } else if (getSupabaseWebAuthConfig().enabled) {
     if (!supabaseHasConfig) {
       console.log('Migrating local config to Supabase...');
       migrationTasks.push(saveConfig());
@@ -2314,10 +2511,12 @@ async function buildReportPayload(searchParams) {
 
   const summary = core.summarizeIncidents(incidents, range.rangeStartMs, range.rangeEndMs);
   let snapshotRows = localSnapshotRows;
+  let snapshotAnalytics = buildSnapshotReportAggregates(localSnapshotRows);
   try {
     const supabaseRows = await loadDailyTempSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
     if (supabaseRows.length) {
-      snapshotRows = supabaseRows;
+      snapshotAnalytics = buildSnapshotReportAggregatesFromCompactRows(supabaseRows);
+      snapshotRows = snapshotAnalytics.tempErrorIncidents;
     }
     const supabasPodRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
     if (supabasPodRows.length) {
@@ -2328,9 +2527,8 @@ async function buildReportPayload(searchParams) {
     state.runtime.lastSnapshotError = error.message;
   }
 
-  snapshotRows.sort(function (left, right) { return (right.errorTimestamp || 0) - (left.errorTimestamp || 0); });
+  snapshotRows.sort(function (left, right) { return ((right.firstStartTimestamp || right.errorTimestamp || 0) - (left.firstStartTimestamp || left.errorTimestamp || 0)); });
   podRows.sort(function (left, right) { return (right.timestamp || 0) - (left.timestamp || 0); });
-  const snapshotAnalytics = buildSnapshotReportAggregates(snapshotRows);
   return {
     now: Date.now(),
     rangeStartMs: range.rangeStartMs,
@@ -2412,76 +2610,443 @@ function inferDailySnapshotEndTimestamp(snapshot) {
   return start + (durationMinutes * 60 * 1000);
 }
 
+function buildDailyTempCompactRows(accountConfig, accountState) {
+  const sourceRows = Array.isArray(accountState?.dailySnapshots) ? accountState.dailySnapshots : [];
+  if (!sourceRows.length) {
+    return [];
+  }
+
+  const analytics = buildSnapshotReportAggregates(sourceRows);
+  return (analytics.tempErrorIncidents || []).map(function (row) {
+    return {
+      id: row.day + '|' + (row.accountId || accountConfig.id || 'primary') + '|' + (row.unitId || row.vehicle || 'unit'),
+      day: row.day,
+      accountId: row.accountId || accountConfig.id || 'primary',
+      accountLabel: row.accountLabel || accountConfig.label || accountConfig.id,
+      unitId: row.unitId || row.vehicle,
+      unitLabel: row.unitLabel || row.vehicle || row.unitId,
+      vehicle: row.vehicle || row.unitLabel || row.unitId,
+      type: row.type || 'temp1',
+      label: row.label || sensorFaultLabel(row.type),
+      incidents: Number(row.incidents || 0),
+      temp1Incidents: Number(row.temp1Incidents || 0),
+      temp2Incidents: Number(row.temp2Incidents || 0),
+      bothIncidents: Number(row.bothIncidents || 0),
+      firstStartTimestamp: row.firstStartTimestamp || null,
+      lastEndTimestamp: row.lastEndTimestamp || null,
+      durationMinutes: Number(row.durationMinutes || row.totalMinutes || 0),
+      totalMinutes: Number(row.totalMinutes || 0),
+      longestMinutes: Number(row.longestMinutes || 0),
+      temp1Min: row.temp1Min ?? null,
+      temp1Max: row.temp1Max ?? null,
+      temp2Min: row.temp2Min ?? null,
+      temp2Max: row.temp2Max ?? null,
+      minSpeed: row.minSpeed ?? null,
+      maxSpeed: row.maxSpeed ?? null,
+      latitude: row.latitude ?? null,
+      longitude: row.longitude ?? null,
+      locationSummary: row.locationSummary || '',
+      zoneName: row.zoneName || '',
+    };
+  });
+}
+
+async function migrateWebUsersToPostgres(users) {
+  if (!getPostgresConfig().enabled) {
+    return 0;
+  }
+  const normalizedUsers = (users || []).map(normalizeWebUser).filter(Boolean);
+  if (!normalizedUsers.length) {
+    return 0;
+  }
+  await ensurePostgresSchema();
+  return postgresUpsertRows(
+    'dashboard_web_users',
+    normalizedUsers.map(function (user) {
+      return {
+        id: user.id,
+        username: user.username,
+        display_name: user.displayName,
+        password_hash: user.passwordHash,
+        role: user.role,
+        is_active: user.isActive,
+        created_at: user.createdAt,
+        updated_at: user.updatedAt,
+      };
+    }),
+    ['id', 'username', 'display_name', 'password_hash', 'role', 'is_active', 'created_at', 'updated_at'],
+    ['id'],
+    { touchUpdatedAt: true },
+  );
+}
+
+async function countRowsInPostgres(tableName) {
+  if (!getPostgresConfig().enabled) {
+    return 0;
+  }
+  await ensurePostgresSchema();
+  const result = await postgresQuery(`select count(*)::int as count from ${tableName}`);
+  return result.rows[0] ? Number(result.rows[0].count || 0) : 0;
+}
+
+async function migrateSupabaseDataToPostgres() {
+  if (!getPostgresConfig().enabled || !getSupabaseWebAuthConfig().enabled) {
+    return;
+  }
+
+  try {
+    if ((await countRowsInPostgres('dashboard_web_users')) === 0) {
+      const users = await supabaseFetchAll('dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&order=username.asc', 500);
+      await migrateWebUsersToPostgres(users.map(mapSupabaseWebUser));
+    }
+
+    if ((await countRowsInPostgres('pod_snapshots')) === 0) {
+      const podRows = await supabaseFetchAll('pod_snapshots?select=id,day,snapshot_timestamp,snapshot_time,unit_id,unit_label,customer_name,pod_id,pod_name,latitude,longitude,speed,distance_meters,location_summary&order=day.desc', 1000);
+      if (podRows.length) {
+        await postgresUpsertRows(
+          'pod_snapshots',
+          podRows,
+          [
+            'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
+            'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
+            'speed', 'distance_meters', 'location_summary',
+          ],
+          ['id'],
+        );
+      }
+    }
+
+    if ((await countRowsInPostgres('daily_temp_rollups')) === 0) {
+      const rollupRows = await supabaseFetchAll('daily_temp_rollups?select=id,day,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,incidents,temp1_incidents,temp2_incidents,both_incidents,first_start_timestamp,last_end_timestamp,duration_minutes,total_minutes,longest_minutes,temp1_min,temp1_max,temp2_min,temp2_max,min_speed,max_speed,latitude,longitude,location_summary,zone_name&order=day.desc', 1000);
+      if (rollupRows.length) {
+        await postgresUpsertRows(
+          'daily_temp_rollups',
+          rollupRows,
+          [
+            'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
+            'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
+            'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
+            'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
+            'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
+          ],
+          ['id'],
+          { touchUpdatedAt: true },
+        );
+      } else {
+        const legacyRows = await supabaseFetchAll('daily_temp_snapshots?select=id,day,error_timestamp,error_time,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,duration_minutes,temp1,temp2,speed,latitude,longitude,location_summary,zone_name&order=day.desc', 1000);
+        if (legacyRows.length) {
+          const compactRows = buildDailyTempCompactRows(
+            { id: 'migration', label: 'migration' },
+            { dailySnapshots: legacyRows.map(mapSupabaseDailySnapshotRecord) },
+          );
+          const mappedRows = compactRows.map(mapDailySnapshotToSupabaseRow);
+          await postgresUpsertRows(
+            'daily_temp_rollups',
+            mappedRows,
+            [
+              'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
+              'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
+              'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
+              'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
+              'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
+            ],
+            ['id'],
+            { touchUpdatedAt: true },
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to migrate Supabase data to PostgreSQL:', error.message);
+  }
+}
+
 function mapDailySnapshotToSupabaseRow(snapshot) {
   return {
     id: snapshot.id,
     day: snapshot.day,
-    error_timestamp: new Date(snapshot.errorTimestamp).toISOString(),
-    error_time: snapshot.errorTime || formatLocalTime(snapshot.errorTimestamp),
+    account_id: snapshot.accountId || 'primary',
+    account_label: snapshot.accountLabel || resolveAccountLabel(snapshot.accountId || 'primary'),
     unit_id: snapshot.unitId,
     unit_label: snapshot.unitLabel || snapshot.vehicle || snapshot.unitId,
     vehicle: snapshot.vehicle || snapshot.unitLabel || snapshot.unitId,
     error_type: snapshot.type,
     error_label: snapshot.label || sensorFaultLabel(snapshot.type),
+    incidents: snapshot.incidents ?? 0,
+    temp1_incidents: snapshot.temp1Incidents ?? 0,
+    temp2_incidents: snapshot.temp2Incidents ?? 0,
+    both_incidents: snapshot.bothIncidents ?? 0,
+    first_start_timestamp: snapshot.firstStartTimestamp ? new Date(snapshot.firstStartTimestamp).toISOString() : null,
+    last_end_timestamp: snapshot.lastEndTimestamp ? new Date(snapshot.lastEndTimestamp).toISOString() : null,
     duration_minutes: snapshot.durationMinutes ?? null,
-    temp1: snapshot.temp1 ?? null,
-    temp2: snapshot.temp2 ?? null,
-    speed: snapshot.speed ?? null,
+    total_minutes: snapshot.totalMinutes ?? null,
+    longest_minutes: snapshot.longestMinutes ?? null,
+    temp1_min: snapshot.temp1Min ?? null,
+    temp1_max: snapshot.temp1Max ?? null,
+    temp2_min: snapshot.temp2Min ?? null,
+    temp2_max: snapshot.temp2Max ?? null,
+    min_speed: snapshot.minSpeed ?? null,
+    max_speed: snapshot.maxSpeed ?? null,
+    latitude: snapshot.latitude ?? null,
+    longitude: snapshot.longitude ?? null,
+    location_summary: snapshot.locationSummary || '',
+    zone_name: snapshot.zoneName || '',
   };
 }
 
+function getStorageProvider() {
+  if (getPostgresConfig().enabled) {
+    return 'postgres';
+  }
+  if (getSupabaseWebAuthConfig().enabled) {
+    return 'supabase';
+  }
+  return 'local-bootstrap';
+}
+
+function getPostgresPool() {
+  const runtime = getPostgresConfig();
+  if (!runtime.enabled) {
+    return null;
+  }
+  if (!postgresPool) {
+    postgresPool = new Pool({
+      connectionString: runtime.connectionString,
+      ssl: /supabase|render|railway|neon/i.test(runtime.connectionString) ? { rejectUnauthorized: false } : false,
+    });
+  }
+  return postgresPool;
+}
+
+async function postgresQuery(queryText, params) {
+  const pool = getPostgresPool();
+  if (!pool) {
+    throw new Error('PostgreSQL is not configured.');
+  }
+  return pool.query(queryText, params || []);
+}
+
+async function ensurePostgresSchema() {
+  if (!getPostgresConfig().enabled) {
+    return;
+  }
+
+  await postgresQuery(`
+    create table if not exists app_settings (
+      id text primary key,
+      config_data jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists app_state (
+      id text primary key,
+      state_data jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists dashboard_web_users (
+      id text primary key,
+      username text unique not null,
+      display_name text not null,
+      password_hash text not null,
+      role text not null default 'admin',
+      is_active boolean not null default true,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists daily_temp_rollups (
+      id text primary key,
+      day date not null,
+      account_id text,
+      account_label text,
+      unit_id text not null,
+      unit_label text,
+      vehicle text,
+      error_type text,
+      error_label text,
+      incidents integer default 0,
+      temp1_incidents integer default 0,
+      temp2_incidents integer default 0,
+      both_incidents integer default 0,
+      first_start_timestamp timestamptz,
+      last_end_timestamp timestamptz,
+      duration_minutes numeric,
+      total_minutes numeric,
+      longest_minutes numeric,
+      temp1_min numeric,
+      temp1_max numeric,
+      temp2_min numeric,
+      temp2_max numeric,
+      min_speed numeric,
+      max_speed numeric,
+      latitude numeric,
+      longitude numeric,
+      location_summary text,
+      zone_name text,
+      created_at timestamptz default now(),
+      updated_at timestamptz default now()
+    );
+
+    create table if not exists pod_snapshots (
+      id text primary key,
+      day date not null,
+      snapshot_timestamp timestamptz not null,
+      snapshot_time text,
+      unit_id text not null,
+      unit_label text,
+      customer_name text,
+      pod_id text,
+      pod_name text,
+      latitude numeric,
+      longitude numeric,
+      speed numeric,
+      distance_meters numeric,
+      location_summary text,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_daily_temp_rollups_day on daily_temp_rollups(day desc);
+    create index if not exists idx_daily_temp_rollups_unit_id on daily_temp_rollups(unit_id);
+    create index if not exists idx_daily_temp_rollups_account_id on daily_temp_rollups(account_id);
+    create index if not exists idx_pod_snapshots_day on pod_snapshots(day desc);
+    create index if not exists idx_pod_snapshots_unit_id on pod_snapshots(unit_id);
+    create index if not exists idx_dashboard_web_users_username on dashboard_web_users(username);
+  `);
+}
+
+async function postgresUpsertJsonSetting(tableName, jsonColumn, value) {
+  await ensurePostgresSchema();
+  await postgresQuery(
+    `insert into ${tableName} (id, ${jsonColumn}, updated_at)
+     values ($1, $2::jsonb, now())
+     on conflict (id) do update
+     set ${jsonColumn} = excluded.${jsonColumn},
+         updated_at = now()`,
+    ['default', JSON.stringify(value)],
+  );
+}
+
+async function postgresLoadJsonSetting(tableName, jsonColumn) {
+  await ensurePostgresSchema();
+  const result = await postgresQuery(
+    `select ${jsonColumn} from ${tableName} where id = $1 limit 1`,
+    ['default'],
+  );
+  return result.rows.length ? result.rows[0][jsonColumn] : null;
+}
+
+async function postgresUpsertRows(tableName, rows, columns, conflictColumns, options) {
+  if (!rows.length) {
+    return 0;
+  }
+  await ensurePostgresSchema();
+  const settings = options && typeof options === 'object' ? options : {};
+  const params = [];
+  const valueRows = rows.map(function (row, rowIndex) {
+    const placeholders = columns.map(function (_column, columnIndex) {
+      params.push(row[columns[columnIndex]]);
+      return `$${rowIndex * columns.length + columnIndex + 1}`;
+    });
+    return `(${placeholders.join(', ')})`;
+  });
+  const assignments = columns
+    .filter(function (column) { return !conflictColumns.includes(column); })
+    .map(function (column) { return `${column} = excluded.${column}`; });
+  if (settings.touchUpdatedAt) {
+    assignments.push('updated_at = now()');
+  }
+
+  await postgresQuery(
+    `insert into ${tableName} (${columns.join(', ')})
+     values ${valueRows.join(', ')}
+     on conflict (${conflictColumns.join(', ')}) do update
+     set ${assignments.join(', ')}`,
+    params,
+  );
+  return rows.length;
+}
+
 function mapSupabaseDailySnapshotRecord(record) {
-  const parts = String(record.id || '').split('|');
-  const accountId = parts[1] || 'primary';
-  const unitId = String(record.unit_id || parts[2] || '').trim();
-  const errorTimestamp = Date.parse(record.error_timestamp || '');
-  const durationMinutes = Number(record.duration_minutes || 0);
+  const legacyErrorTimestamp = Date.parse(record.error_timestamp || '');
+  const firstStartTimestamp = Date.parse(record.first_start_timestamp || record.error_timestamp || '');
+  const lastEndTimestamp = Date.parse(record.last_end_timestamp || '');
+  const durationMinutes = Number(record.duration_minutes || record.total_minutes || 0);
+  const safeLastEndTimestamp = Number.isFinite(lastEndTimestamp)
+    ? lastEndTimestamp
+    : Number.isFinite(firstStartTimestamp)
+      ? firstStartTimestamp + (durationMinutes * 60 * 1000)
+      : null;
   return {
     id: String(record.id || ''),
-    accountId,
-    accountLabel: resolveAccountLabel(accountId),
     day: String(record.day || '').slice(0, 10),
-    errorTimestamp: Number.isFinite(errorTimestamp) ? errorTimestamp : null,
-    errorTime: String(record.error_time || ''),
-    startTimestamp: Number.isFinite(errorTimestamp) ? errorTimestamp : null,
-    endTimestamp: Number.isFinite(errorTimestamp) && Number.isFinite(durationMinutes)
-      ? errorTimestamp + (durationMinutes * 60 * 1000)
-      : Number.isFinite(errorTimestamp) ? errorTimestamp : null,
-    unitId,
-    unitLabel: String(record.unit_label || record.vehicle || unitId),
-    vehicle: String(record.vehicle || record.unit_label || unitId),
-    type: String(record.error_type || '').trim(),
+    accountId: String(record.account_id || record.accountId || 'primary'),
+    accountLabel: String(record.account_label || record.accountLabel || resolveAccountLabel(record.account_id || record.accountId || 'primary')),
+    unitId: String(record.unit_id || ''),
+    unitLabel: String(record.unit_label || record.vehicle || record.unit_id || ''),
+    vehicle: String(record.vehicle || record.unit_label || record.unit_id || ''),
+    type: String(record.error_type || '').trim() || 'temp1',
     label: String(record.error_label || sensorFaultLabel(record.error_type) || ''),
-    durationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : 0,
-    temp1: toNumber(record.temp1),
-    temp2: toNumber(record.temp2),
-    speed: toNumber(record.speed),
-    latitude: null,
-    longitude: null,
-    locationSummary: '',
-    zoneName: '',
+    incidents: Number(record.incidents || 1),
+    temp1Incidents: Number(record.temp1_incidents || (String(record.error_type || '') === 'temp1' ? 1 : 0)),
+    temp2Incidents: Number(record.temp2_incidents || (String(record.error_type || '') === 'temp2' ? 1 : 0)),
+    bothIncidents: Number(record.both_incidents || (String(record.error_type || '') === 'temp1+temp2' ? 1 : 0)),
+    firstStartTimestamp: Number.isFinite(firstStartTimestamp) ? firstStartTimestamp : null,
+    lastEndTimestamp: safeLastEndTimestamp,
+    errorTimestamp: Number.isFinite(legacyErrorTimestamp) ? legacyErrorTimestamp : (Number.isFinite(firstStartTimestamp) ? firstStartTimestamp : null),
+    durationMinutes,
+    totalMinutes: Number(record.total_minutes || record.duration_minutes || 0),
+    longestMinutes: Number(record.longest_minutes || record.duration_minutes || 0),
+    temp1Min: toNumber(record.temp1_min ?? record.temp1),
+    temp1Max: toNumber(record.temp1_max ?? record.temp1),
+    temp2Min: toNumber(record.temp2_min ?? record.temp2),
+    temp2Max: toNumber(record.temp2_max ?? record.temp2),
+    minSpeed: toNumber(record.min_speed ?? record.speed),
+    maxSpeed: toNumber(record.max_speed ?? record.speed),
+    latitude: toNumber(record.latitude),
+    longitude: toNumber(record.longitude),
+    locationSummary: String(record.location_summary || ''),
+    zoneName: String(record.zone_name || ''),
+    startTime: Number.isFinite(firstStartTimestamp) ? formatLocalTime(firstStartTimestamp) : '-',
+    endTime: Number.isFinite(lastEndTimestamp) ? formatLocalTime(lastEndTimestamp) : '-',
   };
 }
 
 async function upsertDailyTempSnapshotsToSupabase(accountConfig, accountState) {
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
+  const compactRows = buildDailyTempCompactRows(accountConfig, accountState);
+  if (!compactRows.length) {
     return 0;
   }
 
-  const sourceRows = Array.isArray(accountState?.dailySnapshots) ? accountState.dailySnapshots : [];
-  if (!sourceRows.length) {
-    return 0;
-  }
-
-  const rows = sourceRows.map(mapDailySnapshotToSupabaseRow).filter(function (row) {
-    return row.id && row.day && row.error_timestamp && row.unit_id && row.error_type;
+  const rows = compactRows.map(mapDailySnapshotToSupabaseRow).filter(function (row) {
+    return row.id && row.day && row.unit_id;
   });
   if (!rows.length) {
     return 0;
   }
 
-  await supabaseRestRequest('POST', 'daily_temp_snapshots', {
+  if (getPostgresConfig().enabled) {
+    return postgresUpsertRows(
+      'daily_temp_rollups',
+      rows,
+      [
+        'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
+        'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
+        'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
+        'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
+        'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
+      ],
+      ['id'],
+      { touchUpdatedAt: true },
+    );
+  }
+
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return 0;
+  }
+
+  await supabaseRestRequest('POST', 'daily_temp_rollups', {
     headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
     body: rows,
   });
@@ -2531,11 +3096,6 @@ function mapSupabasePodSnapshotRecord(record) {
 }
 
 async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
-    return 0;
-  }
-
   const sourceRows = Array.isArray(accountState?.podSnapshots) ? accountState.podSnapshots : [];
   if (!sourceRows.length) {
     return 0;
@@ -2548,6 +3108,24 @@ async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
     return 0;
   }
 
+  if (getPostgresConfig().enabled) {
+    return postgresUpsertRows(
+      'pod_snapshots',
+      rows,
+      [
+        'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
+        'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
+        'speed', 'distance_meters', 'location_summary',
+      ],
+      ['id'],
+    );
+  }
+
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return 0;
+  }
+
   await supabaseRestRequest('POST', 'pod_snapshots', {
     headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
     body: rows,
@@ -2556,13 +3134,31 @@ async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
 }
 
 async function loadPodSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled || rangeStartMs === null || rangeEndMs === null) {
+  if (rangeStartMs === null || rangeEndMs === null) {
     return [];
   }
 
   const startDay = formatLocalDay(rangeStartMs);
   const endDay = formatLocalDay(rangeEndMs);
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, day, snapshot_timestamp, snapshot_time, unit_id, unit_label, customer_name, pod_id, pod_name, latitude, longitude, speed, distance_meters, location_summary
+       from pod_snapshots
+       where day >= $1 and day <= $2
+       order by snapshot_timestamp desc
+       limit 20000`,
+      [startDay, endDay],
+    );
+    return result.rows.map(mapSupabasePodSnapshotRecord).filter(function (row) {
+      return row.timestamp !== null;
+    });
+  }
+
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return [];
+  }
+
   const rows = await supabaseRestRequest(
     'GET',
     `pod_snapshots?select=id,day,snapshot_timestamp,snapshot_time,unit_id,unit_label,customer_name,pod_id,pod_name,latitude,longitude,speed,distance_meters,location_summary&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=snapshot_timestamp.desc&limit=20000`,
@@ -2573,20 +3169,37 @@ async function loadPodSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
 }
 
 async function loadDailyTempSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled || rangeStartMs === null || rangeEndMs === null) {
+  if (rangeStartMs === null || rangeEndMs === null) {
     return [];
   }
 
   const startDay = formatLocalDay(rangeStartMs);
   const endDay = formatLocalDay(rangeEndMs);
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, day, account_id, account_label, unit_id, unit_label, vehicle, error_type, error_label,
+              incidents, temp1_incidents, temp2_incidents, both_incidents, first_start_timestamp,
+              last_end_timestamp, duration_minutes, total_minutes, longest_minutes, temp1_min, temp1_max,
+              temp2_min, temp2_max, min_speed, max_speed, latitude, longitude, location_summary, zone_name
+       from daily_temp_rollups
+       where day >= $1 and day <= $2
+       order by day desc, first_start_timestamp desc nulls last
+       limit 20000`,
+      [startDay, endDay],
+    );
+    return result.rows.map(mapSupabaseDailySnapshotRecord);
+  }
+
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return [];
+  }
+
   const rows = await supabaseRestRequest(
     'GET',
-    `daily_temp_snapshots?select=id,day,error_timestamp,error_time,unit_id,unit_label,vehicle,error_type,error_label,duration_minutes,temp1,temp2,speed&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=error_timestamp.desc&limit=20000`,
+    `daily_temp_rollups?select=id,day,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,incidents,temp1_incidents,temp2_incidents,both_incidents,first_start_timestamp,last_end_timestamp,duration_minutes,total_minutes,longest_minutes,temp1_min,temp1_max,temp2_min,temp2_max,min_speed,max_speed,latitude,longitude,location_summary,zone_name&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=day.desc&limit=20000`,
   );
-  return rows.map(mapSupabaseDailySnapshotRecord).filter(function (row) {
-    return row.errorTimestamp !== null;
-  });
+  return rows.map(mapSupabaseDailySnapshotRecord);
 }
 
 function buildTempErrorIncidentsFromSnapshotRows(snapshotRows) {
@@ -2677,6 +3290,99 @@ function buildTempErrorIncidentsFromSnapshotRows(snapshotRows) {
   }).sort(function (left, right) {
     return (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0);
   });
+}
+
+function buildSnapshotReportAggregatesFromCompactRows(compactRows) {
+  const tempErrorIncidents = [...(compactRows || [])].sort(function (left, right) {
+    return (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0);
+  });
+
+  const compileByUnitDay = tempErrorIncidents.map(function (row) {
+    return {
+      day: row.day,
+      accountId: row.accountId,
+      accountLabel: row.accountLabel,
+      unitId: row.unitId,
+      unitLabel: row.unitLabel,
+      vehicle: row.vehicle,
+      incidents: row.incidents,
+      temp1Incidents: row.temp1Incidents,
+      temp2Incidents: row.temp2Incidents,
+      bothIncidents: row.bothIncidents,
+      totalMinutes: Number(row.totalMinutes || 0),
+      longestMinutes: Number(row.longestMinutes || 0),
+    };
+  }).sort(function (left, right) {
+    return right.day.localeCompare(left.day)
+      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitLabel || left.unitId).localeCompare(String(right.unitLabel || right.unitId));
+  });
+
+  const compileByDayMap = new Map();
+  const dailyTotalsMap = new Map();
+  for (const row of compileByUnitDay) {
+    if (!compileByDayMap.has(row.day)) {
+      compileByDayMap.set(row.day, {
+        day: row.day,
+        units: 0,
+        temp1Units: 0,
+        temp2Units: 0,
+        bothUnits: 0,
+        incidents: 0,
+        totalMinutes: 0,
+        longestMinutes: 0,
+      });
+    }
+    const dailyCompile = compileByDayMap.get(row.day);
+    dailyCompile.units += 1;
+    if (row.temp1Incidents > 0) dailyCompile.temp1Units += 1;
+    if (row.temp2Incidents > 0) dailyCompile.temp2Units += 1;
+    if (row.bothIncidents > 0) dailyCompile.bothUnits += 1;
+    dailyCompile.incidents += Number(row.incidents || 0);
+    dailyCompile.totalMinutes += Number(row.totalMinutes || 0);
+    dailyCompile.longestMinutes = Math.max(dailyCompile.longestMinutes, Number(row.longestMinutes || 0));
+
+    if (!dailyTotalsMap.has(row.day)) {
+      dailyTotalsMap.set(row.day, {
+        day: row.day,
+        units: 0,
+        incidents: 0,
+        criticalIncidents: 0,
+        totalMinutes: 0,
+      });
+    }
+    const dailyTotals = dailyTotalsMap.get(row.day);
+    dailyTotals.units += 1;
+    dailyTotals.incidents += Number(row.incidents || 0);
+    dailyTotals.criticalIncidents += Number(row.bothIncidents || 0);
+    dailyTotals.totalMinutes += Number(row.totalMinutes || 0);
+  }
+
+  const compileByDay = [...compileByDayMap.values()].map(function (row) {
+    return {
+      ...row,
+      totalMinutes: Number(row.totalMinutes.toFixed(2)),
+      longestMinutes: Number(row.longestMinutes.toFixed(2)),
+    };
+  }).sort(function (left, right) {
+    return right.day.localeCompare(left.day);
+  });
+
+  const dailyTotals = [...dailyTotalsMap.values()].map(function (row) {
+    return {
+      ...row,
+      totalMinutes: Number(row.totalMinutes.toFixed(2)),
+    };
+  }).sort(function (left, right) {
+    return right.day.localeCompare(left.day);
+  });
+
+  return {
+    tempErrorIncidents,
+    compileByUnitDay,
+    compileByDay,
+    dailyTotals,
+  };
 }
 
 function buildSnapshotReportAggregates(snapshotRows) {

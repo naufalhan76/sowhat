@@ -107,3 +107,41 @@ create table if not exists public.app_state (
   state_data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
+
+
+create table if not exists public.daily_temp_rollups (
+  id text primary key,
+  day date not null,
+  account_id text,
+  account_label text,
+  unit_id text not null,
+  unit_label text,
+  vehicle text,
+  error_type text,
+  error_label text,
+  incidents integer default 0,
+  temp1_incidents integer default 0,
+  temp2_incidents integer default 0,
+  both_incidents integer default 0,
+  first_start_timestamp timestamptz,
+  last_end_timestamp timestamptz,
+  duration_minutes numeric,
+  total_minutes numeric,
+  longest_minutes numeric,
+  temp1_min numeric,
+  temp1_max numeric,
+  temp2_min numeric,
+  temp2_max numeric,
+  min_speed numeric,
+  max_speed numeric,
+  latitude numeric,
+  longitude numeric,
+  location_summary text,
+  zone_name text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_daily_temp_rollups_day on public.daily_temp_rollups(day desc);
+create index if not exists idx_daily_temp_rollups_unit_id on public.daily_temp_rollups(unit_id);
+create index if not exists idx_daily_temp_rollups_account_id on public.daily_temp_rollups(account_id);

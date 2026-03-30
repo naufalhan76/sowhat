@@ -1,192 +1,208 @@
-# 🚀 Panduan Deployment Solofleet ke VPS
+# Deploy Solofleet ke VPS + PostgreSQL
 
-Panduan ini berisi langkah-langkah untuk memindahkan project Solofleet dari komputer lokal kamu (Windows) ke dalam VPS (Virtual Private Server) berbasis Linux (seperti Ubuntu/Debian), dan menjalankannya agar online 24/7 menggunakan **PM2**.
+Panduan ini buat menjalankan dashboard di VPS Linux dengan:
+- Node.js
+- PM2
+- Nginx
+- PostgreSQL self-hosted
+- custom domain
 
----
+App sekarang mendukung mode storage prioritas:
+1. `PostgreSQL`
+2. `Supabase`
+3. file lokal `.json`
 
-## 📋 Langkah 1: Persiapan di VPS
-Pastikan VPS kamu sudah terinstall **Node.js** dan **npm**. Jika belum, jalankan perintah ini di terminal VPS kamu:
+Kalau `DATABASE_URL` tersedia, app akan otomatis pakai PostgreSQL sebagai storage utama dan mencoba migrasi data lama dari JSON/Supabase saat startup pertama.
+
+## 1. Install dependency dasar di VPS
 
 ```bash
-# Update package list
 sudo apt update
-
-# Install Node.js (Versi 20.x atau 22.x disarankan)
+sudo apt install -y curl git nginx postgresql postgresql-contrib
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
-```
-
-Install **PM2** secara global di VPS:
-```bash
 sudo npm install -g pm2
 ```
 
----
-
-## 📦 Langkah 2: Pindahkan Project ke VPS
-Kamu bisa memindahkan file menggunakan **Git** (paling disarankan) ataupun **SCP / SFTP** (FileZilla).
-
-### Opsi A: Menggunakan Git (Disarankan)
-Jika project kamu sudah di-push ke GitHub/GitLab:
-```bash
-git clone https://github.com/naufalhan76/sowhat.git
-cd sowhat
-```
-
-### Opsi B: Menggunakan SCP (Upload manual dari laptop lokal)
-Buka terminal/PowerShell di **komputer lokal** kamu (di folder project A:\Solofleet), lalu ketik:
-```bash
-# Ganti user@ip_vps dengan username dan IP VPS kamu
-# PERHATIAN: Jangan sertakan folder node_modules!
-scp -r ./* user@ip_vps:~/solofleet/
-```
-Atau cukup gunakan aplikasi seperti **FileZilla** untuk drag-and-drop file ke VPS. Pastikan tidak membawa folder `node_modules` atau folder `.git`.
-
----
-
-## ⚙️ Langkah 3: Setup Konfigurasi (.env)
-Karena kita tidak mengirim file `.env` (sudah di-ignore oleh Git), kita wajib membuatnya di VPS:
-
-1. Masuk ke folder project di VPS:
-   ```bash
-   cd ~/solofleet
-   ```
-2. Buat file `.env` baru:
-   ```bash
-   nano .env
-   ```
-3. Input data berikut (Sesuaikan dengan kredensial Supabase kamu):
-   ```properties
-   PORT=3000
-   SUPABASE_URL=URL_SUPABASE_KAMU
-   SUPABASE_SERVICE_ROLE_KEY=KODE_SERVICE_ROLE_KAMU
-   ```
-4. Simpan file (`Ctrl+X`, ketik `Y`, lalu `Enter`).
-
----
-
-## 🔨 Langkah 4: Install Dependencies & Build Frontend
-Di dalam folder project VPS (`~/solofleet`), instal semua package NPM yang dibutuhkan dan build file antarmuka (frontend).
+## 2. Clone project
 
 ```bash
-# Install module backend & frontend
+cd /var/www
+sudo git clone https://github.com/naufalhan76/sowhat.git solofleet
+cd solofleet
 npm install
+```
 
-# Build file frontend React (Vite)
+## 3. Buat database PostgreSQL
+
+Masuk ke user postgres:
+
+```bash
+sudo -u postgres psql
+```
+
+Lalu buat database dan user:
+
+```sql
+create database solofleet;
+create user solofleet_app with encrypted password 'GANTI_PASSWORD_DB';
+grant all privileges on database solofleet to solofleet_app;
+\c solofleet
+grant all on schema public to solofleet_app;
+alter default privileges in schema public grant all on tables to solofleet_app;
+alter default privileges in schema public grant all on sequences to solofleet_app;
+```
+
+Keluar dari `psql`:
+
+```sql
+\q
+```
+
+## 4. Buat file `.env`
+
+Di root project:
+
+```bash
+nano .env
+```
+
+Isi minimal:
+
+```env
+PORT=3001
+HOST=127.0.0.1
+DATABASE_URL=postgresql://solofleet_app:GANTI_PASSWORD_DB@127.0.0.1:5432/solofleet
+
+# Optional: kalau masih mau dipakai sebagai sumber migrasi lama
+SUPABASE_URL=https://unwcleokcopodhhbsyrx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=ISI_SERVICE_ROLE_KEY
+```
+
+Catatan:
+- `DATABASE_URL` membuat app pindah ke PostgreSQL.
+- `SUPABASE_*` boleh tetap diisi sementara kalau kamu mau auto-migrate data lama dari Supabase ke PostgreSQL.
+- Setelah migrasi sudah aman, `SUPABASE_*` boleh dihapus.
+
+## 5. Build frontend
+
+```bash
 npm run build
 ```
-*(Catatan: `npm run build` wajib dijalankan agar hasil generate UI React masuk ke folder `web-dist`, yang nantinya akan disajikan oleh `server.js`)*
 
----
+## 6. Jalankan app
 
-## 🚀 Langkah 5: Jalankan Aplikasi Menggunakan PM2
-Agar aplikasi berjalan otomatis di background, otomatis restart jika terjadi error/crash, dan menyala saat VPS direboot, kita siapkan PM2:
+```bash
+pm2 start server.js --name sowhat
+pm2 save
+pm2 startup
+```
 
-1. **Jalankan aplikasi:**
-   ```bash
-   pm2 start server.js --name "sowhat"
-   ```
+Cek log:
 
-2. **Periksa status jalannya aplikasi:**
-   ```bash
-   pm2 status
-   # atau untuk melihat log proses:
-   pm2 logs solofleet
-   ```
+```bash
+pm2 logs sowhat
+```
 
-3. **Buat PM2 otomatis menyala sewaktu VPS Reboot:**
-   Jalankan perintah ini:
-   ```bash
-   pm2 startup
-   ```
-   *(PM2 akan memberikan sebuah perintah baru di layar. Copy perintah tersebut dan paste lagi ke terminal, lalu Enter).*
-   
-   Simpan daftar PM2 saat ini:
-   ```bash
-   pm2 save
-   ```
+Saat boot pertama, cek log untuk pesan seperti:
+- `Migrating config to PostgreSQL...`
+- `Migrating state to PostgreSQL...`
+- `Completed auto-migration of local/Supabase data to PostgreSQL.`
 
----
+## 7. Setup Nginx reverse proxy
 
-## ✅ Selesai!
-Sekarang aplikasi kamu sudah berjalan tanpa henti di VPS pada port **3000**.
-Kamu bisa mengeceknya dari browser dengan membuka:
-`http://IP_VPS_KAMU:3000`
+Buat config:
 
-### Perintah Berguna PM2 
-Jika suatu saat ada update kode / fitur baru:
-- `pm2 restart solofleet` (Untuk merestart aplikasi setelah update kode)
-- `pm2 stop solofleet` (Untuk mematikan aplikasi)
-- `pm2 logs solofleet` (Untuk melihat pesan error jika aplikasi bermasalah)
-- `pm2 monit` (Untuk melihat penggunaan CPU dan RAM backend)
+```bash
+sudo nano /etc/nginx/sites-available/solofleet
+```
 
----
+Isi:
 
-## 🌐 Langkah 6: Hubungkan Custom Domain (Cloudflare + Reverse Proxy)
-Karena kamu sudah menghubungkan domain ke Cloudflare, kita perlu menyiapkan Nginx di VPS sebagai perantara (Reverse Proxy) dari port 80/443 (HTTP/S) ke port 3000 (Aplikasi Node.js kamu).
+```nginx
+server {
+    listen 80;
+    server_name dashboard.domainkamu.com;
 
-### A. Konfigurasi DNS di Cloudflare
-1. Buka dashboard Cloudflare -> pilih domain kamu -> ke menu **DNS**.
-2. Buat record baru:
-   - **Type**: `A`
-   - **Name**: `@` (atau subdomain misal `app`)
-   - **IPv4 address**: *Masukkan IP VPS kamu*
-   - **Proxy status**: Pastikan statusnya **Proxied (Awan warna Orange)** menyala.
-3. Di menu **SSL/TLS -> Overview**, ubah mode menjadi **Full** atau **Full (Strict)**.
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
-### B. Install & Setup Nginx di VPS
-Di terminal VPS kamu:
+Aktifkan:
 
-1. **Install Nginx:**
-   ```bash
-   sudo apt update
-   sudo apt install -y nginx
-   ```
+```bash
+sudo ln -s /etc/nginx/sites-available/solofleet /etc/nginx/sites-enabled/solofleet
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
-2. **Hapus konfigurasi default:**
-   ```bash
-   sudo rm /etc/nginx/sites-enabled/default
-   ```
+## 8. Arahkan custom domain
 
-3. **Buat file konfigurasi web kamu:**
-   ```bash
-   sudo nano /etc/nginx/sites-available/sowhat
-   ```
+Di DNS provider atau Cloudflare:
+- buat `A record`
+- host: `dashboard` atau `@`
+- value: IP VPS kamu
 
-4. **Copy-paste konfigurasi (Reverse Proxy) berikut:**
-   *(Ganti `domain-kamu.com` dengan nama domain aslimu)*
-   ```nginx
-   server {
-       listen 80;
-       server_name app.mabox.tech;
+Contoh:
+- `dashboard.domainkamu.com -> 123.123.123.123`
 
-       location / {
-           proxy_pass http://127.0.0.1:3000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-           
-           # Teruskan IP asli dari Cloudflare
-           proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-   *Simpan & Exit (`Ctrl+X` -> `Y` -> `Enter`).*
+## 9. Pasang HTTPS
 
-5. **Aktifkan konfigurasi baru:**
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/sowhat /etc/nginx/sites-enabled/
-   ```
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d dashboard.domainkamu.com
+```
 
-6. **Test syntax Nginx & Restart:**
-   ```bash
-   sudo nginx -t
-   sudo systemctl restart nginx
-   ```
+## 10. Update aplikasi berikutnya
 
-Tunggu beberapa detik untuk propagasi DNS Cloudflare. Sekarang, kamu bisa mengakses aplikasi secara penuh via custom domain kamu seperti `https://domain-kamu.com` tanpa port `:3000` di belakangnya! SSL HTTPS otomatis ditangani oleh proxy *Cloudflare*.
+Kalau ada perubahan baru:
+
+```bash
+cd /var/www/solofleet
+git pull origin main
+npm install
+npm run build
+pm2 restart sowhat
+```
+
+## 11. Validasi migrasi data
+
+Masuk ke PostgreSQL:
+
+```bash
+sudo -u postgres psql -d solofleet
+```
+
+Cek isi tabel utama:
+
+```sql
+select id, updated_at from app_settings;
+select id, updated_at from app_state;
+select count(*) from dashboard_web_users;
+select count(*) from daily_temp_rollups;
+select count(*) from pod_snapshots;
+```
+
+Kalau semua sudah masuk dan UI normal, kamu bisa stop ketergantungan ke Supabase dengan menghapus:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+## 12. Tabel yang dipakai di PostgreSQL
+
+App akan auto-create tabel ini:
+- `app_settings`
+- `app_state`
+- `dashboard_web_users`
+- `daily_temp_rollups`
+- `pod_snapshots`
+
+Jadi kamu tidak wajib run schema manual di PostgreSQL lokal. App akan buat sendiri saat startup.
