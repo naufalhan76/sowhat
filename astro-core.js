@@ -758,6 +758,7 @@ module.exports = {
   normalizeAstroLocation,
   normalizeAstroRoute,
   parseAstroLocationCsv,
+  parseAstroRouteCsv,
   annotateFleetRowsWithAstro,
   buildRouteReportRows,
   buildAstroColumns,
