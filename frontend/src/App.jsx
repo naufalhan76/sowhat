@@ -549,7 +549,8 @@ export default function App() {
     const detailRow = activePanel === 'historical' ? selectedHistoricalRow : selectedFleetRow;
     if (!detailRow) return;
     if (!['fleet', 'temp-errors', 'historical'].includes(activePanel)) return;
-    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, 'remote', activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
+    const detailSource = activePanel === 'historical' ? 'remote' : 'merged';
+    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
   }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, selectedHistoricalRow?.id, selectedHistoricalRow?.accountId, range.startDate, range.endDate, historicalRangeApplied.startDate, historicalRangeApplied.endDate]);
 
   useEffect(() => {
@@ -557,8 +558,9 @@ export default function App() {
     if (!detailRow) return;
     if (!['fleet', 'temp-errors', 'historical'].includes(activePanel)) return;
     const intervalMs = Math.max(30000, Number(status?.config?.pollIntervalSeconds || 60) * 1000);
+    const detailSource = activePanel === 'historical' ? 'remote' : 'merged';
     const timer = window.setInterval(() => {
-      loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, 'remote', activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
+      loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
       if (activePanel !== 'historical') {
         loadDashboard(false, true).catch(() => {});
       }
@@ -2644,6 +2646,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 
