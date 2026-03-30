@@ -2,8 +2,8 @@
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
   Activity, ArrowRight, BarChart3, Box, ChevronLeft, ChevronRight,
-  Flag, LayoutDashboard, Map as MapIcon, Navigation,
-  RefreshCw, Settings, ShieldAlert, Thermometer, Zap, Search
+  Flag, LayoutDashboard, Map as MapIcon, Menu, Navigation,
+  RefreshCw, Settings, ShieldAlert, Thermometer, X, Zap, Search
 } from 'lucide-react';
 import L from 'leaflet';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
@@ -366,6 +366,7 @@ export default function App() {
   const [mapAccountFilter, setMapAccountFilter] = useState('all');
   const [mapRegionPages, setMapRegionPages] = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -562,6 +563,17 @@ export default function App() {
   const hasSolofleetAccounts = connectedAccounts.length > 0;
   const isAdmin = webSessionUser?.role === 'admin';
   const showOverviewChrome = activePanel === 'overview';
+  const navItems = useMemo(() => ([
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'fleet', label: 'Fleet Live', icon: Navigation },
+    { id: 'map', label: 'Map', icon: MapIcon },
+    { id: 'astro-report', label: 'Astro Report', icon: BarChart3 },
+    { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer },
+    { id: 'stop', label: 'Stop/Idle', icon: Flag },
+    { id: 'api-monitor', label: 'API Monitor', icon: Activity },
+    { id: 'config', label: 'Config', icon: Settings },
+    ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Settings }] : []),
+  ]), [isAdmin]);
 
   const stopBusy = () => {
     if (busyTimeoutRef.current) {
@@ -1002,6 +1014,22 @@ export default function App() {
       loadAdminDatabase(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
     }
   }, [activePanel, isAdmin]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activePanel]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 961px)');
+    const handleChange = (event) => {
+      if (event.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+    handleChange(media);
+    media.addEventListener?.('change', handleChange);
+    return () => media.removeEventListener?.('change', handleChange);
+  }, []);
 
   const discoverUnits = async (targetAccountId = activeAccountId) => {
     const resolvedAccountId = targetAccountId || activeAccountId;
@@ -1450,10 +1478,17 @@ export default function App() {
 
   return (
     
-    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       <header className="topbar">
-        <div className="topbar-brand">
-          <BrandLockup compact />
+        <div className="topbar-brand-row">
+          <div className="topbar-brand">
+            <BrandLockup compact />
+          </div>
+          <div className="mobile-topbar-actions">
+            <button type="button" className="topbar-icon-button mobile-nav-toggle" onClick={() => setMobileNavOpen((current) => !current)} aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}>
+              {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
         <div className="topbar-controls">
           <div className="date-range-group">
@@ -1482,6 +1517,8 @@ export default function App() {
         </div>
       </header>
 
+      <button type="button" className="mobile-sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />
+
       <nav className="sidebar">
         <div className="sidebar-top">
           <button type="button" className="nav-item collapse-btn sidebar-collapse-top" onClick={() => setSidebarCollapsed((current) => !current)}>
@@ -1490,28 +1527,27 @@ export default function App() {
           </button>
         </div>
         <div className="sidebar-nav">
-          {[
-                        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-            { id: 'fleet', label: 'Fleet Live', icon: Navigation },
-            { id: 'map', label: 'Map', icon: MapIcon },
-            { id: 'astro-report', label: 'Astro Report', icon: BarChart3 },
-            { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer },
-            { id: 'stop', label: 'Stop/Idle', icon: Flag },
-            { id: 'api-monitor', label: 'API Monitor', icon: Activity },
-            { id: 'config', label: 'Config', icon: Settings },
-            ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Settings }] : []),
-          ].map(item => {
+          {navItems.map(item => {
             const Icon = item.icon;
-            return <button key={item.id} type="button" className={`nav-item ${activePanel === item.id ? 'active' : ''}`} onClick={() => setActivePanel(item.id)}><Icon size={18} /><span>{item.label}</span></button>;
+            return <button key={item.id} type="button" className={`nav-item ${activePanel === item.id ? 'active' : ''}`} onClick={() => {
+              setActivePanel(item.id);
+              setMobileNavOpen(false);
+            }}><Icon size={18} /><span>{item.label}</span></button>;
           })}
         </div>
         <div className="sidebar-bottom profile-dock">
-          <button type="button" className="profile-summary-button" onClick={() => setActivePanel(isAdmin ? 'admin' : 'config')}>
+          <button type="button" className="profile-summary-button" onClick={() => {
+            setActivePanel(isAdmin ? 'admin' : 'config');
+            setMobileNavOpen(false);
+          }}>
             <strong>{webSessionUser?.displayName || webSessionUser?.username || 'Dashboard user'}</strong>
             <span>{webSessionUser?.username || '-'}{webSessionUser?.role ? ` | ${webSessionUser.role}` : ''}</span>
           </button>
           <div className="profile-dock-actions">
-            <Button variant="bordered" className="profile-dock-btn" onPress={() => setActivePanel(isAdmin ? 'admin' : 'config')}>Profile</Button>
+            <Button variant="bordered" className="profile-dock-btn" onPress={() => {
+              setActivePanel(isAdmin ? 'admin' : 'config');
+              setMobileNavOpen(false);
+            }}>Profile</Button>
             <Button variant="light" className="profile-dock-btn" onPress={logoutWeb}>Logout</Button>
           </div>
         </div>
