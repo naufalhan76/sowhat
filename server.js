@@ -4085,7 +4085,7 @@ function extractFetchedRecords(payload, unit) {
   const fallbackVehicle = String(vehicleInfo.vehicleid || vehicleInfo.alias || unit.label || unit.id);
 
   const records = source.map(function (row) {
-    const timestamp = Date.parse(
+    const timestamp = toTimestampMaybe(
       row.gpstime ||
       row.gpsdatetime ||
       row.datetime ||
