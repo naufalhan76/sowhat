@@ -1047,11 +1047,16 @@ export default function App() {
     startBusy('Menyiapkan Astro CSV...');
     try {
       const query = new URLSearchParams({ startDate: astroReportFilters.startDate, endDate: astroReportFilters.endDate });
+      let nopolPrefix = '';
       if (astroReportFilters.accountId && astroReportFilters.accountId !== 'all') query.set('accountId', astroReportFilters.accountId);
       if (astroReportFilters.unitId) {
         const [routeAccountId, routeUnitId] = astroReportFilters.unitId.split('::');
         if (routeAccountId) query.set('accountId', routeAccountId);
         if (routeUnitId) query.set('unitId', routeUnitId);
+        
+        const unitLabel = astroUnitLabelByKey.get(astroReportFilters.unitId) || routeUnitId;
+        const sanitizedNopol = unitLabel.replace(/[^a-zA-Z0-9]/g, '');
+        nopolPrefix = `${sanitizedNopol}-`;
       }
       const response = await fetch(`/api/astro/report/export?${query.toString()}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1059,7 +1064,7 @@ export default function App() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `astro-report-${astroReportFilters.startDate}-to-${astroReportFilters.endDate}.csv`;
+      link.download = `astro-report-${nopolPrefix}${astroReportFilters.startDate}-to-${astroReportFilters.endDate}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
