@@ -2389,7 +2389,9 @@ function FleetStatusMap({ rows }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  const lastFitKeyRef = useRef('');
   const plottedRows = useMemo(() => (rows || []).filter((row) => Number.isFinite(Number(row.latitude)) && Number.isFinite(Number(row.longitude))), [rows]);
+  const plottedRowsFitKey = useMemo(() => plottedRows.map((row) => `${row.accountId || 'primary'}:${row.id}`).sort().join('|'), [plottedRows]);
   const legendItems = useMemo(() => [
     { key: 'temp-single', label: '1 temp error', color: '#f97316' },
     { key: 'temp-both', label: '2 temp error', color: '#ef4444' },
@@ -2422,7 +2424,10 @@ function FleetStatusMap({ rows }) {
     if (!map || !layer) return;
     layer.clearLayers();
     if (!plottedRows.length) {
-      map.setView([-2.5, 118], 5);
+      if (lastFitKeyRef.current !== '__empty__') {
+        map.setView([-2.5, 118], 5);
+        lastFitKeyRef.current = '__empty__';
+      }
       return;
     }
     const bounds = [];
@@ -2439,14 +2444,17 @@ function FleetStatusMap({ rows }) {
         weight: 2,
       });
       marker.bindTooltip(row.label || row.id, { permanent: true, direction: 'top', offset: [0, -10], className: 'fleet-map-label' });
-      marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Temp 1 ${fmtNum(row.temperature, 1)} C</div><div>Temp 2 ${fmtNum(row.temperature2, 1)} C</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
+      marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Temp 1 ${fmtNum(row.liveTemp1, 1)} C</div><div>Temp 2 ${fmtNum(row.liveTemp2, 1)} C</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
       marker.addTo(layer);
       bounds.push([latitude, longitude]);
     });
-    if (bounds.length === 1) map.setView(bounds[0], 11);
-    else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
+    if (lastFitKeyRef.current !== plottedRowsFitKey) {
+      if (bounds.length === 1) map.setView(bounds[0], 11);
+      else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
+      lastFitKeyRef.current = plottedRowsFitKey;
+    }
     window.setTimeout(() => map.invalidateSize(), 50);
-  }, [plottedRows]);
+  }, [plottedRows, plottedRowsFitKey]);
 
   return <div className="unit-map-shell unit-map-shell-dark fleet-status-map-shell">
     <div className="unit-map-head">
