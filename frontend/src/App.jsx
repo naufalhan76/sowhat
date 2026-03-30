@@ -364,7 +364,7 @@ export default function App() {
   const [fleetAccountFilter, setFleetAccountFilter] = useState('all');
   const [mapSearch, setMapSearch] = useState('');
   const [mapAccountFilter, setMapAccountFilter] = useState('all');
-  const [mapRegionPage, setMapRegionPage] = useState(1);
+  const [mapRegionPages, setMapRegionPages] = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
@@ -539,13 +539,6 @@ export default function App() {
       rows: sortFleetRows(grouped.get(region) || []),
     })).filter((group) => group.rows.length > 0);
   }, [mapFleetRows]);
-  const mapRegionPageSize = 5;
-  const mapRegionTotalPages = Math.max(1, Math.ceil(mapRegionSummary.length / mapRegionPageSize));
-  const visibleMapRegions = useMemo(() => {
-    const safePage = Math.min(mapRegionTotalPages, Math.max(1, mapRegionPage));
-    const startIndex = (safePage - 1) * mapRegionPageSize;
-    return mapRegionSummary.slice(startIndex, startIndex + mapRegionPageSize);
-  }, [mapRegionSummary, mapRegionPage, mapRegionTotalPages]);
   const explicitSelectedFleetRow = useMemo(() => fleetRows.find((row) => row.id === selectedUnitId && row.accountId === selectedUnitAccountId) || null, [fleetRows, selectedUnitId, selectedUnitAccountId]);
   const selectedFleetRow = useMemo(() => explicitSelectedFleetRow || prioritizedFleet[0] || fleetRows[0] || null, [explicitSelectedFleetRow, prioritizedFleet, fleetRows]);
   const expandedFleetRow = useMemo(() => prioritizedFleet.find((row) => unitRowKey(row) === expandedFleetRowKey) || null, [prioritizedFleet, expandedFleetRowKey]);
@@ -570,9 +563,6 @@ export default function App() {
   const isAdmin = webSessionUser?.role === 'admin';
   const showOverviewChrome = activePanel === 'overview';
 
-  useEffect(() => {
-    setMapRegionPage((current) => Math.min(Math.max(1, current), mapRegionTotalPages));
-  }, [mapRegionTotalPages]);
   const stopBusy = () => {
     if (busyTimeoutRef.current) {
       window.clearTimeout(busyTimeoutRef.current);
@@ -1683,15 +1673,20 @@ export default function App() {
                 </div>
               </CardHeader>
               <CardContent>
-                {mapRegionSummary.length ? <>
-                  <div className="region-summary-grid">
-                    {visibleMapRegions.map((group) => <div key={group.region} className="region-summary-card">
+                {mapRegionSummary.length ? <div className="region-summary-grid">
+                  {mapRegionSummary.map((group) => {
+                    const pageSize = 5;
+                    const totalPages = Math.max(1, Math.ceil(group.rows.length / pageSize));
+                    const currentPage = Math.min(totalPages, Math.max(1, mapRegionPages[group.region] || 1));
+                    const startIndex = (currentPage - 1) * pageSize;
+                    const visibleRows = group.rows.slice(startIndex, startIndex + pageSize);
+                    return <div key={group.region} className="region-summary-card">
                       <div className="region-summary-head">
                         <strong>{group.region}</strong>
                         <Chip variant="flat">{group.rows.length} unit</Chip>
                       </div>
                       <div className="region-unit-list">
-                        {group.rows.map((row) => {
+                        {visibleRows.map((row) => {
                           const statusMeta = getMapStatusMeta(row);
                           return <div key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`} className="region-unit-item">
                             <span className="region-unit-dot" style={{ backgroundColor: statusMeta.color }} />
@@ -1702,18 +1697,18 @@ export default function App() {
                           </div>;
                         })}
                       </div>
-                    </div>)}
-                  </div>
-                  {mapRegionSummary.length > mapRegionPageSize ? <div className="region-summary-pagination">
-                    <div className="table-pagination-meta">Page {Math.min(mapRegionPage, mapRegionTotalPages)} of {mapRegionTotalPages}</div>
-                    <div className="table-pagination-controls">
-                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage(1)} disabled={mapRegionPage <= 1}>{'<<'}</button>
-                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage((current) => Math.max(1, current - 1))} disabled={mapRegionPage <= 1}>{'<'}</button>
-                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage((current) => Math.min(mapRegionTotalPages, current + 1))} disabled={mapRegionPage >= mapRegionTotalPages}>{'>'}</button>
-                      <button type="button" className="table-page-button" onClick={() => setMapRegionPage(mapRegionTotalPages)} disabled={mapRegionPage >= mapRegionTotalPages}>{'>>'}</button>
-                    </div>
-                  </div> : null}
-                </> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
+                      {group.rows.length > pageSize ? <div className="region-summary-pagination">
+                        <div className="table-pagination-meta">Page {currentPage} of {totalPages}</div>
+                        <div className="table-pagination-controls">
+                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: 1 }))} disabled={currentPage <= 1}>{'<<'}</button>
+                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: Math.max(1, currentPage - 1) }))} disabled={currentPage <= 1}>{'<'}</button>
+                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: Math.min(totalPages, currentPage + 1) }))} disabled={currentPage >= totalPages}>{'>'}</button>
+                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: totalPages }))} disabled={currentPage >= totalPages}>{'>>'}</button>
+                        </div>
+                      </div> : null}
+                    </div>;
+                  })}
+                </div> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
               </CardContent>
             </Card>
           </> : null}
@@ -2913,6 +2908,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 
