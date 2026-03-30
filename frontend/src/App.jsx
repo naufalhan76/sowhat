@@ -28,6 +28,12 @@ const BrandLockup = ({ compact = false }) => <div className={`brand-lockup ${com
 </div>;
 // removed object import
 
+function today(offset = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
 const EMPTY_FORM = {
   baseUrl: 'https://www.solofleet.com',
   endpointPath: '/ReportTemperatureChart/getVehicleDetailDefrostJson',
@@ -54,18 +60,14 @@ const EMPTY_FORM = {
 const EMPTY_WEB_LOGIN_FORM = { username: '', password: '' };
 const EMPTY_SOLOFLEET_LOGIN_FORM = { email: '', password: '', rememberMe: true, label: '' };
 const EMPTY_WEB_USER_FORM = { id: '', username: '', displayName: '', password: '', role: 'admin', isActive: true };
+const EMPTY_ADMIN_ROLLUP_FORM = { id: '', day: today(0), accountId: 'primary', accountLabel: '', unitId: '', unitLabel: '', vehicle: '', type: 'temp1', label: '', incidents: '0', temp1Incidents: '0', temp2Incidents: '0', bothIncidents: '0', firstStartTimestamp: '', lastEndTimestamp: '', durationMinutes: '0', totalMinutes: '0', longestMinutes: '0', temp1Min: '', temp1Max: '', temp2Min: '', temp2Max: '', minSpeed: '', maxSpeed: '', latitude: '', longitude: '', locationSummary: '', zoneName: '' };
+const EMPTY_ADMIN_POD_FORM = { id: '', day: today(0), timestamp: '', time: '', unitId: '', unitLabel: '', customerName: '', podId: '', podName: '', latitude: '', longitude: '', speed: '', distanceMeters: '', locationSummary: '' };
 const EMPTY_ASTRO_LOCATION_FORM = { id: '', name: '', latitude: '', longitude: '', radiusMeters: '150', type: 'POD', isActive: true, notes: '' };
 const ASTRO_GROUP_PREVIEW_LIMIT = 5;
 const ASTRO_ROUTE_MAX_PODS = 5;
 const EMPTY_ASTRO_ROUTE_FORM = { id: '', accountId: 'primary', unitId: '', customerName: 'Astro', whLocationId: '', poolLocationId: '', podSequence: [''], rit1Start: '05:00', rit1End: '14:59', rit2Enabled: false, rit2Start: '19:00', rit2End: '06:00', isActive: true, notes: '' };
 const ASTRO_LOCATION_SAMPLE_CSV = ['Nama Tempat,Latitude,Longitude,Radius,Type', 'Astro WH CBN,-6.296412,107.146281,180,WH', 'Astro POD Bekasi Timur,-6.238765,106.999321,120,POD', 'Astro Pool Cakung,-6.182450,106.935870,160,POOL'].join('\n');
 const ASTRO_ROUTE_SAMPLE_CSV = ['Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit2 Enabled,Rit2 Start,Rit2 End,Active,Notes', 'primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,false,19:00,06:00,true,Rit pagi only'].join('\n');
-
-const today = (offset = 0) => {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().slice(0, 10);
-};
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -127,6 +129,16 @@ const fmtClock = (value) => {
   return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
 };
 const fmtStayDuration = (startValue, endValue) => formatStayText(startValue, endValue);
+const toDateTimeLocalInput = (value) => {
+  const parsed = parseDateValue(value);
+  if (!parsed) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const hour = String(parsed.getHours()).padStart(2, '0');
+  const minute = String(parsed.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+};
 const fmtAgo = (minutes) => minutes === null || minutes === undefined ? '-' : `${fmtNum(minutes, 1)} min ago`;
 const unitsToText = (units) => (units || []).map((unit) => `${unit.id}|${unit.label}`).join('\n');
 const parseUnits = (text) => String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
@@ -288,6 +300,11 @@ export default function App() {
   const [webSessionUser, setWebSessionUser] = useState(null);
   const [webUsers, setWebUsers] = useState([]);
   const [webUserForm, setWebUserForm] = useState(EMPTY_WEB_USER_FORM);
+  const [adminStorageProvider, setAdminStorageProvider] = useState('local-bootstrap');
+  const [adminTempRollups, setAdminTempRollups] = useState([]);
+  const [adminPodSnapshots, setAdminPodSnapshots] = useState([]);
+  const [adminRollupForm, setAdminRollupForm] = useState(EMPTY_ADMIN_ROLLUP_FORM);
+  const [adminPodForm, setAdminPodForm] = useState(EMPTY_ADMIN_POD_FORM);
   const [astroLocationForm, setAstroLocationForm] = useState(EMPTY_ASTRO_LOCATION_FORM);
   const [astroRouteForm, setAstroRouteForm] = useState(EMPTY_ASTRO_ROUTE_FORM);
   const [astroCsvText, setAstroCsvText] = useState('');
@@ -581,6 +598,21 @@ export default function App() {
     }
   };
 
+  const loadAdminDatabase = async (quiet = false) => {
+    if (!isAdmin) return;
+    if (!quiet) startBusy('Mengambil database tools...');
+    try {
+      const payload = await api('/api/admin/db');
+      startTransition(() => {
+        setAdminStorageProvider(payload.storageProvider || 'local-bootstrap');
+        setAdminTempRollups(payload.rollups || []);
+        setAdminPodSnapshots(payload.podSnapshots || []);
+      });
+    } finally {
+      if (!quiet) stopBusy();
+    }
+  };
+
   const loginToWeb = async () => {
     startBusy('Mencoba login dashboard...');
     try {
@@ -739,9 +771,128 @@ export default function App() {
     }
   };
 
+  const editAdminRollup = (row) => {
+    setAdminRollupForm({
+      id: row.id || '',
+      day: row.day || today(0),
+      accountId: row.accountId || 'primary',
+      accountLabel: row.accountLabel || '',
+      unitId: row.unitId || '',
+      unitLabel: row.unitLabel || '',
+      vehicle: row.vehicle || '',
+      type: row.type || 'temp1',
+      label: row.label || '',
+      incidents: String(row.incidents ?? '0'),
+      temp1Incidents: String(row.temp1Incidents ?? '0'),
+      temp2Incidents: String(row.temp2Incidents ?? '0'),
+      bothIncidents: String(row.bothIncidents ?? '0'),
+      firstStartTimestamp: toDateTimeLocalInput(row.firstStartTimestamp),
+      lastEndTimestamp: toDateTimeLocalInput(row.lastEndTimestamp),
+      durationMinutes: String(row.durationMinutes ?? '0'),
+      totalMinutes: String(row.totalMinutes ?? '0'),
+      longestMinutes: String(row.longestMinutes ?? '0'),
+      temp1Min: row.temp1Min ?? '',
+      temp1Max: row.temp1Max ?? '',
+      temp2Min: row.temp2Min ?? '',
+      temp2Max: row.temp2Max ?? '',
+      minSpeed: row.minSpeed ?? '',
+      maxSpeed: row.maxSpeed ?? '',
+      latitude: row.latitude ?? '',
+      longitude: row.longitude ?? '',
+      locationSummary: row.locationSummary || '',
+      zoneName: row.zoneName || '',
+    });
+  };
+
+  const saveAdminRollupEntry = async () => {
+    startBusy('Menyimpan temp rollup...');
+    try {
+      const payload = await api('/api/admin/db/rollups', {
+        method: 'POST',
+        body: JSON.stringify(adminRollupForm),
+      });
+      startTransition(() => {
+        setAdminStorageProvider(payload.storageProvider || adminStorageProvider);
+        setAdminTempRollups(payload.rollups || []);
+        setAdminRollupForm(EMPTY_ADMIN_ROLLUP_FORM);
+        setBanner({ tone: 'success', message: 'Temp rollup saved.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const deleteAdminRollupEntry = async (id) => {
+    startBusy('Menghapus temp rollup...');
+    try {
+      const payload = await api(`/api/admin/db/rollups?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      startTransition(() => {
+        setAdminStorageProvider(payload.storageProvider || adminStorageProvider);
+        setAdminTempRollups(payload.rollups || []);
+        if (adminRollupForm.id === id) setAdminRollupForm(EMPTY_ADMIN_ROLLUP_FORM);
+        setBanner({ tone: 'success', message: 'Temp rollup deleted.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const editAdminPodSnapshot = (row) => {
+    setAdminPodForm({
+      id: row.id || '',
+      day: row.day || today(0),
+      timestamp: toDateTimeLocalInput(row.timestamp),
+      time: row.time || '',
+      unitId: row.unitId || '',
+      unitLabel: row.unitLabel || '',
+      customerName: row.customerName || '',
+      podId: row.podId || '',
+      podName: row.podName || '',
+      latitude: row.latitude ?? '',
+      longitude: row.longitude ?? '',
+      speed: row.speed ?? '',
+      distanceMeters: row.distanceMeters ?? '',
+      locationSummary: row.locationSummary || '',
+    });
+  };
+
+  const saveAdminPodEntry = async () => {
+    startBusy('Menyimpan POD snapshot...');
+    try {
+      const payload = await api('/api/admin/db/pod-snapshots', {
+        method: 'POST',
+        body: JSON.stringify(adminPodForm),
+      });
+      startTransition(() => {
+        setAdminStorageProvider(payload.storageProvider || adminStorageProvider);
+        setAdminPodSnapshots(payload.podSnapshots || []);
+        setAdminPodForm(EMPTY_ADMIN_POD_FORM);
+        setBanner({ tone: 'success', message: 'POD snapshot saved.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const deleteAdminPodEntry = async (id) => {
+    startBusy('Menghapus POD snapshot...');
+    try {
+      const payload = await api(`/api/admin/db/pod-snapshots?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      startTransition(() => {
+        setAdminStorageProvider(payload.storageProvider || adminStorageProvider);
+        setAdminPodSnapshots(payload.podSnapshots || []);
+        if (adminPodForm.id === id) setAdminPodForm(EMPTY_ADMIN_POD_FORM);
+        setBanner({ tone: 'success', message: 'POD snapshot deleted.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
   useEffect(() => {
     if (activePanel === 'admin' && isAdmin) {
       loadAdminUsers(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
+      loadAdminDatabase(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
     }
   }, [activePanel, isAdmin]);
 
@@ -1705,10 +1856,222 @@ export default function App() {
           </> : null}
 
           {activePanel === 'admin' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Web profile</h2><p>Kelola akun web dashboard yang login-nya beda dari account Solofleet.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setWebUserForm(EMPTY_WEB_USER_FORM)}>New user</Button></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Signed in as</span><strong>{webSessionUser?.displayName || webSessionUser?.username || '-'}</strong></div><div className="mini-metric"><span>Role</span><strong>{webSessionUser?.role || '-'}</strong></div><div className="mini-metric"><span>Stored users</span><strong>{webUsers.length}</strong></div></div></CardContent></Card>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Web profile</h2>
+                  <p>Kelola akun web dashboard yang login-nya beda dari account Solofleet.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" onPress={() => setWebUserForm(EMPTY_WEB_USER_FORM)}>New user</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="metric-strip admin-storage-strip">
+                  <div className="mini-metric"><span>Signed in as</span><strong>{webSessionUser?.displayName || webSessionUser?.username || '-'}</strong></div>
+                  <div className="mini-metric"><span>Role</span><strong>{webSessionUser?.role || '-'}</strong></div>
+                  <div className="mini-metric"><span>Stored users</span><strong>{webUsers.length}</strong></div>
+                  <div className="mini-metric"><span>Storage</span><strong>{adminStorageProvider || 'local-bootstrap'}</strong></div>
+                  <div className="mini-metric"><span>Temp rollups</span><strong>{adminTempRollups.length}</strong></div>
+                  <div className="mini-metric"><span>POD snapshots</span><strong>{adminPodSnapshots.length}</strong></div>
+                </div>
+              </CardContent>
+            </Card>
             <div className="split-panels split-panels-tall">
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Manage web users</h2><p>Create, edit, dan delete akun web di sini.</p></div></CardHeader><CardContent><DataTable columns={['Username', 'Display', 'Role', 'Status', 'Updated', 'Actions']} emptyMessage="Belum ada web user." rows={webUsers.map((user) => [user.username, user.displayName || '-', user.role || 'admin', user.isActive ? 'Active' : 'Disabled', fmtDate(user.updatedAt), <div className="inline-buttons"><Button variant="bordered" onPress={() => setWebUserForm({ id: user.id, username: user.username, displayName: user.displayName || '', password: '', role: user.role || 'admin', isActive: user.isActive !== false })}>Edit</Button><Button variant="light" onPress={() => deleteWebUserEntry(user.id)}>Delete</Button></div>])} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>{webUserForm.id ? 'Edit web user' : 'Create web user'}</h2><p>Password boleh dikosongkan kalau cuma edit display name / role user yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={saveWebUserEntry}>Save user</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Username</span><input type="text" value={webUserForm.username} onChange={(event) => setWebUserForm((current) => ({ ...current, username: event.target.value }))} placeholder="admin" /></label><label className="field"><span>Display name</span><input type="text" value={webUserForm.displayName} onChange={(event) => setWebUserForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Administrator" /></label><label className="field"><span>Password</span><input type="password" value={webUserForm.password} onChange={(event) => setWebUserForm((current) => ({ ...current, password: event.target.value }))} placeholder={webUserForm.id ? 'Kosongkan kalau tidak ganti password' : 'Password baru'} /></label><label className="field"><span>Role</span><select value={webUserForm.role} onChange={(event) => setWebUserForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Admin</option><option value="viewer">Viewer</option></select></label><label className="field checkbox-field"><input type="checkbox" checked={webUserForm.isActive} onChange={(event) => setWebUserForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label></div></CardContent></Card>
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>Manage web users</h2>
+                    <p>Create, edit, dan delete akun web di sini.</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <DataTable
+                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                    columns={['Username', 'Display', 'Role', 'Status', 'Updated', 'Actions']}
+                    emptyMessage="Belum ada web user."
+                    rows={webUsers.map((user) => [
+                      user.username,
+                      user.displayName || '-',
+                      user.role || 'admin',
+                      user.isActive ? 'Active' : 'Disabled',
+                      fmtDate(user.updatedAt),
+                      <div className="inline-buttons">
+                        <Button variant="bordered" onPress={() => setWebUserForm({ id: user.id, username: user.username, displayName: user.displayName || '', password: '', role: user.role || 'admin', isActive: user.isActive !== false })}>Edit</Button>
+                        <Button variant="light" onPress={() => deleteWebUserEntry(user.id)}>Delete</Button>
+                      </div>,
+                    ])}
+                  />
+                </CardContent>
+              </Card>
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>{webUserForm.id ? 'Edit web user' : 'Create web user'}</h2>
+                    <p>Password boleh dikosongkan kalau cuma edit display name / role user yang sudah ada.</p>
+                  </div>
+                  <div className="inline-buttons">
+                    <Button color="primary" onPress={saveWebUserEntry}>Save user</Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="settings-stack">
+                    <label className="field"><span>Username</span><input type="text" value={webUserForm.username} onChange={(event) => setWebUserForm((current) => ({ ...current, username: event.target.value }))} placeholder="admin" /></label>
+                    <label className="field"><span>Display name</span><input type="text" value={webUserForm.displayName} onChange={(event) => setWebUserForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Administrator" /></label>
+                    <label className="field"><span>Password</span><input type="password" value={webUserForm.password} onChange={(event) => setWebUserForm((current) => ({ ...current, password: event.target.value }))} placeholder={webUserForm.id ? 'Kosongkan kalau tidak ganti password' : 'Password baru'} /></label>
+                    <label className="field"><span>Role</span><select value={webUserForm.role} onChange={(event) => setWebUserForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Admin</option><option value="viewer">Viewer</option></select></label>
+                    <label className="field checkbox-field"><input type="checkbox" checked={webUserForm.isActive} onChange={(event) => setWebUserForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Database tools</h2>
+                  <p>Edit data PostgreSQL langsung dari dashboard buat rollup temp error dan POD snapshot.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" onPress={() => loadAdminDatabase()}>Refresh DB</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="metric-strip admin-storage-strip">
+                  <div className="mini-metric"><span>Provider</span><strong>{adminStorageProvider || '-'}</strong></div>
+                  <div className="mini-metric"><span>Rollup rows</span><strong>{adminTempRollups.length}</strong></div>
+                  <div className="mini-metric"><span>POD rows</span><strong>{adminPodSnapshots.length}</strong></div>
+                </div>
+              </CardContent>
+            </Card>
+            <div className="split-panels split-panels-tall">
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>Temp rollups</h2>
+                    <p>Raw rollup harian yang dipakai report temp error. Edit dengan hati-hati.</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <DataTable
+                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                    columns={['Day', 'Account', 'Unit', 'Type', 'Incidents', 'Window', 'Actions']}
+                    emptyMessage="Belum ada temp rollup di PostgreSQL."
+                    rows={adminTempRollups.map((row) => [
+                      row.day || '-',
+                      row.accountLabel || row.accountId || '-',
+                      <div><strong>{row.unitLabel || row.vehicle || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>,
+                      row.label || row.type || '-',
+                      row.incidents ?? 0,
+                      <div>{fmtDate(row.firstStartTimestamp)}<div className="subtle-line">{fmtDate(row.lastEndTimestamp)}</div></div>,
+                      <div className="inline-buttons"><Button variant="bordered" onPress={() => editAdminRollup(row)}>Edit</Button><Button variant="light" onPress={() => deleteAdminRollupEntry(row.id)}>Delete</Button></div>,
+                    ])}
+                  />
+                </CardContent>
+              </Card>
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>{adminRollupForm.id ? 'Edit temp rollup' : 'New temp rollup'}</h2>
+                    <p>Field minimum: day, account, unit, type, dan incidents. Timestamp pakai waktu lokal VPS/browser.</p>
+                  </div>
+                  <div className="inline-buttons">
+                    <Button color="primary" onPress={saveAdminRollupEntry}>Save rollup</Button>
+                    <Button variant="bordered" onPress={() => setAdminRollupForm(EMPTY_ADMIN_ROLLUP_FORM)}>Reset</Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="settings-stack">
+                    <div className="form-grid admin-db-grid">
+                      <label className="field"><span>Rollup id</span><input type="text" value={adminRollupForm.id} onChange={(event) => setAdminRollupForm((current) => ({ ...current, id: event.target.value }))} placeholder="auto kalau kosong" /></label>
+                      <label className="field"><span>Day</span><input type="date" value={adminRollupForm.day} onChange={(event) => setAdminRollupForm((current) => ({ ...current, day: event.target.value }))} /></label>
+                      <label className="field"><span>Account id</span><input type="text" value={adminRollupForm.accountId} onChange={(event) => setAdminRollupForm((current) => ({ ...current, accountId: event.target.value }))} placeholder="primary" /></label>
+                      <label className="field"><span>Account label</span><input type="text" value={adminRollupForm.accountLabel} onChange={(event) => setAdminRollupForm((current) => ({ ...current, accountLabel: event.target.value }))} placeholder="Account display name" /></label>
+                      <label className="field"><span>Unit id</span><input type="text" value={adminRollupForm.unitId} onChange={(event) => setAdminRollupForm((current) => ({ ...current, unitId: event.target.value }))} placeholder="COL77" /></label>
+                      <label className="field"><span>Unit label / Nopol</span><input type="text" value={adminRollupForm.unitLabel} onChange={(event) => setAdminRollupForm((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="B 9749 SXW" /></label>
+                      <label className="field"><span>Vehicle</span><input type="text" value={adminRollupForm.vehicle} onChange={(event) => setAdminRollupForm((current) => ({ ...current, vehicle: event.target.value }))} placeholder="Vehicle label" /></label>
+                      <label className="field"><span>Type</span><select value={adminRollupForm.type} onChange={(event) => setAdminRollupForm((current) => ({ ...current, type: event.target.value }))}><option value="temp1">temp1</option><option value="temp2">temp2</option><option value="temp1+temp2">temp1+temp2</option></select></label>
+                      <label className="field"><span>Label</span><input type="text" value={adminRollupForm.label} onChange={(event) => setAdminRollupForm((current) => ({ ...current, label: event.target.value }))} placeholder="TEMP1 ERROR" /></label>
+                      <label className="field"><span>Incidents</span><input type="number" min="0" value={adminRollupForm.incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, incidents: event.target.value }))} /></label>
+                      <label className="field"><span>Temp1 incidents</span><input type="number" min="0" value={adminRollupForm.temp1Incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Incidents: event.target.value }))} /></label>
+                      <label className="field"><span>Temp2 incidents</span><input type="number" min="0" value={adminRollupForm.temp2Incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Incidents: event.target.value }))} /></label>
+                      <label className="field"><span>Both incidents</span><input type="number" min="0" value={adminRollupForm.bothIncidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, bothIncidents: event.target.value }))} /></label>
+                      <label className="field"><span>First start</span><input type="datetime-local" value={adminRollupForm.firstStartTimestamp} onChange={(event) => setAdminRollupForm((current) => ({ ...current, firstStartTimestamp: event.target.value }))} /></label>
+                      <label className="field"><span>Last end</span><input type="datetime-local" value={adminRollupForm.lastEndTimestamp} onChange={(event) => setAdminRollupForm((current) => ({ ...current, lastEndTimestamp: event.target.value }))} /></label>
+                      <label className="field"><span>Duration minutes</span><input type="number" step="0.1" value={adminRollupForm.durationMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, durationMinutes: event.target.value }))} /></label>
+                      <label className="field"><span>Total minutes</span><input type="number" step="0.1" value={adminRollupForm.totalMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, totalMinutes: event.target.value }))} /></label>
+                      <label className="field"><span>Longest minutes</span><input type="number" step="0.1" value={adminRollupForm.longestMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, longestMinutes: event.target.value }))} /></label>
+                      <label className="field"><span>Temp1 min</span><input type="number" step="0.1" value={adminRollupForm.temp1Min} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Min: event.target.value }))} /></label>
+                      <label className="field"><span>Temp1 max</span><input type="number" step="0.1" value={adminRollupForm.temp1Max} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Max: event.target.value }))} /></label>
+                      <label className="field"><span>Temp2 min</span><input type="number" step="0.1" value={adminRollupForm.temp2Min} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Min: event.target.value }))} /></label>
+                      <label className="field"><span>Temp2 max</span><input type="number" step="0.1" value={adminRollupForm.temp2Max} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Max: event.target.value }))} /></label>
+                      <label className="field"><span>Min speed</span><input type="number" step="0.1" value={adminRollupForm.minSpeed} onChange={(event) => setAdminRollupForm((current) => ({ ...current, minSpeed: event.target.value }))} /></label>
+                      <label className="field"><span>Max speed</span><input type="number" step="0.1" value={adminRollupForm.maxSpeed} onChange={(event) => setAdminRollupForm((current) => ({ ...current, maxSpeed: event.target.value }))} /></label>
+                      <label className="field"><span>Latitude</span><input type="number" step="any" value={adminRollupForm.latitude} onChange={(event) => setAdminRollupForm((current) => ({ ...current, latitude: event.target.value }))} /></label>
+                      <label className="field"><span>Longitude</span><input type="number" step="any" value={adminRollupForm.longitude} onChange={(event) => setAdminRollupForm((current) => ({ ...current, longitude: event.target.value }))} /></label>
+                      <label className="field admin-db-grid-span-2"><span>Location summary</span><input type="text" value={adminRollupForm.locationSummary} onChange={(event) => setAdminRollupForm((current) => ({ ...current, locationSummary: event.target.value }))} placeholder="Jalan, kecamatan, kota" /></label>
+                      <label className="field"><span>Zone</span><input type="text" value={adminRollupForm.zoneName} onChange={(event) => setAdminRollupForm((current) => ({ ...current, zoneName: event.target.value }))} placeholder="Zone name" /></label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="split-panels split-panels-tall">
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>POD snapshots</h2>
+                    <p>Snapshot geofence POD yang tersimpan di PostgreSQL.</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <DataTable
+                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                    columns={['Day', 'Time', 'Unit', 'POD', 'Distance', 'Location', 'Actions']}
+                    emptyMessage="Belum ada POD snapshot di PostgreSQL."
+                    rows={adminPodSnapshots.map((row) => [
+                      row.day || '-',
+                      fmtDate(row.timestamp),
+                      <div><strong>{row.unitLabel || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>,
+                      <div><strong>{row.podName || row.podId || '-'}</strong><div className="subtle-line">{row.podId || '-'}</div></div>,
+                      row.distanceMeters ?? '-',
+                      row.locationSummary || '-',
+                      <div className="inline-buttons"><Button variant="bordered" onPress={() => editAdminPodSnapshot(row)}>Edit</Button><Button variant="light" onPress={() => deleteAdminPodEntry(row.id)}>Delete</Button></div>,
+                    ])}
+                  />
+                </CardContent>
+              </Card>
+              <Card className="panel-card">
+                <CardHeader className="panel-card-header">
+                  <div>
+                    <h2>{adminPodForm.id ? 'Edit POD snapshot' : 'New POD snapshot'}</h2>
+                    <p>Gunakan editor ini kalau mau koreksi snapshot POD langsung dari web.</p>
+                  </div>
+                  <div className="inline-buttons">
+                    <Button color="primary" onPress={saveAdminPodEntry}>Save POD snapshot</Button>
+                    <Button variant="bordered" onPress={() => setAdminPodForm(EMPTY_ADMIN_POD_FORM)}>Reset</Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="settings-stack">
+                    <div className="form-grid admin-db-grid">
+                      <label className="field"><span>Snapshot id</span><input type="text" value={adminPodForm.id} onChange={(event) => setAdminPodForm((current) => ({ ...current, id: event.target.value }))} placeholder="auto kalau kosong" /></label>
+                      <label className="field"><span>Day</span><input type="date" value={adminPodForm.day} onChange={(event) => setAdminPodForm((current) => ({ ...current, day: event.target.value }))} /></label>
+                      <label className="field"><span>Timestamp</span><input type="datetime-local" value={adminPodForm.timestamp} onChange={(event) => setAdminPodForm((current) => ({ ...current, timestamp: event.target.value }))} /></label>
+                      <label className="field"><span>Time label</span><input type="text" value={adminPodForm.time} onChange={(event) => setAdminPodForm((current) => ({ ...current, time: event.target.value }))} placeholder="13:34:22" /></label>
+                      <label className="field"><span>Unit id</span><input type="text" value={adminPodForm.unitId} onChange={(event) => setAdminPodForm((current) => ({ ...current, unitId: event.target.value }))} placeholder="COL77" /></label>
+                      <label className="field"><span>Unit label / Nopol</span><input type="text" value={adminPodForm.unitLabel} onChange={(event) => setAdminPodForm((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="B 9749 SXW" /></label>
+                      <label className="field"><span>Customer name</span><input type="text" value={adminPodForm.customerName} onChange={(event) => setAdminPodForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Astro" /></label>
+                      <label className="field"><span>POD id</span><input type="text" value={adminPodForm.podId} onChange={(event) => setAdminPodForm((current) => ({ ...current, podId: event.target.value }))} placeholder="pod-1" /></label>
+                      <label className="field"><span>POD name</span><input type="text" value={adminPodForm.podName} onChange={(event) => setAdminPodForm((current) => ({ ...current, podName: event.target.value }))} placeholder="Astro HUB CNR" /></label>
+                      <label className="field"><span>Latitude</span><input type="number" step="any" value={adminPodForm.latitude} onChange={(event) => setAdminPodForm((current) => ({ ...current, latitude: event.target.value }))} /></label>
+                      <label className="field"><span>Longitude</span><input type="number" step="any" value={adminPodForm.longitude} onChange={(event) => setAdminPodForm((current) => ({ ...current, longitude: event.target.value }))} /></label>
+                      <label className="field"><span>Speed</span><input type="number" step="0.1" value={adminPodForm.speed} onChange={(event) => setAdminPodForm((current) => ({ ...current, speed: event.target.value }))} /></label>
+                      <label className="field"><span>Distance meters</span><input type="number" step="0.1" value={adminPodForm.distanceMeters} onChange={(event) => setAdminPodForm((current) => ({ ...current, distanceMeters: event.target.value }))} /></label>
+                      <label className="field admin-db-grid-span-2"><span>Location summary</span><input type="text" value={adminPodForm.locationSummary} onChange={(event) => setAdminPodForm((current) => ({ ...current, locationSummary: event.target.value }))} placeholder="Alamat singkat" /></label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </> : null}
 

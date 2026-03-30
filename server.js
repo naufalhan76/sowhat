@@ -3095,6 +3095,182 @@ function mapSupabasePodSnapshotRecord(record) {
   };
 }
 
+function normalizeAdminTempRollupInput(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const day = String(source.day || '').trim().slice(0, 10);
+  const accountId = String(source.accountId || 'primary').trim() || 'primary';
+  const unitId = String(source.unitId || '').trim();
+  if (!day || !unitId) {
+    throw new Error('Day dan unit id wajib diisi.');
+  }
+
+  const id = String(source.id || `${day}|${accountId}|${unitId}`).trim();
+  const parseTimestamp = function (value) {
+    const timestamp = toTimestampMaybe(value);
+    return timestamp === null ? null : new Date(timestamp).toISOString();
+  };
+
+  return {
+    id,
+    day,
+    account_id: accountId,
+    account_label: String(source.accountLabel || resolveAccountLabel(accountId)).trim() || resolveAccountLabel(accountId),
+    unit_id: unitId,
+    unit_label: String(source.unitLabel || source.vehicle || unitId).trim() || unitId,
+    vehicle: String(source.vehicle || source.unitLabel || unitId).trim() || unitId,
+    error_type: String(source.type || source.errorType || 'temp1').trim() || 'temp1',
+    error_label: String(source.label || source.errorLabel || sensorFaultLabel(source.type || source.errorType || 'temp1')).trim(),
+    incidents: Math.max(0, Number(source.incidents || 0)),
+    temp1_incidents: Math.max(0, Number(source.temp1Incidents || 0)),
+    temp2_incidents: Math.max(0, Number(source.temp2Incidents || 0)),
+    both_incidents: Math.max(0, Number(source.bothIncidents || 0)),
+    first_start_timestamp: parseTimestamp(source.firstStartTimestamp),
+    last_end_timestamp: parseTimestamp(source.lastEndTimestamp),
+    duration_minutes: toNumber(source.durationMinutes),
+    total_minutes: toNumber(source.totalMinutes),
+    longest_minutes: toNumber(source.longestMinutes),
+    temp1_min: toNumber(source.temp1Min),
+    temp1_max: toNumber(source.temp1Max),
+    temp2_min: toNumber(source.temp2Min),
+    temp2_max: toNumber(source.temp2Max),
+    min_speed: toNumber(source.minSpeed),
+    max_speed: toNumber(source.maxSpeed),
+    latitude: toNumber(source.latitude),
+    longitude: toNumber(source.longitude),
+    location_summary: String(source.locationSummary || '').trim(),
+    zone_name: String(source.zoneName || '').trim(),
+  };
+}
+
+function normalizeAdminPodSnapshotInput(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const day = String(source.day || '').trim().slice(0, 10);
+  const unitId = String(source.unitId || '').trim();
+  const podId = String(source.podId || '').trim();
+  const snapshotTimestamp = toTimestampMaybe(source.timestamp || source.snapshotTimestamp);
+  if (!day || !unitId || !podId || snapshotTimestamp === null) {
+    throw new Error('Day, unit id, POD, dan timestamp wajib diisi.');
+  }
+
+  return {
+    id: String(source.id || `${day}|${unitId}|${podId}|${snapshotTimestamp}`).trim(),
+    day,
+    snapshot_timestamp: new Date(snapshotTimestamp).toISOString(),
+    snapshot_time: String(source.time || formatLocalTime(snapshotTimestamp)).trim() || formatLocalTime(snapshotTimestamp),
+    unit_id: unitId,
+    unit_label: String(source.unitLabel || unitId).trim() || unitId,
+    customer_name: String(source.customerName || '').trim(),
+    pod_id: podId,
+    pod_name: String(source.podName || podId).trim() || podId,
+    latitude: toNumber(source.latitude),
+    longitude: toNumber(source.longitude),
+    speed: toNumber(source.speed),
+    distance_meters: toNumber(source.distanceMeters),
+    location_summary: String(source.locationSummary || '').trim(),
+  };
+}
+
+async function listAdminTempRollups(limit) {
+  const resolvedLimit = Math.max(1, Math.min(1000, Number(limit || 250)));
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, day, account_id, account_label, unit_id, unit_label, vehicle, error_type, error_label,
+              incidents, temp1_incidents, temp2_incidents, both_incidents, first_start_timestamp,
+              last_end_timestamp, duration_minutes, total_minutes, longest_minutes, temp1_min, temp1_max,
+              temp2_min, temp2_max, min_speed, max_speed, latitude, longitude, location_summary, zone_name
+       from daily_temp_rollups
+       order by day desc, first_start_timestamp desc nulls last
+       limit $1`,
+      [resolvedLimit],
+    );
+    return result.rows.map(mapSupabaseDailySnapshotRecord);
+  }
+
+  const rows = buildSnapshotReportAggregates(
+    Object.values(getAllAccountConfigs()).flatMap(function () { return []; }),
+  );
+  return rows.tempErrorIncidents || [];
+}
+
+async function saveAdminTempRollup(input) {
+  const row = normalizeAdminTempRollupInput(input);
+  if (getPostgresConfig().enabled) {
+    await postgresUpsertRows(
+      'daily_temp_rollups',
+      [row],
+      [
+        'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
+        'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
+        'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
+        'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
+        'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
+      ],
+      ['id'],
+      { touchUpdatedAt: true },
+    );
+    const rows = await listAdminTempRollups(250);
+    return rows;
+  }
+  throw new Error('Temp rollup editor saat ini hanya diaktifkan untuk PostgreSQL.');
+}
+
+async function deleteAdminTempRollup(id) {
+  const resolvedId = String(id || '').trim();
+  if (!resolvedId) {
+    throw new Error('Rollup id wajib diisi.');
+  }
+  if (getPostgresConfig().enabled) {
+    await postgresQuery('delete from daily_temp_rollups where id = $1', [resolvedId]);
+    return listAdminTempRollups(250);
+  }
+  throw new Error('Temp rollup editor saat ini hanya diaktifkan untuk PostgreSQL.');
+}
+
+async function listAdminPodSnapshots(limit) {
+  const resolvedLimit = Math.max(1, Math.min(1000, Number(limit || 250)));
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, day, snapshot_timestamp, snapshot_time, unit_id, unit_label, customer_name, pod_id, pod_name, latitude, longitude, speed, distance_meters, location_summary
+       from pod_snapshots
+       order by day desc, snapshot_timestamp desc
+       limit $1`,
+      [resolvedLimit],
+    );
+    return result.rows.map(mapSupabasePodSnapshotRecord);
+  }
+  return [];
+}
+
+async function saveAdminPodSnapshot(input) {
+  const row = normalizeAdminPodSnapshotInput(input);
+  if (getPostgresConfig().enabled) {
+    await postgresUpsertRows(
+      'pod_snapshots',
+      [row],
+      [
+        'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
+        'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
+        'speed', 'distance_meters', 'location_summary',
+      ],
+      ['id'],
+    );
+    return listAdminPodSnapshots(250);
+  }
+  throw new Error('POD snapshot editor saat ini hanya diaktifkan untuk PostgreSQL.');
+}
+
+async function deleteAdminPodSnapshot(id) {
+  const resolvedId = String(id || '').trim();
+  if (!resolvedId) {
+    throw new Error('POD snapshot id wajib diisi.');
+  }
+  if (getPostgresConfig().enabled) {
+    await postgresQuery('delete from pod_snapshots where id = $1', [resolvedId]);
+    return listAdminPodSnapshots(250);
+  }
+  throw new Error('POD snapshot editor saat ini hanya diaktifkan untuk PostgreSQL.');
+}
+
 async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
   const sourceRows = Array.isArray(accountState?.podSnapshots) ? accountState.podSnapshots : [];
   if (!sourceRows.length) {
@@ -4744,6 +4920,97 @@ async function handleApi(req, res, url) {
         ok: false,
         error: error.message,
       });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/db' && method === 'GET') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+      return true;
+    }
+    try {
+      const [rollups, podSnapshots] = await Promise.all([
+        listAdminTempRollups(Number(url.searchParams.get('rollupLimit') || 250)),
+        listAdminPodSnapshots(Number(url.searchParams.get('podLimit') || 250)),
+      ]);
+      sendJson(res, 200, {
+        ok: true,
+        storageProvider: getStorageProvider(),
+        rollups,
+        podSnapshots,
+        summary: {
+          rollups: rollups.length,
+          podSnapshots: podSnapshots.length,
+        },
+      });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/db/rollups' && method === 'POST') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const rollups = await saveAdminTempRollup(body);
+      sendJson(res, 200, { ok: true, rollups, storageProvider: getStorageProvider() });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/db/rollups' && method === 'DELETE') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+      return true;
+    }
+    try {
+      const id = String(url.searchParams.get('id') || '').trim();
+      const rollups = await deleteAdminTempRollup(id);
+      sendJson(res, 200, { ok: true, rollups, storageProvider: getStorageProvider() });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/db/pod-snapshots' && method === 'POST') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const podSnapshots = await saveAdminPodSnapshot(body);
+      sendJson(res, 200, { ok: true, podSnapshots, storageProvider: getStorageProvider() });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/db/pod-snapshots' && method === 'DELETE') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+      return true;
+    }
+    try {
+      const id = String(url.searchParams.get('id') || '').trim();
+      const podSnapshots = await deleteAdminPodSnapshot(id);
+      sendJson(res, 200, { ok: true, podSnapshots, storageProvider: getStorageProvider() });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error.message });
     }
     return true;
   }
