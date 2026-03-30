@@ -3710,6 +3710,27 @@ function buildSnapshotReportAggregates(snapshotRows) {
   };
 }
 
+function resolveAstroAccountId(reference) {
+  const target = String(reference || '').trim();
+  if (!target) {
+    return 'primary';
+  }
+  const normalized = target.toLowerCase();
+  const accounts = getAllAccountConfigs();
+  const matched = accounts.find(function (account) {
+    return String(account.id || '').trim().toLowerCase() === normalized
+      || String(account.label || '').trim().toLowerCase() === normalized
+      || String(account.authEmail || '').trim().toLowerCase() === normalized;
+  });
+  if (matched) {
+    return matched.id;
+  }
+  if (normalized === 'primary account') {
+    return 'primary';
+  }
+  return '';
+}
+
 function validateAstroRoutes(routes, locations) {
   const accountIds = new Set(getAllAccountConfigs().map(function (account) { return account.id; }));
   const locationMap = new Map((locations || []).map(function (location) { return [location.id, location]; }));
@@ -3720,9 +3741,11 @@ function validateAstroRoutes(routes, locations) {
     if (!normalized) {
       throw new Error('Astro route invalid. Account, nopol, WH, dan Rit 1 wajib diisi.');
     }
-    if (!accountIds.has(normalized.accountId)) {
+    const resolvedAccountId = resolveAstroAccountId(normalized.accountId);
+    if (!resolvedAccountId || !accountIds.has(resolvedAccountId)) {
       throw new Error('Account Astro route tidak ditemukan: ' + normalized.accountId);
     }
+    normalized.accountId = resolvedAccountId;
     if (!normalized.whLocationId) {
       throw new Error('WH location wajib diisi untuk unit ' + normalized.unitId);
     }
@@ -5683,6 +5706,7 @@ if (require.main === module) {
     }
   });
 }
+
 
 
 
