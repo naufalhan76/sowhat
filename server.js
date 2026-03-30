@@ -1177,17 +1177,31 @@ function ensureAccountState(accountId) {
   return state.linkedAccounts[accountId];
 }
 
+function toSolofleetLocalDate(timestamp) {
+  const numeric = Number(timestamp);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return new Date(numeric + (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000));
+}
+
 function formatLocalDay(timestamp) {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const date = toSolofleetLocalDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
 function formatLocalTime(timestamp) {
-  const date = new Date(timestamp);
-  return [date.getHours(), date.getMinutes(), date.getSeconds()].map(function (value) {
+  const date = toSolofleetLocalDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return [date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()].map(function (value) {
     return String(value).padStart(2, '0');
   }).join(':');
 }
@@ -2361,19 +2375,40 @@ function buildLiveAlerts(accountConfig, accountState, now) {
   return liveAlerts;
 }
 
+function parseSolofleetDateInputStart(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0) - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000);
+}
+
+function parseSolofleetDateInputEnd(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), 23, 59, 59, 999) - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000);
+}
+
 function parseDateRange(searchParams) {
   const startValue = searchParams.get('startDate') || searchParams.get('start');
   const endValue = searchParams.get('endDate') || searchParams.get('end');
   return {
-    rangeStartMs: core.parseDateInputStart(startValue),
-    rangeEndMs: core.parseDateInputEnd(endValue),
+    rangeStartMs: parseSolofleetDateInputStart(startValue),
+    rangeEndMs: parseSolofleetDateInputEnd(endValue),
   };
 }
 
 function localEndOfDay(timestamp) {
-  const date = new Date(timestamp);
-  date.setHours(23, 59, 59, 999);
-  return date.getTime();
+  const date = toSolofleetLocalDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  date.setUTCHours(23, 59, 59, 999);
+  return date.getTime() - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000);
 }
 
 function clipIncidentToRange(incident, rangeStartMs, rangeEndMs) {
@@ -3764,11 +3799,14 @@ function resolveAstroUnitLabel(accountConfig, unitId) {
 
 function buildDateRangeDays(startDay, endDay) {
   const days = [];
-  const cursor = new Date(`${startDay}T00:00:00`);
-  const end = new Date(`${endDay}T00:00:00`);
+  let cursor = parseSolofleetDateInputStart(startDay);
+  const end = parseSolofleetDateInputStart(endDay);
+  if (cursor === null || end === null) {
+    return days;
+  }
   while (cursor <= end) {
-    days.push(formatLocalDay(cursor.getTime()));
-    cursor.setDate(cursor.getDate() + 1);
+    days.push(formatLocalDay(cursor));
+    cursor += 24 * 60 * 60 * 1000;
   }
   return days;
 }
@@ -5645,6 +5683,9 @@ if (require.main === module) {
     }
   });
 }
+
+
+
 
 
 
