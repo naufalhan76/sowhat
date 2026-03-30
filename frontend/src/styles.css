@@ -1,4 +1,4 @@
-/* Solofleet Command Center Theme */
+﻿/* Solofleet Command Center Theme */
 
 :root {
   /* Colors */
@@ -2616,3 +2616,102 @@ textarea:focus {
   justify-content: flex-end;
 }
 
+
+.fleet-status-map-shell {
+  margin-top: 0;
+}
+
+.fleet-status-map-frame {
+  min-height: 480px;
+}
+
+.fleet-status-map-canvas {
+  height: 480px;
+}
+
+.fleet-map-legend {
+  gap: 8px;
+}
+
+.fleet-map-legend .sf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.region-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.region-summary-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.68), rgba(2, 6, 23, 0.72));
+}
+
+.region-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.region-summary-head strong {
+  font-size: 14px;
+}
+
+.region-unit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.region-unit-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.region-unit-item strong {
+  display: block;
+  font-size: 13px;
+}
+
+.region-unit-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.fleet-map-popup strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.fleet-map-popup div {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .fleet-status-map-frame,
+  .fleet-status-map-canvas {
+    min-height: 320px;
+    height: 320px;
+  }
+
+  .region-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

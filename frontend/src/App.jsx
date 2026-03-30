@@ -295,6 +295,29 @@ const health = (row) => {
   if (row.isMoving) return { label: 'Moving', tone: 'success' };
   return { label: 'Normal', tone: 'default' };
 };
+const REGION_RULES = [
+  { name: 'Jabodetabek', keywords: ['dki jakarta', 'jakarta', 'bogor', 'depok', 'tangerang', 'tangerang selatan', 'bekasi'] },
+  { name: 'Jogja', keywords: ['di yogyakarta', 'yogyakarta', 'jogja', 'sleman', 'bantul', 'kulon progo', 'gunungkidul'] },
+  { name: 'Bali', keywords: ['bali', 'denpasar', 'badung', 'tabanan', 'gianyar', 'klungkung', 'karangasem', 'buleleng', 'jembrana', 'bangli'] },
+  { name: 'Jawa Barat', keywords: ['jawa barat', 'bandung', 'cimahi', 'garut', 'tasikmalaya', 'ciamis', 'banjar', 'kuningan', 'cirebon', 'majalengka', 'sumedang', 'subang', 'purwakarta', 'karawang', 'sukabumi', 'cianjur', 'indramayu', 'pangandaran'] },
+  { name: 'Jawa Tengah', keywords: ['jawa tengah', 'semarang', 'solo', 'surakarta', 'salatiga', 'magelang', 'tegal', 'pekalongan', 'brebes', 'purwokerto', 'cilacap', 'kebumen', 'purworejo', 'klaten', 'boyolali', 'sragen', 'wonogiri', 'karanganyar', 'kudus', 'pati', 'jepara', 'demak', 'kendal', 'batang', 'temanggung', 'wonosobo'] },
+  { name: 'Jawa Timur', keywords: ['jawa timur', 'surabaya', 'sidoarjo', 'gresik', 'malang', 'batu', 'pasuruan', 'probolinggo', 'mojokerto', 'jombang', 'kediri', 'blitar', 'madiun', 'ngawi', 'nganjuk', 'lamongan', 'bojonegoro', 'tuban', 'banyuwangi', 'jember', 'lumajang', 'situbondo', 'bondowoso', 'madura', 'pamekasan', 'sampang', 'sumenep', 'bangkalan'] },
+  { name: 'Sumatera', keywords: ['aceh', 'sumatera utara', 'medan', 'binjai', 'pematangsiantar', 'riau', 'pekanbaru', 'dumai', 'sumatera barat', 'padang', 'bukittinggi', 'jambi', 'palembang', 'sumatera selatan', 'lampung', 'bandar lampung', 'bengkulu', 'kepulauan riau', 'batam', 'tanjung pinang', 'bangka belitung', 'pangkal pinang'] },
+];
+const regionTextForRow = (row) => [row?.locationSummary, row?.zoneName, row?.group, row?.customerName].map((value) => String(value || '').toLowerCase()).join(' | ');
+const resolveFleetRegion = (row) => {
+  const text = regionTextForRow(row);
+  if (!text.trim()) return 'Lainnya';
+  const match = REGION_RULES.find((rule) => rule.keywords.some((keyword) => text.includes(keyword)));
+  return match?.name || 'Lainnya';
+};
+const getMapStatusMeta = (row) => {
+  if (rowIsCriticalError(row)) return { key: 'temp-both', label: '2 temp error', color: '#ef4444' };
+  if (rowHasSensorError(row)) return { key: 'temp-single', label: '1 temp error', color: '#f97316' };
+  if (rowHasGpsLate(row) || row?.errGps) return { key: 'gps-late', label: 'Late GPS', color: '#eab308' };
+  if (row?.isMoving || Number(row?.speed || 0) > 0) return { key: 'moving', label: 'Moving', color: '#22c55e' };
+  return { key: 'stop', label: 'Stop', color: '#94a3b8' };
+};
 const sortFleetRows = (rows) => [...rows].sort((left, right) => {
   const priorityGap = rowPriority(right) - rowPriority(left);
   if (priorityGap !== 0) return priorityGap;
@@ -339,11 +362,14 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('all');
   const [fleetAccountFilter, setFleetAccountFilter] = useState('all');
+  const [mapSearch, setMapSearch] = useState('');
+  const [mapAccountFilter, setMapAccountFilter] = useState('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const deferredHistoricalSearch = useDeferredValue(historicalSearch);
+  const deferredMapSearch = useDeferredValue(mapSearch);
   const [range, setRange] = useState({ startDate: today(0), endDate: today(0) });
   const [historicalRangeDraft, setHistoricalRangeDraft] = useState({ startDate: today(0), endDate: today(0) });
   const [historicalRangeApplied, setHistoricalRangeApplied] = useState({ startDate: today(0), endDate: today(0) });
@@ -490,6 +516,28 @@ export default function App() {
     }
     return sortFleetRows(filtered);
   }, [deferredSearch, fleetRows, fleetAccountFilter, quickFilter]);
+  const mapFleetRows = useMemo(() => {
+    const q = deferredMapSearch.trim().toLowerCase();
+    let filtered = fleetRows;
+    if (mapAccountFilter !== 'all') filtered = filtered.filter((row) => (row.accountId || 'primary') === mapAccountFilter);
+    if (q) {
+      filtered = filtered.filter((row) => [row.accountLabel, row.id, row.label, row.alias, row.locationSummary, row.zoneName, row.customerName].some((value) => String(value || '').toLowerCase().includes(q)));
+    }
+    return sortFleetRows(filtered);
+  }, [fleetRows, deferredMapSearch, mapAccountFilter]);
+  const mapRegionSummary = useMemo(() => {
+    const grouped = new globalThis.Map();
+    mapFleetRows.forEach((row) => {
+      const region = resolveFleetRegion(row);
+      if (!grouped.has(region)) grouped.set(region, []);
+      grouped.get(region).push(row);
+    });
+    const orderedRegions = [...REGION_RULES.map((rule) => rule.name), 'Lainnya'];
+    return orderedRegions.map((region) => ({
+      region,
+      rows: sortFleetRows(grouped.get(region) || []),
+    })).filter((group) => group.rows.length > 0);
+  }, [mapFleetRows]);
   const explicitSelectedFleetRow = useMemo(() => fleetRows.find((row) => row.id === selectedUnitId && row.accountId === selectedUnitAccountId) || null, [fleetRows, selectedUnitId, selectedUnitAccountId]);
   const selectedFleetRow = useMemo(() => explicitSelectedFleetRow || prioritizedFleet[0] || fleetRows[0] || null, [explicitSelectedFleetRow, prioritizedFleet, fleetRows]);
   const expandedFleetRow = useMemo(() => prioritizedFleet.find((row) => unitRowKey(row) === expandedFleetRowKey) || null, [prioritizedFleet, expandedFleetRowKey]);
@@ -1442,8 +1490,9 @@ export default function App() {
         </div>
         <div className="sidebar-nav">
           {[
-            { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+                        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'fleet', label: 'Fleet Live', icon: Navigation },
+            { id: 'map', label: 'Map', icon: MapIcon },
             { id: 'astro-report', label: 'Astro Report', icon: BarChart3 },
             { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer },
             { id: 'stop', label: 'Stop/Idle', icon: Flag },
@@ -1582,6 +1631,69 @@ export default function App() {
                     </tbody>
                   </table>
                 </div> : <div className="empty-state">Belum ada fleet snapshot. Save config lalu jalankan Poll now.</div>}
+              </CardContent>
+            </Card>
+          </> : null}
+                    {activePanel === 'map' ? <>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Fleet map overview</h2>
+                  <p>Titik unit live dengan warna status utama dan grouping wilayah berbasis keyword alamat Solofleet.</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="fleet-filter-bar">
+                  <label className="field fleet-filter-field">
+                    <span>Account filter</span>
+                    <select value={mapAccountFilter} onChange={(event) => setMapAccountFilter(event.target.value)}>
+                      <option value="all">All accounts</option>
+                      {fleetFilterAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}
+                    </select>
+                  </label>
+                  <label className="field fleet-filter-field fleet-map-search-field">
+                    <span>Search nopol / unit</span>
+                    <div className="search-box historical-search-box">
+                      <Search size={16} className="search-icon" />
+                      <input type="search" value={mapSearch} onChange={(event) => setMapSearch(event.target.value)} placeholder="Cari nopol, unit, account, lokasi..." />
+                    </div>
+                  </label>
+                </div>
+                <div className="fleet-table-summary">
+                  <span>{mapFleetRows.length} unit tampil di map</span>
+                  <span>{mapAccountFilter === 'all' ? 'Semua account' : accountName(fleetFilterAccounts.find((account) => account.id === mapAccountFilter))} | {deferredMapSearch ? `Filter: ${deferredMapSearch}` : 'Tanpa search filter'}</span>
+                </div>
+                <FleetStatusMap rows={mapFleetRows} />
+              </CardContent>
+            </Card>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Unit per wilayah</h2>
+                  <p>Grouping v1 berdasarkan keyword alamat di lokasi live Solofleet.</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {mapRegionSummary.length ? <div className="region-summary-grid">
+                  {mapRegionSummary.map((group) => <div key={group.region} className="region-summary-card">
+                    <div className="region-summary-head">
+                      <strong>{group.region}</strong>
+                      <Chip variant="flat">{group.rows.length} unit</Chip>
+                    </div>
+                    <div className="region-unit-list">
+                      {group.rows.map((row) => {
+                        const statusMeta = getMapStatusMeta(row);
+                        return <div key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`} className="region-unit-item">
+                          <span className="region-unit-dot" style={{ backgroundColor: statusMeta.color }} />
+                          <div>
+                            <strong>{row.label || row.id}</strong>
+                            <div className="subtle-line">{row.id} | {statusMeta.label}</div>
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                  </div>)}
+                </div> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
               </CardContent>
             </Card>
           </> : null}
@@ -2258,6 +2370,85 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
   </div>;
 }
 
+function FleetStatusMap({ rows }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const plottedRows = useMemo(() => (rows || []).filter((row) => Number.isFinite(Number(row.latitude)) && Number.isFinite(Number(row.longitude))), [rows]);
+  const legendItems = useMemo(() => [
+    { key: 'temp-single', label: '1 temp error', color: '#f97316' },
+    { key: 'temp-both', label: '2 temp error', color: '#ef4444' },
+    { key: 'moving', label: 'Moving', color: '#22c55e' },
+    { key: 'gps-late', label: 'Late GPS', color: '#eab308' },
+    { key: 'stop', label: 'Stop', color: '#94a3b8' },
+  ], []);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return undefined;
+    const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    const layer = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    layerRef.current = layer;
+    window.setTimeout(() => map.invalidateSize(), 80);
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    if (!plottedRows.length) {
+      map.setView([-2.5, 118], 5);
+      return;
+    }
+    const bounds = [];
+    plottedRows.forEach((row) => {
+      const latitude = Number(row.latitude);
+      const longitude = Number(row.longitude);
+      const statusMeta = getMapStatusMeta(row);
+      const region = resolveFleetRegion(row);
+      const marker = L.circleMarker([latitude, longitude], {
+        radius: 8,
+        color: statusMeta.color,
+        fillColor: statusMeta.color,
+        fillOpacity: 0.88,
+        weight: 2,
+      });
+      marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
+      marker.addTo(layer);
+      bounds.push([latitude, longitude]);
+    });
+    if (bounds.length === 1) map.setView(bounds[0], 11);
+    else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
+    window.setTimeout(() => map.invalidateSize(), 50);
+  }, [plottedRows]);
+
+  return <div className="unit-map-shell unit-map-shell-dark fleet-status-map-shell">
+    <div className="unit-map-head">
+      <div>
+        <strong>All fleet map</strong>
+        <span>{rows.length} unit live | {plottedRows.length} titik punya koordinat</span>
+      </div>
+      <div className="chip-row unit-map-chip-row fleet-map-legend">
+        {legendItems.map((item) => <Chip key={item.key} variant="flat"><span className="region-unit-dot" style={{ backgroundColor: item.color }} />{item.label}</Chip>)}
+      </div>
+    </div>
+    <div className="unit-map-frame fleet-status-map-frame">
+      <div ref={containerRef} className="unit-map-canvas fleet-status-map-canvas" />
+      {!plottedRows.length ? <div className="unit-map-overlay">Belum ada unit dengan koordinat live untuk digambar di map.</div> : null}
+    </div>
+  </div>;
+}
+
 function UnitRouteMap({ row, records, busy, rangeLabel }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
@@ -2702,6 +2893,9 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
 
 
 
