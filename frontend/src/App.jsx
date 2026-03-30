@@ -110,13 +110,14 @@ const formatStayText = (startValue, endValue) => {
   if (hours) return `${hours}h`;
   return `${minutes}m`;
 };
+const DISPLAY_TIMEZONE = 'UTC';
 const fmtDate = (value) => {
   const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtDateCompact = (value) => {
   const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtDateOnly = (value) => {
   const parsed = parseDateValue(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value} 00:00:00` : value);
@@ -126,14 +127,9 @@ const fmtNum = (value, digits = 1) => value === null || value === undefined || v
 const fmtCoord = (value) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(6);
 const fmtClock = (value) => {
   const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(parsed) : '-';
+  return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtStayDuration = (startValue, endValue) => formatStayText(startValue, endValue);
-const ASTRO_DISPLAY_TIMEZONE = 'UTC';
-const fmtAstroDateCompact = (value) => {
-  const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: ASTRO_DISPLAY_TIMEZONE }).format(parsed) : '-';
-};
 const toDateTimeLocalInput = (value) => {
   const parsed = parseDateValue(value);
   if (!parsed) return '';
@@ -403,7 +399,7 @@ export default function App() {
       row.rit,
       row.unitLabel || row.unitId,
       row.whName,
-      fmtAstroDateCompact(row.whEta),
+      fmtDateCompact(row.whEta),
       fmtNum(row.whArrivalTemp, 1),
       fmtNum(row.whDepartureTemp, 1),
       fmtStayDuration(row.whEta, row.whEtd),
@@ -411,7 +407,7 @@ export default function App() {
     for (let index = 0; index < astroReportMaxPods; index += 1) {
       const pod = row.pods?.[index];
       cells.push(
-        pod ? fmtAstroDateCompact(pod.eta) : '-',
+        pod ? fmtDateCompact(pod.eta) : '-',
         pod ? fmtNum(pod.arrivalTemp, 1) : '-',
         pod ? fmtNum(pod.departureTemp, 1) : '-',
         pod ? fmtStayDuration(pod.eta, pod.etd) : '-',
