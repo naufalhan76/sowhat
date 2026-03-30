@@ -2754,3 +2754,44 @@ textarea:focus {
 
 
 
+
+.fleet-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.fleet-map-search-field {
+  flex: 1 1 320px;
+  min-width: 320px;
+}
+
+.region-summary-card {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+.region-summary-head {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.region-unit-list {
+  flex: 1 1 auto;
+  align-content: start;
+}
+
+.region-summary-pagination {
+  margin-top: auto;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
