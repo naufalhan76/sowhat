@@ -119,3 +119,74 @@ Jika suatu saat ada update kode / fitur baru:
 - `pm2 stop solofleet` (Untuk mematikan aplikasi)
 - `pm2 logs solofleet` (Untuk melihat pesan error jika aplikasi bermasalah)
 - `pm2 monit` (Untuk melihat penggunaan CPU dan RAM backend)
+
+---
+
+## 🌐 Langkah 6: Hubungkan Custom Domain (Cloudflare + Reverse Proxy)
+Karena kamu sudah menghubungkan domain ke Cloudflare, kita perlu menyiapkan Nginx di VPS sebagai perantara (Reverse Proxy) dari port 80/443 (HTTP/S) ke port 3000 (Aplikasi Node.js kamu).
+
+### A. Konfigurasi DNS di Cloudflare
+1. Buka dashboard Cloudflare -> pilih domain kamu -> ke menu **DNS**.
+2. Buat record baru:
+   - **Type**: `A`
+   - **Name**: `@` (atau subdomain misal `app`)
+   - **IPv4 address**: *Masukkan IP VPS kamu*
+   - **Proxy status**: Pastikan statusnya **Proxied (Awan warna Orange)** menyala.
+3. Di menu **SSL/TLS -> Overview**, ubah mode menjadi **Full** atau **Full (Strict)**.
+
+### B. Install & Setup Nginx di VPS
+Di terminal VPS kamu:
+
+1. **Install Nginx:**
+   ```bash
+   sudo apt update
+   sudo apt install -y nginx
+   ```
+
+2. **Hapus konfigurasi default:**
+   ```bash
+   sudo rm /etc/nginx/sites-enabled/default
+   ```
+
+3. **Buat file konfigurasi web kamu:**
+   ```bash
+   sudo nano /etc/nginx/sites-available/solofleet
+   ```
+
+4. **Copy-paste konfigurasi (Reverse Proxy) berikut:**
+   *(Ganti `domain-kamu.com` dengan nama domain aslimu)*
+   ```nginx
+   server {
+       listen 80;
+       server_name domain-kamu.com;
+
+       location / {
+           proxy_pass http://127.0.0.1:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+           
+           # Teruskan IP asli dari Cloudflare
+           proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+   *Simpan & Exit (`Ctrl+X` -> `Y` -> `Enter`).*
+
+5. **Aktifkan konfigurasi baru:**
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/solofleet /etc/nginx/sites-enabled/
+   ```
+
+6. **Test syntax Nginx & Restart:**
+   ```bash
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+Tunggu beberapa detik untuk propagasi DNS Cloudflare. Sekarang, kamu bisa mengakses aplikasi secara penuh via custom domain kamu seperti `https://domain-kamu.com` tanpa port `:3000` di belakangnya! SSL HTTPS otomatis ditangani oleh proxy *Cloudflare*.
