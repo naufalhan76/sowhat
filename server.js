@@ -1,8 +1,11 @@
+require('dotenv').config();
 const http = require('http');
+const crypto = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const core = require('./web/report-core.js');
+const astroCore = require('./astro-core.js');
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.PORT || 3000);
@@ -24,6 +27,7 @@ const MIME_TYPES = {
 const DEFAULT_CONFIG = {
   solofleetBaseUrl: 'https://www.solofleet.com',
   endpointPath: '/ReportTemperatureChart/getVehicleDetailDefrostJson',
+  historicalEndpointPath: '/ReportDailyDetail/getVehicleDetailJsonWithoutZoneCalcFilterevery1minCalc',
   refererPath: '/ReportTemperatureChart',
   vehiclePagePath: '/Vehicle',
   discoveryEndpointPath: '/Vehicle/vehiclelivewithoutzonetripNewModelCondense',
@@ -43,6 +47,8 @@ const DEFAULT_CONFIG = {
   units: [],
   customerProfiles: [],
   podSites: [],
+  astroLocations: [],
+  astroRoutes: [],
   linkedAccounts: [],
   activeAccountId: 'primary',
 };
@@ -75,6 +81,9 @@ let pollTimer = null;
 let pollInFlight = false;
 const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
+const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
+const WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
+const webSessions = new Map();
 
 function recordApiMonitorEvent(entry) {
   apiMonitorLog.push(entry);
@@ -321,6 +330,31 @@ function normalizeLinkedAccount(value) {
   };
 }
 
+
+function normalizeWebUser(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const username = String(value.username || '').trim().toLowerCase();
+  if (!username) {
+    return null;
+  }
+
+  const createdAt = String(value.createdAt || value.created_at || new Date().toISOString()).trim() || new Date().toISOString();
+  const updatedAt = String(value.updatedAt || value.updated_at || createdAt).trim() || createdAt;
+
+  return {
+    id: String(value.id || username).trim() || username,
+    username,
+    displayName: String(value.displayName || value.display_name || username).trim() || username,
+    passwordHash: String(value.passwordHash || value.password_hash || '').trim(),
+    role: String(value.role || 'admin').trim() || 'admin',
+    isActive: value.isActive === undefined ? (value.is_active !== undefined ? Boolean(value.is_active) : true) : Boolean(value.isActive),
+    createdAt,
+    updatedAt,
+  };
+}
 function normalizeConfig(raw) {
   const merged = {
     ...clone(DEFAULT_CONFIG),
@@ -356,10 +390,19 @@ function normalizeConfig(raw) {
   merged.podSites = Array.isArray(merged.podSites)
     ? merged.podSites.map(normalizePodSite).filter(Boolean)
     : [];
+  merged.astroLocations = Array.isArray(merged.astroLocations)
+    ? merged.astroLocations.map(astroCore.normalizeAstroLocation).filter(Boolean)
+    : [];
+  merged.astroRoutes = Array.isArray(merged.astroRoutes)
+    ? merged.astroRoutes.map(astroCore.normalizeAstroRoute).filter(Boolean)
+    : [];
   merged.linkedAccounts = Array.isArray(merged.linkedAccounts)
     ? merged.linkedAccounts.map(normalizeLinkedAccount).filter(Boolean)
     : [];
   merged.activeAccountId = String(merged.activeAccountId || 'primary').trim() || 'primary';
+  merged.webUsers = Array.isArray(merged.webUsers)
+    ? merged.webUsers.map(normalizeWebUser).filter(Boolean)
+    : [];
 
   return merged;
 }
@@ -470,12 +513,16 @@ function normalizeState(raw) {
 }
 
 function ensureDataFiles() {
-  fs.mkdirSync(DATA_ROOT, { recursive: true });
-  if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2));
-  }
-  if (!fs.existsSync(STATE_FILE)) {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(DEFAULT_STATE, null, 2));
+  try {
+    fs.mkdirSync(DATA_ROOT, { recursive: true });
+    if (!fs.existsSync(CONFIG_FILE)) {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2));
+    }
+    if (!fs.existsSync(STATE_FILE)) {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(DEFAULT_STATE, null, 2));
+    }
+  } catch (error) {
+    console.error('Failed to ensure local data files:', error.message);
   }
 }
 
@@ -488,13 +535,375 @@ function loadJsonFile(filePath, fallbackValue) {
 }
 
 function saveJsonFile(filePath, value) {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+  } catch (error) {
+    console.error('Failed to write local json file', filePath, error.message);
+  }
 }
 
-function saveConfig() {
-  saveJsonFile(CONFIG_FILE, config);
+async function saveConfig() {
+  if (!getSupabaseWebAuthConfig().enabled) {
+    saveJsonFile(CONFIG_FILE, config);
+    return;
+  }
+  try {
+    await supabaseRestRequest('POST', 'app_settings', {
+      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+      body: [{ id: 'default', config_data: config, updated_at: new Date().toISOString() }],
+    });
+  } catch (error) {
+    console.error('Failed to save config to Supabase:', error.message);
+    saveJsonFile(CONFIG_FILE, config);
+  }
 }
 
+function getSupabaseWebAuthConfig() {
+  const url = String(process.env.SUPABASE_URL || config?.supabaseUrl || '').trim().replace(/\/+$/, '');
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || config?.supabaseServiceRoleKey || '').trim();
+  return {
+    url,
+    serviceRoleKey,
+    enabled: Boolean(url && serviceRoleKey),
+  };
+}
+
+function sanitizeWebUserForClient(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    isActive: Boolean(user.isActive),
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+  };
+}
+
+function buildWebAuthConfigForClient(sessionUser) {
+  const supabase = getSupabaseWebAuthConfig();
+  return {
+    provider: supabase.enabled ? 'supabase' : 'local-bootstrap',
+    usesSupabase: supabase.enabled,
+    sessionUser: sessionUser ? sanitizeWebUserForClient(sessionUser) : null,
+  };
+}
+
+function hashPassword(password, existingSalt) {
+  const salt = existingSalt || crypto.randomBytes(16).toString('hex');
+  const digest = crypto.scryptSync(String(password || ''), salt, 64).toString('hex');
+  return `scrypt:${salt}:${digest}`;
+}
+
+function verifyPassword(password, passwordHash) {
+  const value = String(passwordHash || '');
+  if (!value.startsWith('scrypt:')) {
+    return false;
+  }
+
+  const parts = value.split(':');
+  if (parts.length !== 3) {
+    return false;
+  }
+
+  const expected = hashPassword(password, parts[1]);
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(value));
+}
+
+function buildBootstrapWebUser() {
+  const now = new Date().toISOString();
+  return normalizeWebUser({
+    id: 'bootstrap-admin',
+    username: 'admin',
+    displayName: 'Administrator',
+    passwordHash: hashPassword('admin'),
+    role: 'admin',
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+function ensureLocalBootstrapWebUser() {
+  if (getSupabaseWebAuthConfig().enabled) {
+    return;
+  }
+
+  if (!Array.isArray(config.webUsers)) {
+    config.webUsers = [];
+  }
+
+  if (!config.webUsers.length) {
+    config.webUsers = [buildBootstrapWebUser()];
+    config = normalizeConfig(config);
+    saveConfig();
+  }
+}
+
+async function supabaseRestRequest(method, resource, options) {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    throw new Error('Supabase web auth is not configured.');
+  }
+
+  const requestOptions = options && typeof options === 'object' ? options : {};
+  const headers = {
+    apikey: runtime.serviceRoleKey,
+    Authorization: `Bearer ${runtime.serviceRoleKey}`,
+    'Content-Type': 'application/json',
+    ...(requestOptions.headers || {}),
+  };
+
+  const response = await fetch(`${runtime.url}/rest/v1/${resource}`, {
+    method,
+    headers,
+    body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Supabase web auth request failed. HTTP ${response.status}: ${text.slice(0, 180)}`);
+  }
+  return text ? JSON.parse(text) : [];
+}
+
+function mapSupabaseWebUser(record) {
+  return normalizeWebUser({
+    id: record.id,
+    username: record.username,
+    displayName: record.display_name,
+    passwordHash: record.password_hash,
+    role: record.role,
+    isActive: record.is_active,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+  });
+}
+
+async function ensureBootstrapWebUser() {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    ensureLocalBootstrapWebUser();
+    return;
+  }
+
+  try {
+    const existing = await supabaseRestRequest('GET', 'dashboard_web_users?select=id&limit=1');
+    if (Array.isArray(existing) && existing.length) {
+      return;
+    }
+
+    const bootstrap = buildBootstrapWebUser();
+    await supabaseRestRequest('POST', 'dashboard_web_users', {
+      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+      body: [{
+        id: bootstrap.id,
+        username: bootstrap.username,
+        display_name: bootstrap.displayName,
+        password_hash: bootstrap.passwordHash,
+        role: bootstrap.role,
+        is_active: bootstrap.isActive,
+        created_at: bootstrap.createdAt,
+        updated_at: bootstrap.updatedAt,
+      }],
+    });
+  } catch (error) {
+    ensureLocalBootstrapWebUser();
+  }
+}
+
+async function listWebUsers() {
+  await ensureBootstrapWebUser();
+  if (!getSupabaseWebAuthConfig().enabled) {
+    ensureLocalBootstrapWebUser();
+    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
+      return left.username.localeCompare(right.username);
+    });
+  }
+
+  try {
+    const rows = await supabaseRestRequest('GET', 'dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&order=username.asc');
+    return rows.map(mapSupabaseWebUser).filter(Boolean);
+  } catch (error) {
+    ensureLocalBootstrapWebUser();
+    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
+      return left.username.localeCompare(right.username);
+    });
+  }
+}
+
+async function findWebUserByUsername(username) {
+  const normalized = String(username || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  await ensureBootstrapWebUser();
+  if (!getSupabaseWebAuthConfig().enabled) {
+    ensureLocalBootstrapWebUser();
+    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
+      return user.username === normalized;
+    }) || null;
+  }
+
+  const rows = await supabaseRestRequest('GET', `dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&username=eq.${encodeURIComponent(normalized)}&limit=1`);
+  return rows.length ? mapSupabaseWebUser(rows[0]) : null;
+}
+
+async function saveWebUser(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const now = new Date().toISOString();
+  const username = String(source.username || '').trim().toLowerCase();
+  const displayName = String(source.displayName || source.display_name || username).trim() || username;
+  const role = String(source.role || 'admin').trim() || 'admin';
+  const isActive = source.isActive === undefined ? true : Boolean(source.isActive);
+  if (!username) {
+    throw new Error('Username is required.');
+  }
+
+  const existing = source.id
+    ? (await listWebUsers()).find(function (user) { return user.id === source.id; }) || null
+    : await findWebUserByUsername(username);
+
+  const passwordHash = source.password
+    ? hashPassword(source.password)
+    : (existing ? existing.passwordHash : '');
+  if (!passwordHash) {
+    throw new Error('Password is required for a new web user.');
+  }
+
+  const nextUser = normalizeWebUser({
+    id: source.id || (existing && existing.id) || `${username}-${Date.now()}`,
+    username,
+    displayName,
+    passwordHash,
+    role,
+    isActive,
+    createdAt: (existing && existing.createdAt) || now,
+    updatedAt: now,
+  });
+
+  if (!getSupabaseWebAuthConfig().enabled) {
+    ensureLocalBootstrapWebUser();
+    const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
+    const index = users.findIndex(function (user) {
+      return user.id === nextUser.id || user.username === nextUser.username;
+    });
+    if (index >= 0) {
+      users[index] = nextUser;
+    } else {
+      users.push(nextUser);
+    }
+    config.webUsers = users.sort(function (left, right) {
+      return left.username.localeCompare(right.username);
+    });
+    config = normalizeConfig(config);
+    saveConfig();
+    return nextUser;
+  }
+
+  try {
+    const rows = await supabaseRestRequest('POST', 'dashboard_web_users', {
+      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+      body: [{
+        id: nextUser.id,
+        username: nextUser.username,
+        display_name: nextUser.displayName,
+        password_hash: nextUser.passwordHash,
+        role: nextUser.role,
+        is_active: nextUser.isActive,
+        created_at: nextUser.createdAt,
+        updated_at: nextUser.updatedAt,
+      }],
+    });
+    return rows.length ? mapSupabaseWebUser(rows[0]) : nextUser;
+  } catch (error) {
+    ensureLocalBootstrapWebUser();
+    const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
+    const index = users.findIndex(function (user) { return user.id === nextUser.id || user.username === nextUser.username; });
+    if (index >= 0) { users[index] = nextUser; } else { users.push(nextUser); }
+    config.webUsers = users.sort(function (left, right) { return left.username.localeCompare(right.username); });
+    config = normalizeConfig(config);
+    saveConfig();
+    return nextUser;
+  }
+}
+
+async function deleteWebUser(userId) {
+  const resolvedId = String(userId || '').trim();
+  if (!resolvedId) {
+    throw new Error('User id is required.');
+  }
+
+  if (!getSupabaseWebAuthConfig().enabled) {
+    ensureLocalBootstrapWebUser();
+    config.webUsers = (config.webUsers || []).map(normalizeWebUser).filter(Boolean).filter(function (user) {
+      return user.id !== resolvedId;
+    });
+    if (!config.webUsers.length) {
+      config.webUsers = [buildBootstrapWebUser()];
+    }
+    config = normalizeConfig(config);
+    saveConfig();
+    return true;
+  }
+
+  await supabaseRestRequest('DELETE', `dashboard_web_users?id=eq.${encodeURIComponent(resolvedId)}`, {
+    headers: { Prefer: 'return=minimal' },
+  });
+  return true;
+}
+
+function parseCookieHeader(cookieHeader) {
+  const cookies = {};
+  for (const part of String(cookieHeader || '').split(/;\s*/)) {
+    if (!part || !part.includes('=')) {
+      continue;
+    }
+    const separator = part.indexOf('=');
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key) {
+      cookies[key] = value;
+    }
+  }
+  return cookies;
+}
+
+function getWebSession(req) {
+  const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
+  const token = cookies[WEB_AUTH_COOKIE_NAME];
+  if (!token || !webSessions.has(token)) {
+    return null;
+  }
+  return webSessions.get(token);
+}
+
+function createWebSessionCookie(user) {
+  const token = crypto.randomBytes(24).toString('hex');
+  const sessionUser = sanitizeWebUserForClient(user);
+  webSessions.set(token, {
+    token,
+    user: sessionUser,
+    createdAt: Date.now(),
+  });
+  return `${WEB_AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${WEB_SESSION_MAX_AGE_SECONDS}`;
+}
+
+function destroyWebSession(req) {
+  const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
+  const token = cookies[WEB_AUTH_COOKIE_NAME];
+  if (token) {
+    webSessions.delete(token);
+  }
+}
+
+function expiredWebSessionCookie() {
+  return `${WEB_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
 function serializeAccountStateForDisk(accountState) {
   const fleetVehicles = {};
   const units = {};
@@ -541,8 +950,21 @@ function serializeStateForDisk() {
   return payload;
 }
 
-function saveState() {
-  saveJsonFile(STATE_FILE, serializeStateForDisk());
+async function saveState() {
+  const payload = serializeStateForDisk();
+  if (!getSupabaseWebAuthConfig().enabled) {
+    saveJsonFile(STATE_FILE, payload);
+    return;
+  }
+  try {
+    await supabaseRestRequest('POST', 'app_state', {
+      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+      body: [{ id: 'default', state_data: payload, updated_at: new Date().toISOString() }],
+    });
+  } catch (error) {
+    console.error('Failed to save state to Supabase:', error.message);
+    saveJsonFile(STATE_FILE, payload);
+  }
 }
 
 function buildPrimaryAccountConfig() {
@@ -608,43 +1030,54 @@ function findRecordForIncident(unitState, incident) {
 
 function captureDailyErrorSnapshots(accountConfig, accountState) {
   const existingKeys = new Set((accountState.dailySnapshots || []).map(function (snapshot) {
-    return `${snapshot.day}|${snapshot.accountId || accountConfig.id}|${snapshot.unitId}`;
+    return snapshot.id;
   }));
+
+  const pushSnapshot = function (unitId, unitLabel, vehicle, incident, record, snapshot) {
+    const day = formatLocalDay(incident.startTimestamp);
+    const key = day + '|' + accountConfig.id + '|' + unitId + '|' + incident.type + '|' + incident.startTimestamp;
+    if (existingKeys.has(key)) {
+      return;
+    }
+
+    accountState.dailySnapshots.push({
+      id: key,
+      accountId: accountConfig.id,
+      accountLabel: accountConfig.label,
+      day,
+      errorTimestamp: incident.startTimestamp,
+      errorTime: formatLocalTime(incident.startTimestamp),
+      startTimestamp: incident.startTimestamp,
+      endTimestamp: incident.endTimestamp,
+      unitId,
+      unitLabel,
+      vehicle,
+      type: incident.type,
+      label: incident.label,
+      durationMinutes: incident.durationMinutes,
+      temp1: record ? record.temp1 : incident.temp1 ?? null,
+      temp2: record ? record.temp2 : incident.temp2 ?? null,
+      speed: record ? record.speed : incident.speed ?? null,
+      latitude: snapshot?.latitude ?? incident.latitude ?? null,
+      longitude: snapshot?.longitude ?? incident.longitude ?? null,
+      locationSummary: snapshot?.locationSummary || incident.locationSummary || '',
+      zoneName: snapshot?.zoneName || incident.zoneName || '',
+    });
+    existingKeys.add(key);
+  };
 
   for (const [unitId, unitState] of Object.entries(accountState.units)) {
     const analysis = unitState.analysis || buildAnalysisFromRecords(unitState);
     for (const incident of analysis.incidents) {
-      const day = formatLocalDay(incident.startTimestamp);
-      const key = `${day}|${accountConfig.id}|${unitId}`;
-      if (existingKeys.has(key)) {
-        continue;
-      }
-
       const record = findRecordForIncident(unitState, incident);
       const snapshot = accountState.fleet.vehicles[normalizeUnitKey(unitId)] || null;
-      accountState.dailySnapshots.push({
-        id: key,
-        accountId: accountConfig.id,
-        accountLabel: accountConfig.label,
-        day,
-        errorTimestamp: incident.startTimestamp,
-        errorTime: formatLocalTime(incident.startTimestamp),
-        unitId,
-        unitLabel: unitState.label,
-        vehicle: unitState.vehicle || unitState.label || unitId,
-        type: incident.type,
-        label: incident.label,
-        durationMinutes: incident.durationMinutes,
-        temp1: record ? record.temp1 : null,
-        temp2: record ? record.temp2 : null,
-        speed: record ? record.speed : null,
-        latitude: snapshot?.latitude ?? null,
-        longitude: snapshot?.longitude ?? null,
-        locationSummary: snapshot?.locationSummary || '',
-        zoneName: snapshot?.zoneName || '',
-      });
-      existingKeys.add(key);
+      pushSnapshot(unitId, unitState.label, unitState.vehicle || unitState.label || unitId, incident, record, snapshot);
     }
+  }
+
+  for (const incident of buildCurrentFleetSensorAlerts(accountConfig, accountState, Date.now())) {
+    const snapshot = accountState.fleet.vehicles[normalizeUnitKey(incident.unitId)] || null;
+    pushSnapshot(incident.unitId, incident.unitLabel, incident.vehicle, incident, null, snapshot);
   }
 
   accountState.dailySnapshots.sort(function (left, right) {
@@ -662,6 +1095,136 @@ function buildDailySnapshotRows(accountState, rangeStartMs, rangeEndMs) {
     }
     return true;
   });
+}
+
+function syncFleetSnapshotRecords(accountConfig, accountState, now) {
+  const resolvedNow = Number.isFinite(now) ? now : Date.now();
+
+  for (const unit of accountConfig.units || []) {
+    const snapshot = accountState.fleet.vehicles[normalizeUnitKey(unit.id)] || null;
+    if (!snapshot) {
+      continue;
+    }
+
+    const timestamp = snapshot.lastUpdatedMs ?? resolvedNow;
+    if (!Number.isFinite(timestamp)) {
+      continue;
+    }
+
+    const unitState = accountState.units[unit.id] || normalizeUnitState(unit.id, { label: unit.label, vehicle: unit.label });
+    accountState.units[unit.id] = unitState;
+    unitState.label = unit.label;
+    unitState.vehicle = snapshot.alias || snapshot.unitId || unitState.vehicle || unit.label || unit.id;
+    unitState.records = mergeRecords(unitState.records, [{
+      timestamp,
+      vehicle: snapshot.unitId || unitState.vehicle || unit.label || unit.id,
+      speed: snapshot.speed,
+      temp1: snapshot.temp1,
+      temp2: snapshot.temp2,
+      errSensor: snapshot.errSensor || '',
+    }], resolvedNow);
+    unitState.analysis = buildAnalysisFromRecords(unitState);
+  }
+}
+
+function buildCachedUnitHistory(accountState, unitId, rangeStartMs, rangeEndMs) {
+  const unitState = accountState.units[unitId] || null;
+  if (!unitState) {
+    return [];
+  }
+
+  return (unitState.records || []).filter(function (record) {
+    if (rangeStartMs !== null && record.timestamp < rangeStartMs) {
+      return false;
+    }
+    if (rangeEndMs !== null && record.timestamp > rangeEndMs) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function mergeHistoryRecords(primaryRecords, fallbackRecords) {
+  const merged = new Map();
+
+  for (const record of fallbackRecords || []) {
+    merged.set(record.timestamp, record);
+  }
+
+  for (const record of primaryRecords || []) {
+    const existing = merged.get(record.timestamp) || {};
+    merged.set(record.timestamp, {
+      ...existing,
+      ...record,
+      vehicle: record.vehicle || existing.vehicle || 'Unknown Unit',
+      speed: record.speed ?? existing.speed ?? null,
+      temp1: record.temp1 ?? existing.temp1 ?? null,
+      temp2: record.temp2 ?? existing.temp2 ?? null,
+      errSensor: record.errSensor ?? existing.errSensor ?? '',
+    });
+  }
+
+  return [...merged.values()].sort(function (left, right) {
+    return left.timestamp - right.timestamp;
+  });
+}
+
+function buildCurrentFleetSensorAlerts(accountConfig, accountState, now) {
+  const alerts = [];
+  const estimatedDurationMs = Math.max(
+    Number(config.minDurationMinutes || 5) * 60 * 1000,
+    Number(config.requestIntervalSeconds || 60) * 1000,
+  );
+
+  for (const unit of accountConfig.units || []) {
+    const snapshot = accountState.fleet.vehicles[normalizeUnitKey(unit.id)] || null;
+    if (!snapshot) {
+      continue;
+    }
+
+    const type = detectLiveSensorFaultType(snapshot.temp1, snapshot.temp2, snapshot.errSensor || '');
+    if (!type) {
+      continue;
+    }
+
+    const endTimestamp = snapshot.lastUpdatedMs ?? now;
+    const startTimestamp = endTimestamp - estimatedDurationMs;
+    alerts.push({
+      id: 'live|' + accountConfig.id + '|' + unit.id + '|' + type + '|' + endTimestamp,
+      vehicle: snapshot.unitId || unit.label || unit.id,
+      type,
+      label: sensorFaultLabel(type),
+      severity: type === 'temp1+temp2' ? 'critical' : 'warning',
+      startTimestamp,
+      endTimestamp,
+      durationMs: estimatedDurationMs,
+      durationMinutes: Number((estimatedDurationMs / 60000).toFixed(2)),
+      sampleCount: 1,
+      movingSamples: (snapshot.speed ?? 0) > 0 ? 1 : 0,
+      minSpeed: snapshot.speed ?? null,
+      maxSpeed: snapshot.speed ?? null,
+      temp1Min: snapshot.temp1 ?? null,
+      temp1Max: snapshot.temp1 ?? null,
+      temp2Min: snapshot.temp2 ?? null,
+      temp2Max: snapshot.temp2 ?? null,
+      gapMinutes: Number((estimatedDurationMs / 60000).toFixed(2)),
+      accountId: accountConfig.id,
+      accountLabel: accountConfig.label,
+      unitId: unit.id,
+      unitLabel: unit.label,
+      rowKey: accountConfig.id + '::' + unit.id,
+      isCurrent: true,
+      latitude: snapshot.latitude ?? null,
+      longitude: snapshot.longitude ?? null,
+      locationSummary: snapshot.locationSummary || '',
+      zoneName: snapshot.zoneName || '',
+      speed: snapshot.speed ?? null,
+      temp1: snapshot.temp1 ?? null,
+      temp2: snapshot.temp2 ?? null,
+    });
+  }
+
+  return alerts;
 }
 
 function annotateFleetRowsWithPods(accountConfig, fleetRows) {
@@ -823,33 +1386,96 @@ function recomputeAllAnalyses() {
   }
 }
 
-function initializeStorage() {
+let isStorageInitialized = false;
+
+async function initializeStorage() {
+  if (isStorageInitialized) return;
   ensureDataFiles();
-  config = normalizeConfig(loadJsonFile(CONFIG_FILE, DEFAULT_CONFIG));
-  state = normalizeState(loadJsonFile(STATE_FILE, DEFAULT_STATE));
+  let rawConfig = loadJsonFile(CONFIG_FILE, DEFAULT_CONFIG);
+  let rawState = loadJsonFile(STATE_FILE, DEFAULT_STATE);
+  
+  let supabaseHasConfig = false;
+  let supabaseHasState = false;
+
+  if (getSupabaseWebAuthConfig().enabled) {
+    try {
+      const configRows = await supabaseRestRequest('GET', `app_settings?id=eq.default&limit=1`);
+      if (configRows && configRows.length > 0 && configRows[0].config_data) {
+        rawConfig = configRows[0].config_data;
+        supabaseHasConfig = true;
+      }
+      const stateRows = await supabaseRestRequest('GET', `app_state?id=eq.default&limit=1`);
+      if (stateRows && stateRows.length > 0 && stateRows[0].state_data) {
+        rawState = stateRows[0].state_data;
+        supabaseHasState = true;
+      }
+    } catch (e) {
+      console.error('Failed to load storage from Supabase:', e.message);
+    }
+  }
+
+  config = normalizeConfig(rawConfig);
+  ensureLocalBootstrapWebUser();
+  state = normalizeState(rawState);
   syncUnitsWithConfig();
   recomputeAllAnalyses();
+  
+  const migrationTasks = [];
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
     captureDailyErrorSnapshots(accountConfig, accountState);
     capturePodSnapshots(accountConfig, accountState, buildFleetRows(accountConfig, accountState, Date.now(), buildLiveAlerts(accountConfig, accountState, Date.now())));
+    
+    if (getSupabaseWebAuthConfig().enabled) {
+      if (accountState.dailySnapshots && accountState.dailySnapshots.length > 0) {
+        migrationTasks.push(upsertDailyTempSnapshotsToSupabase(accountConfig, accountState));
+      }
+      if (accountState.podSnapshots && accountState.podSnapshots.length > 0) {
+        migrationTasks.push(upsertPodSnapshotsToSupabase(accountConfig, accountState));
+      }
+    }
   }
+  
   state.runtime.isPolling = false;
   state.runtime.nextRunAt = null;
-  saveState();
+
+  if (getSupabaseWebAuthConfig().enabled) {
+    if (!supabaseHasConfig) {
+      console.log('Migrating local config to Supabase...');
+      migrationTasks.push(saveConfig());
+    }
+    if (!supabaseHasState) {
+      console.log('Migrating local state to Supabase...');
+      migrationTasks.push(saveState());
+    }
+    
+    if (migrationTasks.length > 0) {
+      await Promise.allSettled(migrationTasks);
+      console.log('Completed auto-migration of local data to Supabase.');
+    } else {
+      await saveState(); 
+    }
+  } else {
+    saveState();
+  }
+  
+  isStorageInitialized = true;
 }
 
-function send(res, statusCode, content, contentType) {
+const storageInitializationPromise = initializeStorage();
+
+function send(res, statusCode, content, contentType, extraHeaders) {
   res.writeHead(statusCode, {
     'Content-Type': contentType,
     'Cache-Control': 'no-store',
+    ...(extraHeaders || {}),
   });
   res.end(content);
 }
 
-function sendJson(res, statusCode, payload) {
+function sendJson(res, statusCode, payload, extraHeaders) {
   res.__apiErrorMessage = payload && payload.error ? String(payload.error) : '';
-  send(res, statusCode, JSON.stringify(payload, null, 2), 'application/json; charset=utf-8');
+  send(res, statusCode, JSON.stringify(payload, null, 2), 'application/json; charset=utf-8', extraHeaders);
 }
 
 function safePathFromUrl(urlPath) {
@@ -1016,6 +1642,7 @@ function sanitizeConfigForClient() {
     vehicleRoleId: config.vehicleRoleId,
     authEmail: config.authEmail,
     hasSessionCookie: Boolean(config.sessionCookie),
+    hasVerifiedSession: Boolean(config.sessionCookie && config.vehicleRoleId),
     sessionCookiePreview: maskCookie(config.sessionCookie),
     pollIntervalSeconds: config.pollIntervalSeconds,
     requestLookbackMinutes: config.requestLookbackMinutes,
@@ -1030,6 +1657,8 @@ function sanitizeConfigForClient() {
     units: config.units,
     customerProfiles: config.customerProfiles,
     podSites: config.podSites,
+    astroLocations: config.astroLocations,
+    astroRoutes: config.astroRoutes,
     activeAccountId: config.activeAccountId,
     accounts: getAllAccountConfigs().map(function (account) {
       return {
@@ -1037,6 +1666,7 @@ function sanitizeConfigForClient() {
         label: account.label,
         authEmail: account.authEmail,
         hasSessionCookie: Boolean(account.sessionCookie),
+        hasVerifiedSession: Boolean(account.sessionCookie && account.vehicleRoleId),
         sessionCookiePreview: maskCookie(account.sessionCookie),
         vehicleRoleId: account.vehicleRoleId || '',
         units: account.units || [],
@@ -1227,6 +1857,11 @@ function mergeCookieHeaders() {
 
 async function loginToSolofleet(email, password, rememberMe, options) {
   const loginOptions = options && typeof options === 'object' ? options : {};
+  const normalizedEmail = String(email || '').trim();
+  const normalizedPassword = String(password || '');
+  if (!normalizedEmail || !normalizedPassword) {
+    throw new Error('Email dan password Solofleet wajib diisi.');
+  }
   const loginUrl = new URL('/Account/Login', config.solofleetBaseUrl);
   const loginPageResponse = await fetch(loginUrl, {
     method: 'GET',
@@ -1247,8 +1882,8 @@ async function loginToSolofleet(email, password, rememberMe, options) {
   const initialCookies = buildCookieHeader(loginPageResponse.headers.getSetCookie ? loginPageResponse.headers.getSetCookie() : []);
   const body = new URLSearchParams({
     __RequestVerificationToken: verificationToken,
-    Email: email,
-    Password: password,
+    Email: normalizedEmail,
+    Password: normalizedPassword,
     RememberMe: rememberMe ? 'true' : 'false',
   });
 
@@ -1274,9 +1909,25 @@ async function loginToSolofleet(email, password, rememberMe, options) {
     throw new Error('Solofleet login did not return an application session cookie.');
   }
 
-  const resolvedEmail = String(email || '').trim();
+  const resolvedEmail = normalizedEmail;
   const requestedAccountId = String(loginOptions.accountId || '').trim();
   const linkedAccountLabel = String(loginOptions.label || resolvedEmail || requestedAccountId || 'Linked account').trim();
+  let resolvedRoleId = '';
+  try {
+    const roleProbeConfig = normalizeLinkedAccount({
+      id: requestedAccountId || 'primary',
+      label: linkedAccountLabel,
+      authEmail: resolvedEmail,
+      sessionCookie: mergedCookie,
+      vehicleRoleId: '',
+    });
+    resolvedRoleId = await resolveVehicleRoleId(roleProbeConfig);
+  } catch (error) {
+    throw new Error(error?.message || 'Solofleet login gagal diverifikasi. Coba cek ulang email/password.');
+  }
+  if (!resolvedRoleId) {
+    throw new Error('Solofleet login gagal diverifikasi. Coba cek ulang email/password.');
+  }
 
   if (requestedAccountId && requestedAccountId !== 'primary') {
     const linkedAccounts = Array.isArray(config.linkedAccounts) ? [...config.linkedAccounts] : [];
@@ -1285,7 +1936,7 @@ async function loginToSolofleet(email, password, rememberMe, options) {
       label: linkedAccountLabel,
       authEmail: resolvedEmail,
       sessionCookie: mergedCookie,
-      vehicleRoleId: '',
+      vehicleRoleId: resolvedRoleId,
       units: [],
       customerProfiles: [],
       podSites: [],
@@ -1301,6 +1952,7 @@ async function loginToSolofleet(email, password, rememberMe, options) {
   } else {
     config.authEmail = resolvedEmail;
     config.sessionCookie = mergedCookie;
+    config.vehicleRoleId = resolvedRoleId;
     config.activeAccountId = 'primary';
   }
   config = normalizeConfig(config);
@@ -1336,7 +1988,7 @@ function logoutFromSolofleet(accountId) {
   return sanitizeConfigForClient();
 }
 
-function buildStatusPayload() {
+function buildStatusPayload(sessionUser) {
   const now = Date.now();
   const accountSummaries = [];
   const fleetRows = [];
@@ -1345,6 +1997,8 @@ function buildStatusPayload() {
 
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
+    syncFleetSnapshotRecords(accountConfig, accountState, now);
+    captureDailyErrorSnapshots(accountConfig, accountState);
     const accountLiveAlerts = buildLiveAlerts(accountConfig, accountState, now);
     const accountFleetRows = annotateFleetRowsWithPods(accountConfig, buildFleetRows(accountConfig, accountState, now, accountLiveAlerts));
     const accountPodSnapshots = accountState.podSnapshots || [];
@@ -1365,7 +2019,9 @@ function buildStatusPayload() {
     });
   }
 
-  fleetRows.sort(function (left, right) {
+  const astroAnnotatedRows = astroCore.annotateFleetRowsWithAstro(fleetRows, config.astroRoutes || [], config.astroLocations || []);
+
+  astroAnnotatedRows.sort(function (left, right) {
     return String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
       || String(left.label || left.id).localeCompare(String(right.label || right.id));
   });
@@ -1382,40 +2038,41 @@ function buildStatusPayload() {
     runtime: {
       ...state.runtime,
       pollInFlight,
-      unitCount: fleetRows.length,
+      unitCount: astroAnnotatedRows.length,
       liveAlertCount: liveAlerts.length,
       accountCount: getAllAccountConfigs().length,
     },
     accounts: accountSummaries,
-    overview: buildOverview(fleetRows, liveAlerts),
+    overview: buildOverview(astroAnnotatedRows, liveAlerts),
     autoFilterCards: [
       {
         id: 'temp-error',
         label: 'Temp error',
-        count: fleetRows.filter(function (row) { return row.hasLiveSensorFault; }).length,
+        count: astroAnnotatedRows.filter(function (row) { return row.hasLiveSensorFault; }).length,
         description: 'Unit yang live temp sensor-nya sedang 0',
       },
       {
         id: 'setpoint',
         label: 'Setpoint mismatch',
-        count: fleetRows.filter(function (row) { return row.outsideSetpoint; }).length,
+        count: astroAnnotatedRows.filter(function (row) { return row.outsideSetpoint; }).length,
         description: 'Suhu live di luar min/max customer',
       },
       {
         id: 'gps-late',
         label: 'GPS late > 30 min',
-        count: fleetRows.filter(function (row) { return row.minutesSinceUpdate !== null && row.minutesSinceUpdate > 30; }).length,
+        count: astroAnnotatedRows.filter(function (row) { return row.minutesSinceUpdate !== null && row.minutesSinceUpdate > 30; }).length,
         description: 'Update GPS telat lebih dari 30 menit',
       },
     ],
     fleet: {
       fetchedAt: state.runtime.lastSnapshotAt,
       lastError: state.runtime.lastSnapshotError,
-      rows: fleetRows,
+      rows: astroAnnotatedRows,
     },
     liveAlerts,
     podSnapshots,
-    units: fleetRows,
+    units: astroAnnotatedRows,
+    webAuth: buildWebAuthConfigForClient(sessionUser),
   };
 }
 
@@ -1447,22 +2104,33 @@ function buildLiveAlerts(accountConfig, accountState, now) {
   );
 
   const liveAlerts = [];
+  const seenKeys = new Set();
   for (const [unitId, unitState] of Object.entries(accountState.units)) {
     const analysis = unitState.analysis || buildAnalysisFromRecords(unitState);
     for (const incident of analysis.incidents) {
       if (incident.endTimestamp < now - freshnessMs) {
         continue;
       }
-      liveAlerts.push({
+      const alert = {
         ...incident,
         accountId: accountConfig.id,
         accountLabel: accountConfig.label,
         unitId,
         unitLabel: unitState.label,
-        rowKey: `${accountConfig.id}::${unitId}`,
+        rowKey: accountConfig.id + '::' + unitId,
         isCurrent: true,
-      });
+      };
+      liveAlerts.push(alert);
+      seenKeys.add(unitId + '|' + incident.type);
     }
+  }
+
+  for (const alert of buildCurrentFleetSensorAlerts(accountConfig, accountState, now)) {
+    const key = alert.unitId + '|' + alert.type;
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    liveAlerts.push(alert);
   }
 
   liveAlerts.sort(function (left, right) {
@@ -1481,14 +2149,149 @@ function parseDateRange(searchParams) {
   };
 }
 
-function buildReportPayload(searchParams) {
+function localEndOfDay(timestamp) {
+  const date = new Date(timestamp);
+  date.setHours(23, 59, 59, 999);
+  return date.getTime();
+}
+
+function clipIncidentToRange(incident, rangeStartMs, rangeEndMs) {
+  const rawStart = incident.clippedStart ?? incident.startTimestamp ?? null;
+  const rawEnd = incident.clippedEnd ?? incident.endTimestamp ?? rawStart;
+  if (rawStart === null || rawEnd === null) {
+    return null;
+  }
+
+  const start = rangeStartMs === null ? rawStart : Math.max(rawStart, rangeStartMs);
+  const end = rangeEndMs === null ? rawEnd : Math.min(rawEnd, rangeEndMs);
+  if (start > end) {
+    return null;
+  }
+
+  return { start, end };
+}
+
+function buildTempErrorIncidents(alerts, rangeStartMs, rangeEndMs) {
+  const rows = new Map();
+
+  for (const incident of alerts || []) {
+    const clipped = clipIncidentToRange(incident, rangeStartMs, rangeEndMs);
+    if (!clipped) {
+      continue;
+    }
+
+    let segmentStart = clipped.start;
+    while (segmentStart <= clipped.end) {
+      const segmentEnd = Math.min(localEndOfDay(segmentStart), clipped.end);
+      const day = formatLocalDay(segmentStart);
+      const key = `${day}|${incident.accountId || 'primary'}|${incident.unitId || incident.vehicle}`;
+      if (!rows.has(key)) {
+        rows.set(key, {
+          day,
+          accountId: incident.accountId || 'primary',
+          accountLabel: incident.accountLabel || incident.accountId || 'primary',
+          unitId: incident.unitId || incident.vehicle,
+          unitLabel: incident.unitLabel || incident.vehicle,
+          vehicle: incident.vehicle || incident.unitLabel || incident.unitId || '',
+          incidents: 0,
+          temp1Incidents: 0,
+          temp2Incidents: 0,
+          bothIncidents: 0,
+          firstStartTimestamp: segmentStart,
+          lastEndTimestamp: segmentEnd,
+          totalMinutes: 0,
+          longestMinutes: 0,
+          temp1Min: null,
+          temp1Max: null,
+          temp2Min: null,
+          temp2Max: null,
+          minSpeed: null,
+          maxSpeed: null,
+          latitude: incident.latitude ?? null,
+          longitude: incident.longitude ?? null,
+          locationSummary: incident.locationSummary || '',
+          zoneName: incident.zoneName || '',
+        });
+      }
+
+      const row = rows.get(key);
+      const segmentMinutes = Number(((segmentEnd - segmentStart) / 60000).toFixed(2));
+      row.incidents += 1;
+      row.firstStartTimestamp = Math.min(row.firstStartTimestamp, segmentStart);
+      row.lastEndTimestamp = Math.max(row.lastEndTimestamp, segmentEnd);
+      row.totalMinutes += segmentMinutes;
+      row.longestMinutes = Math.max(row.longestMinutes, segmentMinutes);
+      row.latitude = row.latitude ?? incident.latitude ?? null;
+      row.longitude = row.longitude ?? incident.longitude ?? null;
+      row.locationSummary = row.locationSummary || incident.locationSummary || '';
+      row.zoneName = row.zoneName || incident.zoneName || '';
+      if (incident.type === 'temp1') {
+        row.temp1Incidents += 1;
+      } else if (incident.type === 'temp2') {
+        row.temp2Incidents += 1;
+      } else if (incident.type === 'temp1+temp2') {
+        row.bothIncidents += 1;
+      }
+      if (incident.temp1Min !== null && incident.temp1Min !== undefined) {
+        row.temp1Min = row.temp1Min === null ? incident.temp1Min : Math.min(row.temp1Min, incident.temp1Min);
+      }
+      if (incident.temp1Max !== null && incident.temp1Max !== undefined) {
+        row.temp1Max = row.temp1Max === null ? incident.temp1Max : Math.max(row.temp1Max, incident.temp1Max);
+      }
+      if (incident.temp2Min !== null && incident.temp2Min !== undefined) {
+        row.temp2Min = row.temp2Min === null ? incident.temp2Min : Math.min(row.temp2Min, incident.temp2Min);
+      }
+      if (incident.temp2Max !== null && incident.temp2Max !== undefined) {
+        row.temp2Max = row.temp2Max === null ? incident.temp2Max : Math.max(row.temp2Max, incident.temp2Max);
+      }
+      if (incident.minSpeed !== null && incident.minSpeed !== undefined) {
+        row.minSpeed = row.minSpeed === null ? incident.minSpeed : Math.min(row.minSpeed, incident.minSpeed);
+      }
+      if (incident.maxSpeed !== null && incident.maxSpeed !== undefined) {
+        row.maxSpeed = row.maxSpeed === null ? incident.maxSpeed : Math.max(row.maxSpeed, incident.maxSpeed);
+      }
+      segmentStart = segmentEnd + 1;
+    }
+  }
+
+  return [...rows.values()].map(function (row) {
+    const type = row.bothIncidents > 0 || (row.temp1Incidents > 0 && row.temp2Incidents > 0)
+      ? 'temp1+temp2'
+      : row.temp1Incidents > 0
+        ? 'temp1'
+        : 'temp2';
+    return {
+      ...row,
+      type,
+      label: sensorFaultLabel(type),
+      startTime: formatLocalTime(row.firstStartTimestamp),
+      endTime: formatLocalTime(row.lastEndTimestamp),
+      durationMinutes: Number(row.totalMinutes.toFixed(2)),
+      longestMinutes: Number(row.longestMinutes.toFixed(2)),
+    };
+  }).sort(function (left, right) {
+    return (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0)
+      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitLabel || left.unitId).localeCompare(String(right.unitLabel || right.unitId));
+  });
+}
+async function buildReportPayload(searchParams) {
   const range = parseDateRange(searchParams);
   const incidents = [];
-  const snapshotRows = [];
+  const localSnapshotRows = [];
   const podRows = [];
 
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
+    syncFleetSnapshotRecords(accountConfig, accountState, Date.now());
+    captureDailyErrorSnapshots(accountConfig, accountState);
+    try {
+      await upsertDailyTempSnapshotsToSupabase(accountConfig, accountState);
+      await upsertPodSnapshotsToSupabase(accountConfig, accountState);
+    } catch (error) {
+      accountState.runtime.lastSnapshotError = error.message;
+    }
+    incidents.push(...buildCurrentFleetSensorAlerts(accountConfig, accountState, Date.now()));
     incidents.push(...Object.entries(accountState.units).flatMap(function ([unitId, unitState]) {
       return (unitState.analysis ? unitState.analysis.incidents : []).map(function (incident) {
         const snapshot = accountState.fleet.vehicles[normalizeUnitKey(unitId)] || null;
@@ -1505,74 +2308,826 @@ function buildReportPayload(searchParams) {
         };
       });
     }));
-    snapshotRows.push(...buildDailySnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
+    localSnapshotRows.push(...buildDailySnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
     podRows.push(...buildPodSnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
   }
 
   const summary = core.summarizeIncidents(incidents, range.rangeStartMs, range.rangeEndMs);
-  const compileByUnitDayMap = new Map();
+  let snapshotRows = localSnapshotRows;
+  try {
+    const supabaseRows = await loadDailyTempSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
+    if (supabaseRows.length) {
+      snapshotRows = supabaseRows;
+    }
+    const supabasPodRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
+    if (supabasPodRows.length) {
+      podRows.length = 0;
+      podRows.push(...supabasPodRows);
+    }
+  } catch (error) {
+    state.runtime.lastSnapshotError = error.message;
+  }
 
-  for (const incident of summary.alerts || []) {
-    const incidentDay = formatLocalDay(incident.clippedStart || incident.startTimestamp || Date.now());
-    const compileKey = `${incidentDay}|${incident.accountId || 'primary'}|${incident.unitId || incident.vehicle}`;
-    if (!compileByUnitDayMap.has(compileKey)) {
-      compileByUnitDayMap.set(compileKey, {
-        day: incidentDay,
-        accountId: incident.accountId || 'primary',
-        accountLabel: incident.accountLabel || incident.accountId || 'primary',
-        unitId: incident.unitId || incident.vehicle,
-        unitLabel: incident.unitLabel || incident.vehicle,
-        vehicle: incident.unitLabel || incident.vehicle,
+  snapshotRows.sort(function (left, right) { return (right.errorTimestamp || 0) - (left.errorTimestamp || 0); });
+  podRows.sort(function (left, right) { return (right.timestamp || 0) - (left.timestamp || 0); });
+  const snapshotAnalytics = buildSnapshotReportAggregates(snapshotRows);
+  return {
+    now: Date.now(),
+    rangeStartMs: range.rangeStartMs,
+    rangeEndMs: range.rangeEndMs,
+    ...summary,
+    dailyTotals: snapshotAnalytics.dailyTotals,
+    compileByDay: snapshotAnalytics.compileByDay,
+    compileByUnitDay: snapshotAnalytics.compileByUnitDay,
+    tempErrorIncidents: snapshotAnalytics.tempErrorIncidents,
+    rawAlerts: snapshotRows,
+    dailySnapshots: snapshotRows,
+    podSnapshots: podRows,
+    alerts: snapshotRows,
+  };
+}
+
+function buildAstroConfigPayload() {
+  const accountSummaries = getAllAccountConfigs().map(function (account) {
+    return {
+      id: account.id,
+      label: account.label,
+      authEmail: account.authEmail,
+      hasSessionCookie: Boolean(account.sessionCookie),
+      units: account.units || [],
+    };
+  });
+
+  const routeUnits = accountSummaries.flatMap(function (account) {
+    return (account.units || []).map(function (unit) {
+      return {
+        accountId: account.id,
+        accountLabel: account.label,
+        id: unit.id,
+        label: unit.label,
+      };
+    });
+  });
+
+  return {
+    ok: true,
+    locations: config.astroLocations || [],
+    routes: config.astroRoutes || [],
+    accounts: accountSummaries,
+    units: routeUnits,
+  };
+}
+
+function validateAstroLocations(locations) {
+  const seen = new Set();
+  return (locations || []).map(function (item) {
+    const normalized = astroCore.normalizeAstroLocation(item);
+    if (!normalized) {
+      throw new Error('Astro location invalid. Nama, latitude, longitude, radius, dan type wajib valid.');
+    }
+    if (seen.has(normalized.id)) {
+      throw new Error('Astro location id duplicate: ' + normalized.id);
+    }
+    seen.add(normalized.id);
+    return normalized;
+  });
+}
+
+function resolveAccountLabel(accountId) {
+  const account = getAllAccountConfigs().find(function (item) {
+    return item.id === (accountId || 'primary');
+  });
+  return account?.label || account?.authEmail || accountId || 'primary';
+}
+
+function inferDailySnapshotEndTimestamp(snapshot) {
+  const start = toTimestampMaybe(snapshot?.errorTimestamp);
+  const durationMinutes = Number(snapshot?.durationMinutes || 0);
+  if (start === null) {
+    return null;
+  }
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return start;
+  }
+  return start + (durationMinutes * 60 * 1000);
+}
+
+function mapDailySnapshotToSupabaseRow(snapshot) {
+  return {
+    id: snapshot.id,
+    day: snapshot.day,
+    error_timestamp: new Date(snapshot.errorTimestamp).toISOString(),
+    error_time: snapshot.errorTime || formatLocalTime(snapshot.errorTimestamp),
+    unit_id: snapshot.unitId,
+    unit_label: snapshot.unitLabel || snapshot.vehicle || snapshot.unitId,
+    vehicle: snapshot.vehicle || snapshot.unitLabel || snapshot.unitId,
+    error_type: snapshot.type,
+    error_label: snapshot.label || sensorFaultLabel(snapshot.type),
+    duration_minutes: snapshot.durationMinutes ?? null,
+    temp1: snapshot.temp1 ?? null,
+    temp2: snapshot.temp2 ?? null,
+    speed: snapshot.speed ?? null,
+  };
+}
+
+function mapSupabaseDailySnapshotRecord(record) {
+  const parts = String(record.id || '').split('|');
+  const accountId = parts[1] || 'primary';
+  const unitId = String(record.unit_id || parts[2] || '').trim();
+  const errorTimestamp = Date.parse(record.error_timestamp || '');
+  const durationMinutes = Number(record.duration_minutes || 0);
+  return {
+    id: String(record.id || ''),
+    accountId,
+    accountLabel: resolveAccountLabel(accountId),
+    day: String(record.day || '').slice(0, 10),
+    errorTimestamp: Number.isFinite(errorTimestamp) ? errorTimestamp : null,
+    errorTime: String(record.error_time || ''),
+    startTimestamp: Number.isFinite(errorTimestamp) ? errorTimestamp : null,
+    endTimestamp: Number.isFinite(errorTimestamp) && Number.isFinite(durationMinutes)
+      ? errorTimestamp + (durationMinutes * 60 * 1000)
+      : Number.isFinite(errorTimestamp) ? errorTimestamp : null,
+    unitId,
+    unitLabel: String(record.unit_label || record.vehicle || unitId),
+    vehicle: String(record.vehicle || record.unit_label || unitId),
+    type: String(record.error_type || '').trim(),
+    label: String(record.error_label || sensorFaultLabel(record.error_type) || ''),
+    durationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : 0,
+    temp1: toNumber(record.temp1),
+    temp2: toNumber(record.temp2),
+    speed: toNumber(record.speed),
+    latitude: null,
+    longitude: null,
+    locationSummary: '',
+    zoneName: '',
+  };
+}
+
+async function upsertDailyTempSnapshotsToSupabase(accountConfig, accountState) {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return 0;
+  }
+
+  const sourceRows = Array.isArray(accountState?.dailySnapshots) ? accountState.dailySnapshots : [];
+  if (!sourceRows.length) {
+    return 0;
+  }
+
+  const rows = sourceRows.map(mapDailySnapshotToSupabaseRow).filter(function (row) {
+    return row.id && row.day && row.error_timestamp && row.unit_id && row.error_type;
+  });
+  if (!rows.length) {
+    return 0;
+  }
+
+  await supabaseRestRequest('POST', 'daily_temp_snapshots', {
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+    body: rows,
+  });
+  return rows.length;
+}
+
+function mapPodSnapshotToSupabaseRow(snapshot) {
+  return {
+    id: snapshot.id,
+    day: snapshot.day,
+    snapshot_timestamp: new Date(snapshot.timestamp).toISOString(),
+    snapshot_time: snapshot.time || formatLocalTime(snapshot.timestamp),
+    unit_id: snapshot.unitId,
+    unit_label: snapshot.unitLabel,
+    customer_name: snapshot.customerName || '',
+    pod_id: snapshot.podId,
+    pod_name: snapshot.podName,
+    latitude: snapshot.latitude ?? null,
+    longitude: snapshot.longitude ?? null,
+    speed: snapshot.speed ?? null,
+    distance_meters: snapshot.distanceMeters ?? null,
+    location_summary: snapshot.locationSummary || '',
+  };
+}
+
+function mapSupabasePodSnapshotRecord(record) {
+  const accountId = 'primary';
+  const timestamp = Date.parse(record.snapshot_timestamp || '');
+  return {
+    id: String(record.id || ''),
+    accountId,
+    accountLabel: resolveAccountLabel(accountId),
+    day: String(record.day || '').slice(0, 10),
+    timestamp: Number.isFinite(timestamp) ? timestamp : null,
+    time: String(record.snapshot_time || ''),
+    unitId: String(record.unit_id || ''),
+    unitLabel: String(record.unit_label || ''),
+    customerName: String(record.customer_name || ''),
+    podId: String(record.pod_id || ''),
+    podName: String(record.pod_name || ''),
+    latitude: toNumber(record.latitude),
+    longitude: toNumber(record.longitude),
+    speed: toNumber(record.speed),
+    distanceMeters: toNumber(record.distance_meters),
+    locationSummary: String(record.location_summary || ''),
+  };
+}
+
+async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled) {
+    return 0;
+  }
+
+  const sourceRows = Array.isArray(accountState?.podSnapshots) ? accountState.podSnapshots : [];
+  if (!sourceRows.length) {
+    return 0;
+  }
+
+  const rows = sourceRows.map(mapPodSnapshotToSupabaseRow).filter(function (row) {
+    return row.id && row.day && row.snapshot_timestamp && row.unit_id && row.pod_id;
+  });
+  if (!rows.length) {
+    return 0;
+  }
+
+  await supabaseRestRequest('POST', 'pod_snapshots', {
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+    body: rows,
+  });
+  return rows.length;
+}
+
+async function loadPodSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled || rangeStartMs === null || rangeEndMs === null) {
+    return [];
+  }
+
+  const startDay = formatLocalDay(rangeStartMs);
+  const endDay = formatLocalDay(rangeEndMs);
+  const rows = await supabaseRestRequest(
+    'GET',
+    `pod_snapshots?select=id,day,snapshot_timestamp,snapshot_time,unit_id,unit_label,customer_name,pod_id,pod_name,latitude,longitude,speed,distance_meters,location_summary&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=snapshot_timestamp.desc&limit=20000`,
+  );
+  return rows.map(mapSupabasePodSnapshotRecord).filter(function (row) {
+    return row.timestamp !== null;
+  });
+}
+
+async function loadDailyTempSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
+  const runtime = getSupabaseWebAuthConfig();
+  if (!runtime.enabled || rangeStartMs === null || rangeEndMs === null) {
+    return [];
+  }
+
+  const startDay = formatLocalDay(rangeStartMs);
+  const endDay = formatLocalDay(rangeEndMs);
+  const rows = await supabaseRestRequest(
+    'GET',
+    `daily_temp_snapshots?select=id,day,error_timestamp,error_time,unit_id,unit_label,vehicle,error_type,error_label,duration_minutes,temp1,temp2,speed&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=error_timestamp.desc&limit=20000`,
+  );
+  return rows.map(mapSupabaseDailySnapshotRecord).filter(function (row) {
+    return row.errorTimestamp !== null;
+  });
+}
+
+function buildTempErrorIncidentsFromSnapshotRows(snapshotRows) {
+  const rows = new Map();
+
+  for (const snapshot of snapshotRows || []) {
+    const day = snapshot.day || formatLocalDay(snapshot.errorTimestamp || Date.now());
+    const key = `${day}|${snapshot.accountId || 'primary'}|${snapshot.unitId || snapshot.vehicle}`;
+    if (!rows.has(key)) {
+      rows.set(key, {
+        day,
+        accountId: snapshot.accountId || 'primary',
+        accountLabel: snapshot.accountLabel || resolveAccountLabel(snapshot.accountId || 'primary'),
+        unitId: snapshot.unitId || snapshot.vehicle,
+        unitLabel: snapshot.unitLabel || snapshot.vehicle,
+        vehicle: snapshot.vehicle || snapshot.unitLabel || snapshot.unitId || '',
         incidents: 0,
         temp1Incidents: 0,
         temp2Incidents: 0,
         bothIncidents: 0,
+        firstStartTimestamp: snapshot.startTimestamp ?? snapshot.errorTimestamp ?? null,
+        lastEndTimestamp: inferDailySnapshotEndTimestamp(snapshot),
+        totalMinutes: 0,
+        longestMinutes: 0,
+        temp1Min: null,
+        temp1Max: null,
+        temp2Min: null,
+        temp2Max: null,
+        minSpeed: null,
+        maxSpeed: null,
+        latitude: snapshot.latitude ?? null,
+        longitude: snapshot.longitude ?? null,
+        locationSummary: snapshot.locationSummary || '',
+        zoneName: snapshot.zoneName || '',
+      });
+    }
+
+    const row = rows.get(key);
+    const durationMinutes = Number(snapshot.durationMinutes || 0);
+    const endTimestamp = inferDailySnapshotEndTimestamp(snapshot);
+    row.incidents += 1;
+    if (snapshot.startTimestamp !== null && snapshot.startTimestamp !== undefined) {
+      row.firstStartTimestamp = row.firstStartTimestamp === null
+        ? snapshot.startTimestamp
+        : Math.min(row.firstStartTimestamp, snapshot.startTimestamp);
+    }
+    if (endTimestamp !== null && endTimestamp !== undefined) {
+      row.lastEndTimestamp = row.lastEndTimestamp === null
+        ? endTimestamp
+        : Math.max(row.lastEndTimestamp, endTimestamp);
+    }
+    row.totalMinutes += durationMinutes;
+    row.longestMinutes = Math.max(row.longestMinutes, durationMinutes);
+    if (snapshot.type === 'temp1') row.temp1Incidents += 1;
+    if (snapshot.type === 'temp2') row.temp2Incidents += 1;
+    if (snapshot.type === 'temp1+temp2') row.bothIncidents += 1;
+    if (snapshot.temp1 !== null && snapshot.temp1 !== undefined) {
+      row.temp1Min = row.temp1Min === null ? snapshot.temp1 : Math.min(row.temp1Min, snapshot.temp1);
+      row.temp1Max = row.temp1Max === null ? snapshot.temp1 : Math.max(row.temp1Max, snapshot.temp1);
+    }
+    if (snapshot.temp2 !== null && snapshot.temp2 !== undefined) {
+      row.temp2Min = row.temp2Min === null ? snapshot.temp2 : Math.min(row.temp2Min, snapshot.temp2);
+      row.temp2Max = row.temp2Max === null ? snapshot.temp2 : Math.max(row.temp2Max, snapshot.temp2);
+    }
+    if (snapshot.speed !== null && snapshot.speed !== undefined) {
+      row.minSpeed = row.minSpeed === null ? snapshot.speed : Math.min(row.minSpeed, snapshot.speed);
+      row.maxSpeed = row.maxSpeed === null ? snapshot.speed : Math.max(row.maxSpeed, snapshot.speed);
+    }
+  }
+
+  return [...rows.values()].map(function (row) {
+    let type = 'temp1';
+    if (row.bothIncidents > 0 || (row.temp1Incidents > 0 && row.temp2Incidents > 0)) {
+      type = 'temp1+temp2';
+    } else if (row.temp2Incidents > 0) {
+      type = 'temp2';
+    }
+    return {
+      ...row,
+      type,
+      label: sensorFaultLabel(type),
+      durationMinutes: Number(row.totalMinutes.toFixed(2)),
+      totalMinutes: Number(row.totalMinutes.toFixed(2)),
+      longestMinutes: Number(row.longestMinutes.toFixed(2)),
+      startTime: row.firstStartTimestamp ? formatLocalTime(row.firstStartTimestamp) : '-',
+      endTime: row.lastEndTimestamp ? formatLocalTime(row.lastEndTimestamp) : '-',
+    };
+  }).sort(function (left, right) {
+    return (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0);
+  });
+}
+
+function buildSnapshotReportAggregates(snapshotRows) {
+  const tempErrorIncidents = buildTempErrorIncidentsFromSnapshotRows(snapshotRows);
+  const compileByUnitDay = tempErrorIncidents.map(function (row) {
+    return {
+      day: row.day,
+      accountId: row.accountId,
+      accountLabel: row.accountLabel,
+      unitId: row.unitId,
+      unitLabel: row.unitLabel,
+      vehicle: row.vehicle,
+      incidents: row.incidents,
+      temp1Incidents: row.temp1Incidents,
+      temp2Incidents: row.temp2Incidents,
+      bothIncidents: row.bothIncidents,
+      totalMinutes: Number(row.totalMinutes || 0),
+      longestMinutes: Number(row.longestMinutes || 0),
+    };
+  }).sort(function (left, right) {
+    return right.day.localeCompare(left.day)
+      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitLabel || left.unitId).localeCompare(String(right.unitLabel || right.unitId));
+  });
+
+  const compileByDayMap = new Map();
+  const dailyTotalsMap = new Map();
+  for (const row of compileByUnitDay) {
+    if (!compileByDayMap.has(row.day)) {
+      compileByDayMap.set(row.day, {
+        day: row.day,
+        units: 0,
+        temp1Units: 0,
+        temp2Units: 0,
+        bothUnits: 0,
+        incidents: 0,
         totalMinutes: 0,
         longestMinutes: 0,
       });
     }
+    const dailyCompile = compileByDayMap.get(row.day);
+    dailyCompile.units += 1;
+    if (row.temp1Incidents > 0) dailyCompile.temp1Units += 1;
+    if (row.temp2Incidents > 0) dailyCompile.temp2Units += 1;
+    if (row.bothIncidents > 0) dailyCompile.bothUnits += 1;
+    dailyCompile.incidents += Number(row.incidents || 0);
+    dailyCompile.totalMinutes += Number(row.totalMinutes || 0);
+    dailyCompile.longestMinutes = Math.max(dailyCompile.longestMinutes, Number(row.longestMinutes || 0));
 
-    const compileRow = compileByUnitDayMap.get(compileKey);
-    compileRow.incidents += 1;
-    compileRow.totalMinutes += Number(incident.clippedDurationMinutes || incident.durationMinutes || 0);
-    compileRow.longestMinutes = Math.max(
-      compileRow.longestMinutes,
-      Number(incident.clippedDurationMinutes || incident.durationMinutes || 0),
-    );
-
-    if (incident.type === 'temp1') {
-      compileRow.temp1Incidents += 1;
-    } else if (incident.type === 'temp2') {
-      compileRow.temp2Incidents += 1;
-    } else if (incident.type === 'temp1+temp2') {
-      compileRow.bothIncidents += 1;
+    if (!dailyTotalsMap.has(row.day)) {
+      dailyTotalsMap.set(row.day, {
+        day: row.day,
+        units: 0,
+        incidents: 0,
+        criticalIncidents: 0,
+        totalMinutes: 0,
+      });
     }
+    const dailyTotals = dailyTotalsMap.get(row.day);
+    dailyTotals.units += 1;
+    dailyTotals.incidents += Number(row.incidents || 0);
+    dailyTotals.criticalIncidents += Number(row.bothIncidents || 0);
+    dailyTotals.totalMinutes += Number(row.totalMinutes || 0);
   }
 
-  const compileByUnitDay = [...compileByUnitDayMap.values()].map(function (row) {
+  const compileByDay = [...compileByDayMap.values()].map(function (row) {
     return {
       ...row,
       totalMinutes: Number(row.totalMinutes.toFixed(2)),
       longestMinutes: Number(row.longestMinutes.toFixed(2)),
     };
   }).sort(function (left, right) {
-    return right.day.localeCompare(left.day)
-      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
-      || String(left.vehicle || left.unitId).localeCompare(String(right.vehicle || right.unitId));
+    return right.day.localeCompare(left.day);
   });
 
-  snapshotRows.sort(function (left, right) { return (right.errorTimestamp || 0) - (left.errorTimestamp || 0); });
-  podRows.sort(function (left, right) { return (right.timestamp || 0) - (left.timestamp || 0); });
+  const dailyTotals = [...dailyTotalsMap.values()].map(function (row) {
+    return {
+      ...row,
+      totalMinutes: Number(row.totalMinutes.toFixed(2)),
+    };
+  }).sort(function (left, right) {
+    return right.day.localeCompare(left.day);
+  });
+
   return {
-    now: Date.now(),
+    tempErrorIncidents,
+    compileByUnitDay,
+    compileByDay,
+    dailyTotals,
+  };
+}
+
+function validateAstroRoutes(routes, locations) {
+  const accountIds = new Set(getAllAccountConfigs().map(function (account) { return account.id; }));
+  const locationMap = new Map((locations || []).map(function (location) { return [location.id, location]; }));
+  const seen = new Set();
+
+  return (routes || []).map(function (item) {
+    const normalized = astroCore.normalizeAstroRoute(item);
+    if (!normalized) {
+      throw new Error('Astro route invalid. Account, nopol, WH, dan Rit 1 wajib diisi.');
+    }
+    if (!accountIds.has(normalized.accountId)) {
+      throw new Error('Account Astro route tidak ditemukan: ' + normalized.accountId);
+    }
+    if (!normalized.whLocationId) {
+      throw new Error('WH location wajib diisi untuk unit ' + normalized.unitId);
+    }
+    const whLocation = locationMap.get(normalized.whLocationId);
+    if (!whLocation || whLocation.type !== 'WH') {
+      throw new Error('WH location tidak valid untuk unit ' + normalized.unitId);
+    }
+    if (normalized.poolLocationId) {
+      const poolLocation = locationMap.get(normalized.poolLocationId);
+      if (!poolLocation || poolLocation.type !== 'POOL') {
+        throw new Error('POOL location tidak valid untuk unit ' + normalized.unitId);
+      }
+    }
+    if ((normalized.podSequence || []).length > 5) {
+      throw new Error('Maksimal 5 POD per rit untuk unit ' + normalized.unitId);
+    }
+    normalized.podSequence.forEach(function (podId) {
+      const podLocation = locationMap.get(podId);
+      if (!podLocation || podLocation.type !== 'POD') {
+        throw new Error('POD location tidak valid untuk unit ' + normalized.unitId + ': ' + podId);
+      }
+    });
+    if (!normalized.rit1) {
+      throw new Error('Rit 1 wajib valid untuk unit ' + normalized.unitId);
+    }
+    const routeKey = normalized.accountId + '::' + normalized.unitId;
+    if (seen.has(routeKey)) {
+      throw new Error('Astro route duplicate untuk unit ' + normalized.unitId + ' di account ' + normalized.accountId);
+    }
+    seen.add(routeKey);
+    return normalized;
+  });
+}
+
+function csvEscape(value) {
+  const textValue = String(value ?? '');
+  return /[",\n]/.test(textValue) ? '"' + textValue.replace(/"/g, '""') + '"' : textValue;
+}
+
+function buildCsvText(rows) {
+  if (!rows.length) {
+    return '';
+  }
+  const headers = Object.keys(rows[0]);
+  return [headers.join(','), ...rows.map(function (row) {
+    return headers.map(function (header) {
+      return csvEscape(row[header]);
+    }).join(',');
+  })].join('\n');
+}
+
+function resolveAstroUnitLabel(accountConfig, unitId) {
+  const normalizedId = normalizeUnitKey(unitId);
+  const configuredUnit = (accountConfig?.units || []).find(function (unit) {
+    return normalizeUnitKey(unit.id) === normalizedId;
+  });
+  if (configuredUnit?.label) {
+    return configuredUnit.label;
+  }
+
+  const accountState = ensureAccountState(accountConfig?.id || 'primary');
+  const unitState = accountState.units?.[unitId] || accountState.units?.[normalizedId] || null;
+  if (unitState?.label) {
+    return unitState.label;
+  }
+
+  const snapshot = accountState.fleet?.vehicles?.[normalizedId] || null;
+  if (snapshot?.alias) {
+    return snapshot.alias;
+  }
+
+  return String(unitId || '');
+}
+
+function buildDateRangeDays(startDay, endDay) {
+  const days = [];
+  const cursor = new Date(`${startDay}T00:00:00`);
+  const end = new Date(`${endDay}T00:00:00`);
+  while (cursor <= end) {
+    days.push(formatLocalDay(cursor.getTime()));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
+function astroStatusPriority(status) {
+  switch (String(status || '')) {
+    case 'complete':
+      return 5;
+    case 'awaiting_return_wh':
+      return 4;
+    case 'missing_pod':
+      return 3;
+    case 'outside_window':
+      return 2;
+    case 'no_snapshot':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function buildAstroDisplayRows(route, accountConfig, unitLabel, routeRows, startDate, endDate) {
+  const whName = (config.astroLocations || []).find(function (location) {
+    return location.id === route.whLocationId;
+  })?.name || 'WH';
+  const windows = [
+    { key: 'rit1', label: 'Rit 1', enabled: Boolean(route.rit1) && route.rit1.enabled !== false },
+    { key: 'rit2', label: 'Rit 2', enabled: Boolean(route.rit2) && route.rit2.enabled !== false },
+  ].filter(function (entry) {
+    return entry.enabled;
+  });
+
+  const bestByKey = new Map();
+  for (const row of routeRows || []) {
+    if (!row.ritKey || !row.serviceDate) {
+      continue;
+    }
+    const key = `${row.serviceDate}|${row.ritKey}`;
+    const current = bestByKey.get(key);
+    if (!current || astroStatusPriority(row.status) > astroStatusPriority(current.status)) {
+      bestByKey.set(key, {
+        ...row,
+        expectedPodCount: Math.max(Number(row.expectedPodCount || 0), (route.podSequence || []).length),
+      });
+    }
+  }
+
+  const displayRows = [];
+  for (const day of buildDateRangeDays(startDate, endDate)) {
+    for (const rit of windows) {
+      const matched = bestByKey.get(`${day}|${rit.key}`);
+      if (matched) {
+        displayRows.push({
+          ...matched,
+          expectedPodCount: Math.max(Number(matched.expectedPodCount || 0), (route.podSequence || []).length),
+        });
+        continue;
+      }
+
+      displayRows.push({
+        routeId: route.id,
+        accountId: route.accountId || 'primary',
+        accountLabel: accountConfig.label || accountConfig.id,
+        unitId: route.unitId,
+        unitLabel,
+        customer: route.customerName || 'Astro',
+        serviceDate: day,
+        rit: rit.label,
+        ritKey: rit.key,
+        status: 'no_snapshot',
+        reason: 'No WH/POD snapshot found for this rit in the selected range.',
+        whName,
+        whEta: null,
+        whArrivalTemp: null,
+        whEtd: null,
+        whDepartureTemp: null,
+        returnWhEta: null,
+        returnWhEtd: null,
+        poolName: '',
+        poolEta: null,
+        poolArrivalTemp: null,
+        poolEtd: null,
+        poolDepartureTemp: null,
+        pods: [],
+        expectedPodCount: (route.podSequence || []).length,
+      });
+    }
+  }
+
+  return displayRows;
+}
+
+async function buildAstroReportPayload(searchParams) {
+  const range = parseDateRange(searchParams);
+  if (range.rangeStartMs === null || range.rangeEndMs === null) {
+    throw new Error('startDate and endDate are required for Astro report.');
+  }
+
+  const startDate = searchParams.get('startDate') || searchParams.get('start') || formatLocalDay(range.rangeStartMs);
+  const endDate = searchParams.get('endDate') || searchParams.get('end') || formatLocalDay(range.rangeEndMs);
+  const accountId = String(searchParams.get('accountId') || 'all').trim() || 'all';
+  const unitId = String(searchParams.get('unitId') || '').trim().toUpperCase();
+  const activeRoutes = (config.astroRoutes || []).filter(function (route) {
+    if (route.isActive === false) {
+      return false;
+    }
+    if (accountId !== 'all' && String(route.accountId || 'primary') !== accountId) {
+      return false;
+    }
+    if (unitId && String(route.unitId || '').trim().toUpperCase() !== unitId) {
+      return false;
+    }
+    return true;
+  });
+
+  const rows = [];
+  const warnings = [];
+  const diagnostics = [];
+  const paddedStart = range.rangeStartMs - (24 * 60 * 60 * 1000);
+  const paddedEnd = range.rangeEndMs + (24 * 60 * 60 * 1000);
+
+  for (const route of activeRoutes) {
+    const accountConfig = getAccountConfigById(route.accountId || 'primary');
+    if (!accountConfig) {
+      warnings.push('Account Astro route tidak ditemukan untuk ' + route.unitId + '.');
+      continue;
+    }
+    if (!accountConfig.sessionCookie) {
+      warnings.push('Session Solofleet belum ada untuk ' + (accountConfig.label || accountConfig.id) + '.');
+      continue;
+    }
+
+    try {
+      const history = await fetchUnitHistory(accountConfig, route.unitId, paddedStart, paddedEnd);
+      const unitLabel = resolveAstroUnitLabel(accountConfig, route.unitId);
+      const routeDiagnostics = astroCore.buildRouteReportRows(route, config.astroLocations || [], history.records || [])
+        .filter(function (row) {
+          return row.serviceDate >= startDate && row.serviceDate <= endDate;
+        })
+        .map(function (row) {
+          return {
+            ...row,
+            accountLabel: accountConfig.label || accountConfig.id,
+            unitLabel,
+          };
+        });
+      const routeRows = buildAstroDisplayRows(route, accountConfig, unitLabel, routeDiagnostics, startDate, endDate);
+      const incompleteRows = routeDiagnostics.filter(function (row) {
+        return row.status !== 'complete';
+      });
+      if (!routeDiagnostics.length) {
+        warnings.push(route.unitId + ' (' + (accountConfig.label || accountConfig.id) + '): historical ada, tapi belum ketemu visit Astro yang valid di range ini.');
+        diagnostics.push({
+          serviceDate: '-',
+          rit: '-',
+          accountId: route.accountId || 'primary',
+          accountLabel: accountConfig.label || accountConfig.id,
+          unitId: route.unitId,
+          unitLabel,
+          status: 'no_valid_visit',
+          reason: 'Historical ada, tapi belum ketemu visit Astro yang valid di range ini.',
+          missingPodName: '',
+        });
+      }
+      routeRows.filter(function (row) {
+        return row.status === 'no_snapshot';
+      }).forEach(function (row) {
+        diagnostics.push({
+          serviceDate: row.serviceDate || '-',
+          rit: row.rit || '-',
+          accountId: row.accountId || route.accountId || 'primary',
+          accountLabel: accountConfig.label || accountConfig.id,
+          unitId: row.unitId || route.unitId,
+          unitLabel: row.unitLabel || unitLabel,
+          status: row.status,
+          reason: row.reason,
+          missingPodName: '',
+        });
+      });
+      incompleteRows.forEach(function (row) {
+        const ritLabel = row.rit && row.rit !== '-' ? row.rit : 'No rit';
+        const reason = row.status === 'missing_pod'
+          ? (row.reason + ' Missing: ' + (row.missingPodName || '-'))
+          : row.reason;
+        diagnostics.push({
+          serviceDate: row.serviceDate || '-',
+          rit: ritLabel,
+          accountId: row.accountId || route.accountId || 'primary',
+          accountLabel: accountConfig.label || accountConfig.id,
+          unitId: row.unitId || route.unitId,
+          unitLabel: row.unitLabel || unitLabel,
+          status: row.status || 'incomplete',
+          reason: reason,
+          missingPodName: row.missingPodName || '',
+        });
+      });
+      incompleteRows.slice(0, 5).forEach(function (row) {
+        const ritLabel = row.rit && row.rit !== '-' ? row.rit : 'No rit';
+        const reason = row.status === 'missing_pod'
+          ? (row.reason + ' Missing: ' + (row.missingPodName || '-'))
+          : row.reason;
+        warnings.push(row.unitId + ' (' + (accountConfig.label || accountConfig.id) + ') | ' + ritLabel + ' | ' + reason);
+      });
+      if (incompleteRows.length > 5) {
+        warnings.push(route.unitId + ' (' + (accountConfig.label || accountConfig.id) + '): ' + (incompleteRows.length - 5) + ' diagnostic row(s) lain tidak ditampilkan.');
+      }
+      rows.push(...routeRows);
+    } catch (error) {
+      warnings.push(route.unitId + ' (' + (accountConfig.label || accountConfig.id) + '): ' + error.message);
+      diagnostics.push({
+        serviceDate: '-',
+        rit: '-',
+        accountId: route.accountId || 'primary',
+        accountLabel: accountConfig.label || accountConfig.id,
+        unitId: route.unitId,
+        unitLabel: resolveAstroUnitLabel(accountConfig, route.unitId),
+        status: 'request_error',
+        reason: error.message,
+        missingPodName: '',
+      });
+    }
+  }
+
+  rows.sort(function (left, right) {
+    return String(right.serviceDate || '').localeCompare(String(left.serviceDate || ''))
+      || String(left.rit || '').localeCompare(String(right.rit || ''))
+      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitId || '').localeCompare(String(right.unitId || ''));
+  });
+
+  diagnostics.sort(function (left, right) {
+    return String(right.serviceDate || '').localeCompare(String(left.serviceDate || ''))
+      || String(left.unitId || '').localeCompare(String(right.unitId || ''))
+      || String(left.rit || '').localeCompare(String(right.rit || ''));
+  });
+
+  const columnMeta = astroCore.buildAstroColumns(rows);
+  const flatRows = rows.map(function (row) {
+    return astroCore.flattenAstroRow(row, { maxPods: columnMeta.maxPods });
+  });
+
+  return {
+    ok: true,
     rangeStartMs: range.rangeStartMs,
     rangeEndMs: range.rangeEndMs,
-    ...summary,
-    compileByUnitDay,
-    rawAlerts: summary.alerts,
-    dailySnapshots: snapshotRows,
-    podSnapshots: podRows,
-    alerts: snapshotRows,
+    filters: {
+      accountId,
+      unitId,
+      startDate,
+      endDate,
+    },
+    columns: columnMeta.columns,
+    rows,
+    flatRows,
+    warnings,
+    diagnostics,
+    summary: {
+      configuredRoutes: activeRoutes.length,
+      rows: rows.length,
+      maxPods: columnMeta.maxPods,
+      accounts: new Set(rows.map(function (row) { return row.accountId; })).size,
+      units: new Set(rows.map(function (row) { return row.accountId + '::' + row.unitId; })).size,
+      warnings: warnings.length,
+      partialRows: diagnostics.length,
+    },
   };
 }
 
@@ -1632,6 +3187,17 @@ function extractFetchedRecords(payload, unit) {
       speed: toNumber(row.spd ?? row.speed ?? row.gpsspeed),
       temp1: toNumber(row.vtemp1 ?? row.virtualtemp1 ?? row.temp1),
       temp2: toNumber(row.vtemp2 ?? row.virtualtemp2 ?? row.temp2),
+      latitude: toNumber(row.y ?? row.lat ?? row.latitude),
+      longitude: toNumber(row.x ?? row.lng ?? row.longtitude ?? row.longitude),
+      locationSummary: buildLocationSummary([
+        row.stn,
+        row.subd,
+        row.dnm,
+        row.city,
+        row.province,
+      ]),
+      zoneName: String(row.zonename || '').trim(),
+      powerSupply: toNumber(row.powersupply),
     };
   }).filter(Boolean);
 
@@ -1684,11 +3250,11 @@ async function fetchUnitData(accountConfig, unit) {
   return extractFetchedRecords(payload, unit);
 }
 
-async function fetchUnitHistory(accountConfig, unitId, rangeStartMs, rangeEndMs) {
-  const endpointUrl = new URL(config.endpointPath, config.solofleetBaseUrl);
+async function fetchUnitHistoryChunk(accountConfig, unitId, rangeStartMs, rangeEndMs) {
+  const endpointUrl = new URL(config.historicalEndpointPath || config.endpointPath, config.solofleetBaseUrl);
   const refererUrl = new URL(config.refererPath, config.solofleetBaseUrl);
   const body = {
-    ddl: unitId,
+    ddl: String(unitId || '').toLowerCase(),
     startdatetime: new Date(rangeStartMs).toISOString(),
     enddatetime: new Date(rangeEndMs).toISOString(),
     interval: config.requestIntervalSeconds,
@@ -1719,6 +3285,42 @@ async function fetchUnitHistory(accountConfig, unitId, rangeStartMs, rangeEndMs)
 
   const payload = core.parsePossiblyDoubleEncodedJson(text);
   return extractFetchedRecords(payload, { id: unitId, label: unitId });
+}
+
+async function fetchUnitHistory(accountConfig, unitId, rangeStartMs, rangeEndMs) {
+  const safeStartMs = Number(rangeStartMs);
+  const safeEndMs = Number(rangeEndMs);
+  if (!Number.isFinite(safeStartMs) || !Number.isFinite(safeEndMs) || safeEndMs < safeStartMs) {
+    return {
+      vehicle: String(unitId || ''),
+      records: [],
+    };
+  }
+
+  const chunkMs = 5 * 24 * 60 * 60 * 1000;
+  const mergedRecords = new Map();
+  let resolvedVehicle = String(unitId || '');
+
+  for (let chunkStart = safeStartMs; chunkStart <= safeEndMs; chunkStart += chunkMs) {
+    const chunkEnd = Math.min(safeEndMs, chunkStart + chunkMs - 1);
+    const history = await fetchUnitHistoryChunk(accountConfig, unitId, chunkStart, chunkEnd);
+    if (history.vehicle) {
+      resolvedVehicle = history.vehicle;
+    }
+    for (const record of history.records || []) {
+      if (!record || !Number.isFinite(record.timestamp)) {
+        continue;
+      }
+      mergedRecords.set(record.timestamp, record);
+    }
+  }
+
+  return {
+    vehicle: resolvedVehicle,
+    records: [...mergedRecords.values()].sort(function (left, right) {
+      return left.timestamp - right.timestamp;
+    }),
+  };
 }
 
 async function fetchStopReport(accountConfig, unitId, options) {
@@ -2113,6 +3715,17 @@ async function discoverUnits(accountId) {
   }
 
   if (!units.length) {
+    units = Object.values(accountState.fleet.vehicles || {}).map(function (vehicle) {
+      return normalizeUnit({
+        id: vehicle.unitId,
+        label: vehicle.alias || vehicle.unitId,
+      });
+    }).filter(Boolean).sort(function (left, right) {
+      return left.label.localeCompare(right.label) || left.id.localeCompare(right.id);
+    });
+  }
+
+  if (!units.length) {
     throw new Error('Belum berhasil baca daftar unit dari response discovery.');
   }
 
@@ -2299,6 +3912,135 @@ async function handleApi(req, res, url) {
   const pathname = url.pathname;
   const method = req.method || 'GET';
 
+  if (pathname === '/api/web-auth/login' && method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const username = String(body.username || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      if (!username || !password) {
+        throw new Error('Username and password are required.');
+      }
+      const user = await findWebUserByUsername(username);
+      if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
+        sendJson(res, 401, {
+          ok: false,
+          error: 'Username atau password salah.',
+        });
+        return true;
+      }
+      const cookie = createWebSessionCookie(user);
+      sendJson(res, 200, {
+        ok: true,
+        user: sanitizeWebUserForClient(user),
+        webAuth: buildWebAuthConfigForClient(user),
+      }, {
+        'Set-Cookie': cookie,
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/web-auth/logout' && method === 'POST') {
+    destroyWebSession(req);
+    sendJson(res, 200, {
+      ok: true,
+      webAuth: buildWebAuthConfigForClient(null),
+    }, {
+      'Set-Cookie': expiredWebSessionCookie(),
+    });
+    return true;
+  }
+
+  if (pathname === '/api/admin/users' && method === 'GET') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, {
+        ok: false,
+        error: 'Admin access required.',
+      });
+      return true;
+    }
+    try {
+      const users = await listWebUsers();
+      sendJson(res, 200, {
+        ok: true,
+        users: users.map(sanitizeWebUserForClient),
+        webAuth: buildWebAuthConfigForClient(session.user),
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/users' && method === 'POST') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, {
+        ok: false,
+        error: 'Admin access required.',
+      });
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const user = await saveWebUser(body);
+      const users = await listWebUsers();
+      sendJson(res, 200, {
+        ok: true,
+        user: sanitizeWebUserForClient(user),
+        users: users.map(sanitizeWebUserForClient),
+        webAuth: buildWebAuthConfigForClient(session.user),
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/users' && method === 'DELETE') {
+    const session = getWebSession(req);
+    if (!session || session.user.role !== 'admin') {
+      sendJson(res, 403, {
+        ok: false,
+        error: 'Admin access required.',
+      });
+      return true;
+    }
+    try {
+      const userId = String(url.searchParams.get('id') || '').trim();
+      if (!userId) {
+        throw new Error('User id is required.');
+      }
+      if (session.user.id === userId) {
+        throw new Error('Akun yang sedang dipakai tidak bisa dihapus.');
+      }
+      await deleteWebUser(userId);
+      const users = await listWebUsers();
+      sendJson(res, 200, {
+        ok: true,
+        users: users.map(sanitizeWebUserForClient),
+        webAuth: buildWebAuthConfigForClient(session.user),
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
     if (pathname === '/api/auth/login' && method === 'POST') {
     try {
       const body = await readRequestBody(req);
@@ -2331,6 +4073,155 @@ async function handleApi(req, res, url) {
     });
     return true;
   }
+  if (pathname === '/api/astro/config' && method === 'GET') {
+    sendJson(res, 200, buildAstroConfigPayload());
+    return true;
+  }
+
+  if (pathname === '/api/astro/config/locations' && method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const nextLocations = validateAstroLocations(Array.isArray(body.locations) ? body.locations : []);
+      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], nextLocations);
+      config = normalizeConfig({
+        ...config,
+        astroLocations: nextLocations,
+        astroRoutes: nextRoutes,
+      });
+      saveConfig();
+      sendJson(res, 200, buildAstroConfigPayload());
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/config/routes' && method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const nextLocations = validateAstroLocations(config.astroLocations || []);
+      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : [], nextLocations);
+      config = normalizeConfig({
+        ...config,
+        astroLocations: nextLocations,
+        astroRoutes: nextRoutes,
+      });
+      saveConfig();
+      sendJson(res, 200, buildAstroConfigPayload());
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/config/locations/import' && method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const parsed = astroCore.parseAstroLocationCsv(body.csvText || '');
+      if (parsed.errors.length) {
+        throw new Error(parsed.errors.join(' '));
+      }
+      const replaceMode = body.replace === true;
+      const mergedLocations = replaceMode
+        ? parsed.rows
+        : validateAstroLocations([...(config.astroLocations || []).filter(function (location) {
+            return !parsed.rows.some(function (incoming) { return incoming.id === location.id; });
+          }), ...parsed.rows]);
+      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], mergedLocations);
+      config = normalizeConfig({
+        ...config,
+        astroLocations: mergedLocations,
+        astroRoutes: nextRoutes,
+      });
+      saveConfig();
+      sendJson(res, 200, {
+        ...buildAstroConfigPayload(),
+        imported: parsed.rows.length,
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/config/routes/import' && method === 'POST') {
+    try {
+      const body = await readRequestBody(req);
+      const nextLocations = validateAstroLocations(config.astroLocations || []);
+      const parsed = astroCore.parseAstroRouteCsv(body.csvText || '', nextLocations);
+      if (parsed.errors.length) {
+        throw new Error(parsed.errors.join(' '));
+      }
+      const replaceMode = body.replace === true;
+      const mergedRoutes = replaceMode
+        ? parsed.rows
+        : [...(config.astroRoutes || []).filter(function (route) {
+            return !parsed.rows.some(function (incoming) {
+              return String(incoming.accountId || 'primary') === String(route.accountId || 'primary')
+                && String(incoming.unitId || '').toUpperCase() === String(route.unitId || '').toUpperCase();
+            });
+          }), ...parsed.rows];
+      const nextRoutes = validateAstroRoutes(mergedRoutes, nextLocations);
+      config = normalizeConfig({
+        ...config,
+        astroLocations: nextLocations,
+        astroRoutes: nextRoutes,
+      });
+      saveConfig();
+      sendJson(res, 200, {
+        ...buildAstroConfigPayload(),
+        imported: parsed.rows.length,
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/report' && method === 'GET') {
+    try {
+      const payload = await buildAstroReportPayload(url.searchParams);
+      sendJson(res, 200, payload);
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/report/export' && method === 'GET') {
+    try {
+      const payload = await buildAstroReportPayload(url.searchParams);
+      const csvText = buildCsvText(payload.flatRows || []);
+      const startLabel = payload.filters?.startDate || 'start';
+      const endLabel = payload.filters?.endDate || 'end';
+      const unitLabel = payload.filters?.unitId || 'all-units';
+      send(res, 200, csvText, 'text/csv; charset=utf-8', {
+        'Content-Disposition': 'attachment; filename="Astro Report ' + startLabel + ' to ' + endLabel + ' ' + unitLabel + '.csv"',
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: error.message,
+      });
+    }
+    return true;
+  }
+
   if (pathname === '/api/config' && method === 'GET') {
     sendJson(res, 200, sanitizeConfigForClient());
     return true;
@@ -2442,12 +4333,13 @@ async function handleApi(req, res, url) {
       }
     }
 
-    sendJson(res, 200, buildStatusPayload());
+    const session = getWebSession(req);
+    sendJson(res, 200, buildStatusPayload(session ? session.user : null));
     return true;
   }
 
   if (pathname === '/api/report' && method === 'GET') {
-    sendJson(res, 200, buildReportPayload(url.searchParams));
+    sendJson(res, 200, await buildReportPayload(url.searchParams));
     return true;
   }
 
@@ -2458,11 +4350,24 @@ async function handleApi(req, res, url) {
 
   if (pathname === '/api/report/pod' && method === 'GET') {
     const range = parseDateRange(url.searchParams);
-    const rows = getAllAccountConfigs().flatMap(function (account) {
-      return buildPodSnapshotRows(ensureAccountState(account.id), range.rangeStartMs, range.rangeEndMs);
-    }).sort(function (left, right) {
+    let rows = [];
+    try {
+      const supabaseRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
+      if (supabaseRows.length) {
+        rows = supabaseRows;
+      }
+    } catch (e) {}
+    
+    if (!rows.length) {
+      rows = getAllAccountConfigs().flatMap(function (account) {
+        return buildPodSnapshotRows(ensureAccountState(account.id), range.rangeStartMs, range.rangeEndMs);
+      });
+    }
+
+    rows.sort(function (left, right) {
       return (right.timestamp || 0) - (left.timestamp || 0);
     });
+    
     sendJson(res, 200, {
       ok: true,
       rows,
@@ -2477,25 +4382,25 @@ async function handleApi(req, res, url) {
       if (!unitId) {
         throw new Error('Query parameter unitId is required.');
       }
-
       const range = parseDateRange(url.searchParams);
+      if (range.rangeStartMs === null || range.rangeEndMs === null) {
+        throw new Error('startDate and endDate are required for stop report.');
+      }
       const accountConfig = getAccountConfigById(accountId);
       if (!accountConfig) {
         throw new Error(`Account not found: ${accountId}`);
       }
-      const result = await fetchStopReport(accountConfig, unitId, {
+      const payload = await fetchStopReport(accountConfig, unitId, {
         rangeStartMs: range.rangeStartMs,
         rangeEndMs: range.rangeEndMs,
-        reportType: url.searchParams.get('reportType') || '3',
-        minDurationMinutes: url.searchParams.get('minDuration') || '0',
-        processLive: url.searchParams.get('processLive') || '1',
-        withTrack: url.searchParams.get('withTrack') || 'withtrack',
+        reportType: String(url.searchParams.get('reportType') || '3'),
+        minDurationMinutes: Number(url.searchParams.get('minDuration') || config.minDurationMinutes || 0),
+        withTrack: String(url.searchParams.get('withTrack') || 'withtrack'),
       });
-
       sendJson(res, 200, {
         ok: true,
         accountId,
-        ...result,
+        ...payload,
       });
     } catch (error) {
       sendJson(res, 500, {
@@ -2506,10 +4411,11 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-    if (pathname === '/api/unit-history' && method === 'GET') {
+  if (pathname === '/api/unit-history' && method === 'GET') {
     try {
       const unitId = String(url.searchParams.get('unitId') || '').trim();
       const accountId = String(url.searchParams.get('accountId') || config.activeAccountId || 'primary').trim();
+      const source = String(url.searchParams.get('source') || 'merged').trim().toLowerCase();
       if (!unitId) {
         throw new Error('Query parameter unitId is required.');
       }
@@ -2522,14 +4428,31 @@ async function handleApi(req, res, url) {
         throw new Error(`Account not found: ${accountId}`);
       }
       const detail = buildUnitDetailPayload(accountId, unitId);
-      const history = await fetchUnitHistory(accountConfig, unitId, range.rangeStartMs, range.rangeEndMs);
+      const accountState = ensureAccountState(accountId);
+      syncFleetSnapshotRecords(accountConfig, accountState, Date.now());
+      let historyRecords = [];
+      let historyError = null;
+      try {
+        const history = await fetchUnitHistory(accountConfig, unitId, range.rangeStartMs, range.rangeEndMs);
+        historyRecords = history.records;
+      } catch (error) {
+        historyError = error;
+      }
+      let records = historyRecords;
+      if (source !== 'remote') {
+        const cachedRecords = buildCachedUnitHistory(accountState, detail.unit.id, range.rangeStartMs, range.rangeEndMs);
+        records = mergeHistoryRecords(historyRecords, cachedRecords);
+      }
+      if (!records.length && historyError) {
+        throw historyError;
+      }
       sendJson(res, 200, {
         ok: true,
         accountId,
         unit: detail.unit,
         snapshot: detail.snapshot,
         incidents: detail.incidents,
-        records: history.records,
+        records,
       });
     } catch (error) {
       sendJson(res, 500, {
@@ -2652,9 +4575,8 @@ function handleStatic(req, res, url) {
   });
 }
 
-initializeStorage();
-
 async function requestHandler(req, res) {
+  await storageInitializationPromise;
   const url = new URL(req.url || '/', `http://${HOST}:${PORT}`);
   const startedAt = Date.now();
   const method = req.method || 'GET';
@@ -2681,6 +4603,7 @@ async function requestHandler(req, res) {
       handleStatic(req, res, url);
     }
   } catch (error) {
+    console.error('[request]', method, pathName, error);
     sendJson(res, 500, {
       ok: false,
       error: error.message,
@@ -2695,20 +4618,36 @@ module.exports = {
 
 if (require.main === module) {
   const server = http.createServer(requestHandler);
-  server.listen(PORT, HOST, function () {
+  server.listen(PORT, HOST, async function () {
     console.log(`Solofleet auto monitor running at http://${HOST}:${PORT}`);
-    if (config.autoStart) {
-      startPolling().catch(function (error) {
-        state.runtime.lastRunMessage = error.message;
-        state.runtime.isPolling = false;
-        state.runtime.nextRunAt = null;
-        config.autoStart = false;
-        saveConfig();
-        saveState();
-      });
+    try {
+      await storageInitializationPromise;
+      if (config && config.autoStart) {
+        startPolling().catch(function (error) {
+          state.runtime.lastRunMessage = error.message;
+          state.runtime.isPolling = false;
+          state.runtime.nextRunAt = null;
+          config.autoStart = false;
+          saveConfig();
+          saveState();
+        });
+      }
+    } catch (e) {
+      console.error('Failed to initialize storage on startup:', e);
     }
   });
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
