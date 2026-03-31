@@ -3036,3 +3036,89 @@ textarea:focus {
 
 
 
+
+
+
+
+.mobile-topbar-toggle,
+.mobile-nav-toggle {
+  display: none;
+}
+
+.command-center.compact-topbar .topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+}
+
+.command-center.compact-topbar .topbar-brand-row,
+.command-center.compact-topbar .topbar-collapsible,
+.command-center.compact-topbar .topbar-controls,
+.command-center.compact-topbar .topbar-actions {
+  width: 100%;
+}
+
+.command-center.compact-topbar .topbar-brand-row {
+  justify-content: space-between;
+}
+
+.command-center.compact-topbar .mobile-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-center.compact-topbar .mobile-topbar-toggle {
+  display: inline-flex;
+}
+
+.command-center.compact-topbar .topbar-collapsible {
+  display: none;
+  gap: 12px;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-collapsible {
+  display: grid;
+}
+
+.command-center.compact-topbar .topbar-controls {
+  gap: 12px;
+  max-width: none;
+  margin: 0;
+}
+
+.command-center.compact-topbar .date-range-group {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.command-center.compact-topbar .date-range-group input {
+  width: 100%;
+  min-width: 0;
+}
+
+.command-center.compact-topbar .topbar-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.command-center.compact-topbar .topbar-actions > .sf-btn,
+.command-center.compact-topbar .topbar-actions > .account-badge,
+.command-center.compact-topbar .topbar-actions > .control-inline-actions,
+.command-center.compact-topbar .topbar-actions .sf-btn {
+  width: 100%;
+}
+
+.command-center.compact-topbar .control-inline-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .mobile-nav-toggle {
+    display: inline-flex;
+  }
+}

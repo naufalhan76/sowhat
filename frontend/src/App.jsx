@@ -368,6 +368,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileTopbarExpanded, setMobileTopbarExpanded] = useState(false);
+  const [compactTopbar, setCompactTopbar] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
   const [historicalSearch, setHistoricalSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -1018,22 +1019,30 @@ export default function App() {
 
   useEffect(() => {
     setMobileNavOpen(false);
-    setMobileTopbarExpanded(false);
-  }, [activePanel]);
+    if (compactTopbar) {
+      setMobileTopbarExpanded(false);
+    }
+  }, [activePanel, compactTopbar]);
 
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 961px)');
-    const handleChange = (event) => {
-      if (event.matches) {
+    const mobileNavMedia = window.matchMedia('(max-width: 960px)');
+    const compactTopbarMedia = window.matchMedia('(max-width: 960px), (orientation: portrait)');
+    const syncLayout = () => {
+      const nextCompactTopbar = compactTopbarMedia.matches;
+      const nextMobileNav = mobileNavMedia.matches;
+      setCompactTopbar(nextCompactTopbar);
+      if (!nextMobileNav) {
         setMobileNavOpen(false);
-        setMobileTopbarExpanded(true);
-      } else {
-        setMobileTopbarExpanded(false);
       }
+      setMobileTopbarExpanded(!nextCompactTopbar);
     };
-    handleChange(media);
-    media.addEventListener?.('change', handleChange);
-    return () => media.removeEventListener?.('change', handleChange);
+    syncLayout();
+    mobileNavMedia.addEventListener?.('change', syncLayout);
+    compactTopbarMedia.addEventListener?.('change', syncLayout);
+    return () => {
+      mobileNavMedia.removeEventListener?.('change', syncLayout);
+      compactTopbarMedia.removeEventListener?.('change', syncLayout);
+    };
   }, []);
 
   const discoverUnits = async (targetAccountId = activeAccountId) => {
@@ -1483,7 +1492,7 @@ export default function App() {
 
   return (
     
-    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''} ${mobileTopbarExpanded ? 'mobile-topbar-expanded' : ''}`}>
+    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${compactTopbar ? 'compact-topbar' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''} ${mobileTopbarExpanded ? 'mobile-topbar-expanded' : ''}`}>
       <header className="topbar">
         <div className="topbar-brand-row">
           <div className="topbar-brand">
@@ -2962,6 +2971,10 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
 
 
 
