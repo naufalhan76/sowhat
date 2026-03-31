@@ -641,11 +641,7 @@ function sanitizeWebUserForClient(user) {
 }
 
 function buildWebAuthConfigForClient(sessionUser) {
-  const provider = getStorageProvider();
   return {
-    provider,
-    usesSupabase: provider === 'supabase',
-    usesPostgres: provider === 'postgres',
     sessionUser: sessionUser ? sanitizeWebUserForClient(sessionUser) : null,
   };
 }
@@ -1204,6 +1200,53 @@ function shouldUseSecureCookies(req) {
     || String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
 }
 
+function isLocalHostValue(hostValue) {
+  const normalized = String(hostValue || '').trim().toLowerCase().split(':')[0];
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function matchesRequestHost(req, candidateUrl) {
+  const expectedHost = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').trim().toLowerCase();
+  if (!expectedHost) {
+    return false;
+  }
+  try {
+    const parsed = new URL(candidateUrl);
+    return String(parsed.host || '').trim().toLowerCase() === expectedHost;
+  } catch (error) {
+    return false;
+  }
+}
+
+function isTrustedApiMutationRequest(req) {
+  const origin = String(req?.headers?.origin || '').trim();
+  const referer = String(req?.headers?.referer || '').trim();
+  const secFetchSite = String(req?.headers?.['sec-fetch-site'] || '').trim().toLowerCase();
+  const requestHost = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').trim();
+
+  if (origin) {
+    return matchesRequestHost(req, origin);
+  }
+  if (referer) {
+    return matchesRequestHost(req, referer);
+  }
+  if (secFetchSite) {
+    return secFetchSite === 'same-origin' || secFetchSite === 'none';
+  }
+  return isLocalHostValue(requestHost);
+}
+
+function requireTrustedApiMutation(req, res) {
+  if (isTrustedApiMutationRequest(req)) {
+    return true;
+  }
+  sendJson(res, 403, {
+    ok: false,
+    error: 'Cross-site request rejected.',
+  });
+  return false;
+}
+
 async function getWebSession(req) {
   const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
   const token = cookies[WEB_AUTH_COOKIE_NAME];
@@ -1231,7 +1274,7 @@ function createWebSessionCookie(req, user) {
     WEB_AUTH_COOKIE_NAME + '=' + token,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    'SameSite=Strict',
     'Max-Age=' + WEB_SESSION_MAX_AGE_SECONDS,
   ];
   if (shouldUseSecureCookies(req)) {
@@ -1248,7 +1291,7 @@ function expiredWebSessionCookie(req) {
     WEB_AUTH_COOKIE_NAME + '=',
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    'SameSite=Strict',
     'Max-Age=0',
   ];
   if (shouldUseSecureCookies(req)) {
@@ -1974,6 +2017,8 @@ const RESPONSE_SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Cross-Origin-Opener-Policy': 'same-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Content-Security-Policy': [
     "default-src 'self'",
@@ -5368,6 +5413,12 @@ async function handleApi(req, res, url) {
 
     sendJson(res, 200, buildStatusPayload(session.user));
     return true;
+  }
+
+  if (pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
   }
 
   if (pathname.startsWith('/api/')) {
