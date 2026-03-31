@@ -2810,6 +2810,46 @@ textarea:focus {
   display: contents;
 }
 
+@media (min-width: 961px) and (max-width: 1280px) {
+  .topbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 12px 20px;
+    padding: 12px 20px;
+  }
+
+  .topbar-brand-row {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .topbar-collapsible {
+    display: grid;
+    grid-column: 2;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .topbar-controls {
+    display: grid;
+    grid-template-columns: auto minmax(220px, 1fr);
+    align-items: center;
+    max-width: none;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .topbar-controls .search-box {
+    min-width: 220px;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+}
 .topbar-icon-button {
   width: 42px;
   height: 42px;
@@ -2991,6 +3031,8 @@ textarea:focus {
     padding: 10px 12px;
   }
 }
+
+
 
 
 
