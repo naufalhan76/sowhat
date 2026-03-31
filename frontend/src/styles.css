@@ -3045,6 +3045,10 @@ textarea:focus {
   display: none;
 }
 
+.command-center.compact-topbar {
+  grid-template-rows: auto 1fr var(--statusbar-height);
+}
+
 .command-center.compact-topbar .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -3122,3 +3126,4 @@ textarea:focus {
     display: inline-flex;
   }
 }
+
