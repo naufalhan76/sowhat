@@ -1,6 +1,7 @@
 const MIN_VALID_STAY_MS = 3 * 60 * 1000;
 const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 const EXPORT_TIMEZONE = String(process.env.ASTRO_EXPORT_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
+const ASTRO_SPECIAL_WH_TEMP_THRESHOLD = Number(process.env.ASTRO_SPECIAL_WH_TEMP_THRESHOLD || 10);
 
 function toSolofleetLocalDate(timestamp) {
   const numeric = Number(timestamp);
@@ -400,6 +401,65 @@ function buildVisitEvents(records, location) {
   return events;
 }
 
+function isSpecialAstroWhTemperatureFallback(location) {
+  if (!location || String(location.type || '').toUpperCase() !== 'WH') {
+    return false;
+  }
+  const normalized = `${location.id || ''} ${location.name || ''}`.trim().toLowerCase();
+  return normalized.includes('cibinong') || /\bcbn\b/.test(normalized);
+}
+
+function buildSpecialWhTemperatureFallbackVisits(route, location, records, existingVisits) {
+  if (!route || !location || !isSpecialAstroWhTemperatureFallback(location)) {
+    return [];
+  }
+
+  const existingKeys = new Set((existingVisits || [])
+    .filter((visit) => visit && visit.locationId === route.whLocationId)
+    .map((visit) => {
+      const info = inferRitInfo(visit.etd || visit.eta, route);
+      return info ? `${info.serviceDate}|${info.key}` : '';
+    })
+    .filter(Boolean));
+
+  const fallbackByKey = new Map();
+  const sortedRecords = [...(records || [])]
+    .filter((record) => record && Number(record.timestamp))
+    .sort((left, right) => Number(left.timestamp || 0) - Number(right.timestamp || 0));
+
+  for (const record of sortedRecords) {
+    const probeTemp = probeTemperature(record);
+    if (probeTemp === null || probeTemp >= ASTRO_SPECIAL_WH_TEMP_THRESHOLD) {
+      continue;
+    }
+
+    const ritInfo = inferRitInfo(record.timestamp, route);
+    if (!ritInfo) {
+      continue;
+    }
+
+    const key = `${ritInfo.serviceDate}|${ritInfo.key}`;
+    if (existingKeys.has(key) || fallbackByKey.has(key)) {
+      continue;
+    }
+
+    fallbackByKey.set(key, {
+      locationId: location.id,
+      locationName: location.name,
+      locationType: location.type,
+      eta: record.timestamp,
+      etd: record.timestamp,
+      durationMinutes: 0,
+      arrivalTemp: probeTemp,
+      departureTemp: probeTemp,
+      pointCount: 1,
+      inferredBy: 'temperature-threshold',
+    });
+  }
+
+  return [...fallbackByKey.values()];
+}
+
 function formatLocalDay(timestamp) {
   const date = toSolofleetLocalDate(timestamp);
   if (!date || Number.isNaN(date.getTime())) {
@@ -486,7 +546,11 @@ function buildRouteReportRows(route, locations, records) {
     .map((locationId) => locationMap.get(locationId))
     .filter(Boolean)
     .filter((location) => location.isActive !== false);
-  const visits = relevantLocations.flatMap((location) => buildVisitEvents(records, location));
+  let visits = relevantLocations.flatMap((location) => buildVisitEvents(records, location));
+  const whLocation = locationMap.get(route.whLocationId);
+  if (whLocation) {
+    visits = visits.concat(buildSpecialWhTemperatureFallbackVisits(route, whLocation, records, visits));
+  }
   visits.sort((left, right) => left.eta - right.eta || left.etd - right.etd);
 
   const rows = [];
