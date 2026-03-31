@@ -552,15 +552,13 @@ function buildRouteReportRows(route, locations, records) {
     visits = visits.concat(buildSpecialWhTemperatureFallbackVisits(route, whLocation, records, visits));
   }
   visits.sort((left, right) => left.eta - right.eta || left.etd - right.etd);
+  const whVisits = visits.filter((visit) => visit.locationId === route.whLocationId);
+  const validWindowWhVisits = whVisits.filter((visit) => inferRitInfo(visit.etd || visit.eta, route));
 
   const rows = [];
   const consumedUntilByKey = new Map();
 
-  for (const visit of visits) {
-    if (visit.locationId !== route.whLocationId) {
-      continue;
-    }
-
+  for (const visit of validWindowWhVisits) {
     const whName = locationMap.get(route.whLocationId)?.name || 'WH';
     const ritAnchorTimestamp = visit.etd || visit.eta;
     const ritInfo = inferRitInfo(ritAnchorTimestamp, route);
@@ -569,35 +567,6 @@ function buildRouteReportRows(route, locations, records) {
       : `outside|${formatLocalDay(visit.eta)}`;
     const consumedUntil = consumedUntilByKey.get(consumptionKey) || 0;
     if (visit.eta < consumedUntil) {
-      continue;
-    }
-
-    if (!ritInfo) {
-      rows.push({
-        routeId: route.id,
-        accountId: route.accountId || 'primary',
-        unitId: route.unitId,
-        customer: route.customerName || 'Astro',
-        serviceDate: formatLocalDay(visit.eta),
-        rit: '-',
-        ritKey: '',
-        status: 'outside_window',
-        reason: 'WH departure from radius does not match any configured rit window.',
-        whName,
-        whEta: visit.eta,
-        whArrivalTemp: visit.arrivalTemp,
-        whEtd: visit.etd,
-        whDepartureTemp: visit.departureTemp,
-        returnWhEta: null,
-        returnWhEtd: null,
-        poolName: '',
-        poolEta: null,
-        poolArrivalTemp: null,
-        poolEtd: null,
-        poolDepartureTemp: null,
-        pods: [],
-      });
-      consumedUntilByKey.set(consumptionKey, visit.etd);
       continue;
     }
 
@@ -717,6 +686,34 @@ function buildRouteReportRows(route, locations, records) {
       })),
     });
     consumedUntilByKey.set(consumptionKey, returnWh.etd);
+  }
+
+  if (!rows.length && whVisits.length) {
+    const firstVisit = whVisits[0];
+    rows.push({
+      routeId: route.id,
+      accountId: route.accountId || 'primary',
+      unitId: route.unitId,
+      customer: route.customerName || 'Astro',
+      serviceDate: formatLocalDay(firstVisit.eta),
+      rit: '-',
+      ritKey: '',
+      status: 'outside_window',
+      reason: 'WH departure from radius does not match any configured rit window.',
+      whName: locationMap.get(route.whLocationId)?.name || 'WH',
+      whEta: firstVisit.eta,
+      whArrivalTemp: firstVisit.arrivalTemp,
+      whEtd: firstVisit.etd,
+      whDepartureTemp: firstVisit.departureTemp,
+      returnWhEta: null,
+      returnWhEtd: null,
+      poolName: '',
+      poolEta: null,
+      poolArrivalTemp: null,
+      poolEtd: null,
+      poolDepartureTemp: null,
+      pods: [],
+    });
   }
 
   return rows;
