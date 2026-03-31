@@ -540,6 +540,55 @@ function inferRitInfo(timestamp, route) {
   return null;
 }
 
+function resolveVisitWindowRecords(records, visit, route, ritInfo) {
+  return [...(records || [])]
+    .filter((record) => {
+      const timestamp = Number(record?.timestamp || 0);
+      if (!timestamp || timestamp < visit.eta || timestamp > visit.etd) {
+        return false;
+      }
+      const info = inferRitInfo(timestamp, route);
+      return Boolean(info && info.key === ritInfo.key && info.serviceDate === ritInfo.serviceDate);
+    })
+    .sort((left, right) => Number(left.timestamp || 0) - Number(right.timestamp || 0));
+}
+
+function resolveWhVisitTiming(route, location, visit, records, ritInfo) {
+  if (!visit || !ritInfo) {
+    return {
+      eta: visit?.eta || null,
+      arrivalTemp: visit?.arrivalTemp ?? null,
+    };
+  }
+
+  const windowRecords = resolveVisitWindowRecords(records, visit, route, ritInfo);
+  if (!windowRecords.length) {
+    return {
+      eta: visit.eta,
+      arrivalTemp: visit.arrivalTemp,
+    };
+  }
+
+  if (isSpecialAstroWhTemperatureFallback(location)) {
+    const tempThresholdRecord = windowRecords.find((record) => {
+      const probeTemp = probeTemperature(record);
+      return probeTemp !== null && probeTemp < ASTRO_SPECIAL_WH_TEMP_THRESHOLD;
+    });
+    if (tempThresholdRecord) {
+      return {
+        eta: tempThresholdRecord.timestamp,
+        arrivalTemp: probeTemperature(tempThresholdRecord),
+      };
+    }
+  }
+
+  const firstWindowRecord = windowRecords[0];
+  return {
+    eta: firstWindowRecord.timestamp,
+    arrivalTemp: probeTemperature(firstWindowRecord),
+  };
+}
+
 function buildRouteReportRows(route, locations, records) {
   const locationMap = buildLocationMap(locations);
   const relevantLocations = routeLocationIds(route)
@@ -562,11 +611,12 @@ function buildRouteReportRows(route, locations, records) {
     const whName = locationMap.get(route.whLocationId)?.name || 'WH';
     const ritAnchorTimestamp = visit.etd || visit.eta;
     const ritInfo = inferRitInfo(ritAnchorTimestamp, route);
+    const effectiveWh = resolveWhVisitTiming(route, whLocation, visit, records, ritInfo);
     const consumptionKey = ritInfo
       ? `${ritInfo.serviceDate}|${ritInfo.key}`
       : `outside|${formatLocalDay(visit.eta)}`;
     const consumedUntil = consumedUntilByKey.get(consumptionKey) || 0;
-    if (visit.eta < consumedUntil) {
+    if ((effectiveWh.eta || visit.eta) < consumedUntil) {
       continue;
     }
 
@@ -583,8 +633,8 @@ function buildRouteReportRows(route, locations, records) {
         status: 'awaiting_return_wh',
         reason: 'Route already started from WH, but there is no return-to-WH event yet in the selected range.',
         whName,
-        whEta: visit.eta,
-        whArrivalTemp: visit.arrivalTemp,
+        whEta: effectiveWh.eta || visit.eta,
+        whArrivalTemp: effectiveWh.arrivalTemp ?? visit.arrivalTemp,
         whEtd: visit.etd,
         whDepartureTemp: visit.departureTemp,
         returnWhEta: null,
@@ -626,8 +676,8 @@ function buildRouteReportRows(route, locations, records) {
         reason: 'POD sequence not complete before unit returns to WH.',
         missingPodName: locationMap.get(missingPodId)?.name || missingPodId,
         whName,
-        whEta: visit.eta,
-        whArrivalTemp: visit.arrivalTemp,
+        whEta: effectiveWh.eta || visit.eta,
+        whArrivalTemp: effectiveWh.arrivalTemp ?? visit.arrivalTemp,
         whEtd: visit.etd,
         whDepartureTemp: visit.departureTemp,
         returnWhEta: returnWh.eta,
@@ -665,8 +715,8 @@ function buildRouteReportRows(route, locations, records) {
       status: 'complete',
       reason: '',
       whName,
-      whEta: visit.eta,
-      whArrivalTemp: visit.arrivalTemp,
+      whEta: effectiveWh.eta || visit.eta,
+      whArrivalTemp: effectiveWh.arrivalTemp ?? visit.arrivalTemp,
       whEtd: visit.etd,
       whDepartureTemp: visit.departureTemp,
       returnWhEta: returnWh.eta,
