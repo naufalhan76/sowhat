@@ -5335,6 +5335,9 @@ async function handleApi(req, res, url) {
   const method = req.method || 'GET';
 
   if (pathname === '/api/web-auth/login' && method === 'POST') {
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const username = String(body.username || '').trim().toLowerCase();
@@ -5377,6 +5380,9 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/web-auth/logout' && method === 'POST') {
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
     destroyWebSession(req);
     sendJson(res, 200, {
       ok: true,
