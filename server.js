@@ -4144,6 +4144,14 @@ function validateAstroRoutes(routes, locations) {
   const locationMap = new Map((locations || []).map(function (location) { return [location.id, location]; }));
   const seen = new Set();
 
+  function astroRoutePathKey(route) {
+    return [
+      String(route.whLocationId || '').trim(),
+      String(route.poolLocationId || '').trim() || 'no-pool',
+      (route.podSequence || []).map(function (podId) { return String(podId || '').trim(); }).filter(Boolean).join('>') || 'no-pod',
+    ].join('::');
+  }
+
   return (routes || []).map(function (item) {
     const normalized = astroCore.normalizeAstroRoute(item);
     if (!normalized) {
@@ -4182,9 +4190,9 @@ function validateAstroRoutes(routes, locations) {
     if (!normalized.rit1) {
       throw new Error('Rit 1 wajib valid untuk unit ' + normalized.unitId);
     }
-    const routeKey = normalized.accountId + '::' + normalized.unitId;
+    const routeKey = normalized.accountId + '::' + normalized.unitId + '::' + astroRoutePathKey(normalized);
     if (seen.has(routeKey)) {
-      throw new Error('Astro route duplicate untuk unit ' + normalized.unitId + ' di account ' + normalized.accountId);
+      throw new Error('Rute Telah Ada');
     }
     seen.add(routeKey);
     return normalized;

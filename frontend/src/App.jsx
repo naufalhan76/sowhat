@@ -395,6 +395,8 @@ export default function App() {
   const [astroCsvText, setAstroCsvText] = useState('');
   const [astroLocationExpanded, setAstroLocationExpanded] = useState({});
   const [astroRouteExpanded, setAstroRouteExpanded] = useState({});
+  const [astroLocationSearch, setAstroLocationSearch] = useState('');
+  const [astroRouteSearch, setAstroRouteSearch] = useState('');
   const [astroRouteCsvText, setAstroRouteCsvText] = useState('');
   const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', unitId: '' });
   const [astroReport, setAstroReport] = useState(null);
@@ -454,7 +456,43 @@ export default function App() {
       }),
     })).sort((left, right) => String(left.title).localeCompare(String(right.title)));
   }, [astroRoutes, availableAccounts, astroUnitLabelByKey]);
-  const astroReportUnitOptions = useMemo(() => astroRoutes.map((route) => ({ value: `${route.accountId || 'primary'}::${route.unitId}`, label: `${accountName(availableAccounts.find((account) => account.id === (route.accountId || 'primary')))} | ${astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId}` })).sort((left, right) => left.label.localeCompare(right.label)), [astroRoutes, availableAccounts, astroUnitLabelByKey]);
+  const astroFilteredLocationGroups = useMemo(() => {
+    const query = astroLocationSearch.trim().toLowerCase();
+    if (!query) return astroLocationGroups;
+    return astroLocationGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((location) => [location.name, location.id, location.type, location.notes].some((value) => String(value || '').toLowerCase().includes(query))),
+    })).filter((group) => group.items.length > 0);
+  }, [astroLocationGroups, astroLocationSearch]);
+  const astroFilteredRouteGroups = useMemo(() => {
+    const query = astroRouteSearch.trim().toLowerCase();
+    if (!query) return astroRouteGroups;
+    return astroRouteGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((route) => {
+        const unitLabel = astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId;
+        const whName = astroLocations.find((location) => location.id === route.whLocationId)?.name || '';
+        const poolName = astroLocations.find((location) => location.id === route.poolLocationId)?.name || '';
+        const podNames = (route.podSequence || []).map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId).join(' ');
+        return [unitLabel, route.unitId, route.customerName, whName, poolName, podNames, route.notes].some((value) => String(value || '').toLowerCase().includes(query));
+      }),
+    })).filter((group) => group.items.length > 0);
+  }, [astroRouteGroups, astroRouteSearch, astroUnitLabelByKey, astroLocations]);
+  const astroReportAccountOptions = useMemo(() => [{ value: 'all', label: 'All accounts' }, ...availableAccounts.map((account) => ({ value: account.id, label: account.label || account.authEmail || account.id })).sort((left, right) => left.label.localeCompare(right.label))], [availableAccounts]);
+  const astroReportUnitOptions = useMemo(() => astroRoutes.map((route) => {
+    const accountId = route.accountId || 'primary';
+    const accountLabel = accountName(availableAccounts.find((account) => account.id === accountId));
+    const unitLabel = astroUnitLabelByKey.get(`${accountId}::${route.unitId}`) || route.unitId;
+    const whName = astroLocations.find((location) => location.id === route.whLocationId)?.name || 'WH';
+    const podSummary = (route.podSequence || [])
+      .map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId)
+      .slice(0, 2)
+      .join(' -> ');
+    return {
+      value: `${accountId}::${route.unitId}::${route.id}`,
+      label: `${accountLabel} | ${unitLabel}${podSummary ? ` | ${whName} -> ${podSummary}` : ` | ${whName}`}`,
+    };
+  }).sort((left, right) => left.label.localeCompare(right.label)), [astroRoutes, availableAccounts, astroUnitLabelByKey, astroLocations]);
   const astroReportMaxPods = astroReport?.summary?.maxPods || 0;
   const astroReportColumns = useMemo(() => {
     const base = [
@@ -1413,7 +1451,7 @@ export default function App() {
         if (routeAccountId) query.set('accountId', routeAccountId);
         if (routeUnitId) query.set('unitId', routeUnitId);
         
-        const unitLabel = astroUnitLabelByKey.get(astroReportFilters.unitId) || routeUnitId;
+        const unitLabel = astroUnitLabelByKey.get(`${routeAccountId || astroReportFilters.accountId || 'primary'}::${routeUnitId}`) || routeUnitId;
         const sanitizedNopol = unitLabel.replace(/[^a-zA-Z0-9]/g, '');
         nopolPrefix = `${sanitizedNopol}-`;
       }
@@ -1807,21 +1845,8 @@ export default function App() {
                   <label className="historical-field">
                     <span>End date</span>
                     <input type="date" value={astroReportFilters.endDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, endDate: event.target.value }))} />
-                  </label>
-                  <label className="historical-field">
-                    <span>Account</span>
-                    <select value={astroReportFilters.accountId} onChange={(event) => setAstroReportFilters((current) => ({ ...current, accountId: event.target.value, unitId: '' }))}>
-                      <option value="all">All accounts</option>
-                      {availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}
-                    </select>
-                  </label>
-                  <label className="historical-field">
-                    <span>Nopol route</span>
-                    <select value={astroReportFilters.unitId} onChange={(event) => setAstroReportFilters((current) => ({ ...current, unitId: event.target.value }))}>
-                      <option value="">All configured routes</option>
-                      {astroReportUnitOptions.filter((option) => astroReportFilters.accountId === 'all' || option.value.startsWith(`${astroReportFilters.accountId}::`)).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </label>
+                  </label>                  <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', unitId: '' }))} placeholder="Search account..." />
+                  <SearchableSelect label="Nopol route" value={astroReportFilters.unitId} options={[{ value: '', label: 'All configured routes' }, ...astroReportUnitOptions.filter((option) => astroReportFilters.accountId === 'all' || option.value.startsWith(`${astroReportFilters.accountId}::`))]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, unitId: nextValue || '' }))} placeholder="Search route..." />
                   <div className="historical-action-field">
                     <span>Action</span>
                     <Button color="primary" onPress={generateAstroReport}>Generate report</Button>
@@ -1862,6 +1887,16 @@ export default function App() {
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setActivePanel('fleet')}>Back to Fleet Live</Button>
+                  {selectedHistoricalRow && selectedHistoricalRow.latitude !== null && selectedHistoricalRow.longitude !== null ? (
+                    <a
+                      className="sf-btn sf-btn-bordered"
+                      href={`https://www.google.com/maps?q=${selectedHistoricalRow.latitude},${selectedHistoricalRow.longitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open map
+                    </a>
+                  ) : null}
                   <Button variant="bordered" onPress={exportHistory}>Export history CSV</Button>
                 </div>
               </CardHeader>
@@ -1973,14 +2008,21 @@ export default function App() {
                     <Button variant="bordered" onPress={() => importAstroLocations(false)}>Import merge</Button>
                     <Button variant="light" onPress={() => importAstroLocations(true)}>Replace all</Button>
                   </div>
-                  {astroLocations.length ? <div className="astro-group-stack">
+                  <label className="field">
+                    <span>Search saved locations</span>
+                    <div className="search-box historical-search-box">
+                      <Search size={16} className="search-icon" />
+                      <input type="search" value={astroLocationSearch} onChange={(event) => setAstroLocationSearch(event.target.value)} placeholder="Cari nama lokasi, type, note..." />
+                    </div>
+                  </label>
+                  {astroFilteredLocationGroups.length ? <div className="astro-group-stack">
                     <div className="astro-group-summary">
                       <Chip>{astroLocations.length} lokasi</Chip>
                       <Chip color="info">WH {astroWhLocations.length}</Chip>
                       <Chip color="warning">POD {astroPodLocations.length}</Chip>
                       <Chip color="default">POOL {astroPoolLocations.length}</Chip>
                     </div>
-                    {astroLocationGroups.map((group) => {
+                    {astroFilteredLocationGroups.map((group) => {
                       const expanded = astroLocationExpanded[group.key] === true;
                       const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
                       return <div key={group.key} className="astro-group-card">
@@ -2013,7 +2055,7 @@ export default function App() {
                         </div>
                       </div>;
                     })}
-                  </div> : <div className="empty-state">Belum ada Astro location.</div>}
+                  </div> : <div className="empty-state">Belum ada Astro location yang cocok dengan pencarian.</div>}
                 </div>
               </CardContent> : null}
             </Card>
@@ -2074,13 +2116,20 @@ export default function App() {
                     <Button variant="light" onPress={() => importAstroRoutes(true)}>Replace all routes</Button>
                   </div>
                   <div className="subtle-line">Bulk route CSV fleksibel: setelah kolom POOL, tambahkan kolom POD1 sampai maksimal POD5. Sistem akan baca titik POD sesuai jumlah kolom yang kamu isi.</div>
-                  {astroRoutes.length ? <div className="astro-group-stack">
+                  <label className="field">
+                    <span>Search saved routes</span>
+                    <div className="search-box historical-search-box">
+                      <Search size={16} className="search-icon" />
+                      <input type="search" value={astroRouteSearch} onChange={(event) => setAstroRouteSearch(event.target.value)} placeholder="Cari nopol, WH, POD, customer..." />
+                    </div>
+                  </label>
+                  {astroFilteredRouteGroups.length ? <div className="astro-group-stack">
                     <div className="astro-group-summary">
                       <Chip>{astroRoutes.length} route</Chip>
                       <Chip color="info">Account {astroRouteGroups.length}</Chip>
                       <Chip color="warning">Max POD {ASTRO_ROUTE_MAX_PODS}</Chip>
                     </div>
-                    {astroRouteGroups.map((group) => {
+                    {astroFilteredRouteGroups.map((group) => {
                       const expanded = astroRouteExpanded[group.key] === true;
                       const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
                       return <div key={group.key} className="astro-group-card">
@@ -2115,7 +2164,7 @@ export default function App() {
                         </div>
                       </div>;
                     })}
-                  </div> : <div className="empty-state">Belum ada Astro route config.</div>}
+                  </div> : <div className="empty-state">Belum ada Astro route yang cocok dengan pencarian.</div>}
                 </div>
               </CardContent> : null}
             </Card>

@@ -136,17 +136,26 @@ function normalizeAstroRoute(value) {
 
   const rit1 = normalizeTimeWindow(value.rit1, '05:00', '14:59');
   const rit2 = normalizeTimeWindow(value.rit2, '', '');
+  const accountId = String(value.accountId || 'primary').trim() || 'primary';
+  const whLocationId = String(value.whLocationId || '').trim();
+  const poolLocationId = String(value.poolLocationId || '').trim();
+  const podSequence = (Array.isArray(value.podSequence) ? value.podSequence : splitCsvish(value.podSequence))
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  const routeSignature = [
+    whLocationId,
+    poolLocationId || 'no-pool',
+    podSequence.join('-') || 'no-pod',
+  ].join('--');
 
   return {
-    id: String(value.id || `${normalizeUnitKey(value.accountId || 'primary')}-${slugify(unitId, 'astro-route')}`).trim(),
-    accountId: String(value.accountId || 'primary').trim() || 'primary',
+    id: String(value.id || `${normalizeUnitKey(accountId)}-${slugify(unitId, 'astro-route')}-${slugify(routeSignature, 'path')}`).trim(),
+    accountId,
     unitId,
     customerName: String(value.customerName || 'Astro').trim() || 'Astro',
-    whLocationId: String(value.whLocationId || '').trim(),
-    poolLocationId: String(value.poolLocationId || '').trim(),
-    podSequence: (Array.isArray(value.podSequence) ? value.podSequence : splitCsvish(value.podSequence))
-      .map((item) => String(item || '').trim())
-      .filter(Boolean),
+    whLocationId,
+    poolLocationId,
+    podSequence,
     rit1,
     rit2,
     isActive: value.isActive === undefined ? true : Boolean(value.isActive),
