@@ -16,6 +16,7 @@ const WEB_ROOT = fs.existsSync(path.join(__dirname, 'web-dist'))
 const DATA_ROOT = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_ROOT, 'config.json');
 const STATE_FILE = path.join(DATA_ROOT, 'state.json');
+const LOGIN_RATE_LIMITS_FILE = path.join(DATA_ROOT, 'login-rate-limits.json');
 
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -52,6 +53,7 @@ const DEFAULT_CONFIG = {
   astroRoutes: [],
   linkedAccounts: [],
   activeAccountId: 'primary',
+  webSessionSecret: '',
 };
 
 const DEFAULT_STATE = {
@@ -84,9 +86,11 @@ const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
 const WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
-const webSessions = new Map();
 let postgresPool = null;
 const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
+const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || (15 * 60 * 1000));
+const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 10);
+const SOLOFLEET_LOGIN_RATE_LIMIT_MAX = Number(process.env.SOLOFLEET_LOGIN_RATE_LIMIT_MAX || 8);
 
 function recordApiMonitorEvent(entry) {
   apiMonitorLog.push(entry);
@@ -426,6 +430,7 @@ function normalizeConfig(raw) {
     ? merged.linkedAccounts.map(normalizeLinkedAccount).filter(Boolean)
     : [];
   merged.activeAccountId = String(merged.activeAccountId || 'primary').trim() || 'primary';
+  merged.webSessionSecret = String(merged.webSessionSecret || '').trim();
   merged.webUsers = Array.isArray(merged.webUsers)
     ? merged.webUsers.map(normalizeWebUser).filter(Boolean)
     : [];
@@ -547,6 +552,9 @@ function ensureDataFiles() {
     if (!fs.existsSync(STATE_FILE)) {
       fs.writeFileSync(STATE_FILE, JSON.stringify(DEFAULT_STATE, null, 2));
     }
+    if (!fs.existsSync(LOGIN_RATE_LIMITS_FILE)) {
+      fs.writeFileSync(LOGIN_RATE_LIMITS_FILE, JSON.stringify({}, null, 2));
+    }
   } catch (error) {
     console.error('Failed to ensure local data files:', error.message);
   }
@@ -663,36 +671,6 @@ function verifyPassword(password, passwordHash) {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(value));
 }
 
-function buildBootstrapWebUser() {
-  const now = new Date().toISOString();
-  return normalizeWebUser({
-    id: 'bootstrap-admin',
-    username: 'admin',
-    displayName: 'Administrator',
-    passwordHash: hashPassword('admin'),
-    role: 'admin',
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-function ensureLocalBootstrapWebUser() {
-  if (getSupabaseWebAuthConfig().enabled || getPostgresConfig().enabled) {
-    return;
-  }
-
-  if (!Array.isArray(config.webUsers)) {
-    config.webUsers = [];
-  }
-
-  if (!config.webUsers.length) {
-    config.webUsers = [buildBootstrapWebUser()];
-    config = normalizeConfig(config);
-    saveConfig();
-  }
-}
-
 async function supabaseRestRequest(method, resource, options) {
   const runtime = getSupabaseWebAuthConfig();
   if (!runtime.enabled) {
@@ -739,7 +717,6 @@ async function supabaseFetchAll(resource, pageSize) {
 
   return rows;
 }
-
 function mapSupabaseWebUser(record) {
   return normalizeWebUser({
     id: record.id,
@@ -753,72 +730,7 @@ function mapSupabaseWebUser(record) {
   });
 }
 
-async function ensureBootstrapWebUser() {
-  if (getPostgresConfig().enabled) {
-    try {
-      await ensurePostgresSchema();
-      const existing = await postgresQuery('select id from dashboard_web_users limit 1');
-      if (existing.rows.length) {
-        return;
-      }
-
-      const bootstrap = buildBootstrapWebUser();
-      await postgresQuery(
-        `insert into dashboard_web_users
-          (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          bootstrap.id,
-          bootstrap.username,
-          bootstrap.displayName,
-          bootstrap.passwordHash,
-          bootstrap.role,
-          bootstrap.isActive,
-          bootstrap.createdAt,
-          bootstrap.updatedAt,
-        ],
-      );
-      return;
-    } catch (error) {
-      console.error('Failed to ensure bootstrap PostgreSQL user:', error.message);
-      ensureLocalBootstrapWebUser();
-      return;
-    }
-  }
-
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
-    ensureLocalBootstrapWebUser();
-    return;
-  }
-
-  try {
-    const existing = await supabaseRestRequest('GET', 'dashboard_web_users?select=id&limit=1');
-    if (Array.isArray(existing) && existing.length) {
-      return;
-    }
-
-    const bootstrap = buildBootstrapWebUser();
-    await supabaseRestRequest('POST', 'dashboard_web_users', {
-      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-      body: [{
-        id: bootstrap.id,
-        username: bootstrap.username,
-        display_name: bootstrap.displayName,
-        password_hash: bootstrap.passwordHash,
-        role: bootstrap.role,
-        is_active: bootstrap.isActive,
-        created_at: bootstrap.createdAt,
-        updated_at: bootstrap.updatedAt,
-      }],
-    });
-  } catch (error) {
-    ensureLocalBootstrapWebUser();
-  }
-}
-
 async function listWebUsers() {
-  await ensureBootstrapWebUser();
   if (getPostgresConfig().enabled) {
     try {
       const result = await postgresQuery(
@@ -828,7 +740,6 @@ async function listWebUsers() {
       );
       return result.rows.map(mapSupabaseWebUser).filter(Boolean);
     } catch (error) {
-      ensureLocalBootstrapWebUser();
       return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
         return left.username.localeCompare(right.username);
       });
@@ -836,7 +747,6 @@ async function listWebUsers() {
   }
 
   if (!getSupabaseWebAuthConfig().enabled) {
-    ensureLocalBootstrapWebUser();
     return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
       return left.username.localeCompare(right.username);
     });
@@ -846,11 +756,37 @@ async function listWebUsers() {
     const rows = await supabaseRestRequest('GET', 'dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&order=username.asc');
     return rows.map(mapSupabaseWebUser).filter(Boolean);
   } catch (error) {
-    ensureLocalBootstrapWebUser();
     return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
       return left.username.localeCompare(right.username);
     });
   }
+}
+
+async function findWebUserById(userId) {
+  const resolvedId = String(userId || '').trim();
+  if (!resolvedId) {
+    return null;
+  }
+
+  if (getPostgresConfig().enabled) {
+    const result = await postgresQuery(
+      `select id, username, display_name, password_hash, role, is_active, created_at, updated_at
+       from dashboard_web_users
+       where id = $1
+       limit 1`,
+      [resolvedId],
+    );
+    return result.rows.length ? mapSupabaseWebUser(result.rows[0]) : null;
+  }
+
+  if (!getSupabaseWebAuthConfig().enabled) {
+    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
+      return user.id === resolvedId;
+    }) || null;
+  }
+
+  const rows = await supabaseRestRequest('GET', `dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&id=eq.${encodeURIComponent(resolvedId)}&limit=1`);
+  return rows.length ? mapSupabaseWebUser(rows[0]) : null;
 }
 
 async function findWebUserByUsername(username) {
@@ -859,7 +795,6 @@ async function findWebUserByUsername(username) {
     return null;
   }
 
-  await ensureBootstrapWebUser();
   if (getPostgresConfig().enabled) {
     const result = await postgresQuery(
       `select id, username, display_name, password_hash, role, is_active, created_at, updated_at
@@ -872,7 +807,6 @@ async function findWebUserByUsername(username) {
   }
 
   if (!getSupabaseWebAuthConfig().enabled) {
-    ensureLocalBootstrapWebUser();
     return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
       return user.username === normalized;
     }) || null;
@@ -880,6 +814,13 @@ async function findWebUserByUsername(username) {
 
   const rows = await supabaseRestRequest('GET', `dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&username=eq.${encodeURIComponent(normalized)}&limit=1`);
   return rows.length ? mapSupabaseWebUser(rows[0]) : null;
+}
+
+async function countOtherActiveAdmins(excludedUserId) {
+  const users = await listWebUsers();
+  return users.filter(function (user) {
+    return user.id !== excludedUserId && user.role === 'admin' && user.isActive;
+  }).length;
 }
 
 async function saveWebUser(input) {
@@ -904,8 +845,15 @@ async function saveWebUser(input) {
     throw new Error('Password is required for a new web user.');
   }
 
+  if (existing && existing.role === 'admin' && existing.isActive && (role !== 'admin' || !isActive)) {
+    const otherActiveAdmins = await countOtherActiveAdmins(existing.id);
+    if (otherActiveAdmins === 0) {
+      throw new Error('Tidak bisa menurunkan atau menonaktifkan admin terakhir.');
+    }
+  }
+
   const nextUser = normalizeWebUser({
-    id: source.id || (existing && existing.id) || `${username}-${Date.now()}`,
+    id: source.id || (existing && existing.id) || `${username}-${Date.now()}` ,
     username,
     displayName,
     passwordHash,
@@ -943,7 +891,6 @@ async function saveWebUser(input) {
   }
 
   if (!getSupabaseWebAuthConfig().enabled) {
-    ensureLocalBootstrapWebUser();
     const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
     const index = users.findIndex(function (user) {
       return user.id === nextUser.id || user.username === nextUser.username;
@@ -961,31 +908,20 @@ async function saveWebUser(input) {
     return nextUser;
   }
 
-  try {
-    const rows = await supabaseRestRequest('POST', 'dashboard_web_users', {
-      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-      body: [{
-        id: nextUser.id,
-        username: nextUser.username,
-        display_name: nextUser.displayName,
-        password_hash: nextUser.passwordHash,
-        role: nextUser.role,
-        is_active: nextUser.isActive,
-        created_at: nextUser.createdAt,
-        updated_at: nextUser.updatedAt,
-      }],
-    });
-    return rows.length ? mapSupabaseWebUser(rows[0]) : nextUser;
-  } catch (error) {
-    ensureLocalBootstrapWebUser();
-    const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
-    const index = users.findIndex(function (user) { return user.id === nextUser.id || user.username === nextUser.username; });
-    if (index >= 0) { users[index] = nextUser; } else { users.push(nextUser); }
-    config.webUsers = users.sort(function (left, right) { return left.username.localeCompare(right.username); });
-    config = normalizeConfig(config);
-    saveConfig();
-    return nextUser;
-  }
+  const rows = await supabaseRestRequest('POST', 'dashboard_web_users', {
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+    body: [{
+      id: nextUser.id,
+      username: nextUser.username,
+      display_name: nextUser.displayName,
+      password_hash: nextUser.passwordHash,
+      role: nextUser.role,
+      is_active: nextUser.isActive,
+      created_at: nextUser.createdAt,
+      updated_at: nextUser.updatedAt,
+    }],
+  });
+  return rows.length ? mapSupabaseWebUser(rows[0]) : nextUser;
 }
 
 async function deleteWebUser(userId) {
@@ -994,24 +930,26 @@ async function deleteWebUser(userId) {
     throw new Error('User id is required.');
   }
 
-  if (getPostgresConfig().enabled) {
-    await ensureBootstrapWebUser();
-    await postgresQuery('delete from dashboard_web_users where id = $1', [resolvedId]);
-    const remaining = await postgresQuery('select count(*)::int as count from dashboard_web_users');
-    if (!remaining.rows[0] || !remaining.rows[0].count) {
-      await ensureBootstrapWebUser();
+  const existing = await findWebUserById(resolvedId);
+  if (!existing) {
+    return true;
+  }
+  if (existing.role === 'admin' && existing.isActive) {
+    const otherActiveAdmins = await countOtherActiveAdmins(existing.id);
+    if (otherActiveAdmins === 0) {
+      throw new Error('Tidak bisa menghapus admin terakhir.');
     }
+  }
+
+  if (getPostgresConfig().enabled) {
+    await postgresQuery('delete from dashboard_web_users where id = $1', [resolvedId]);
     return true;
   }
 
   if (!getSupabaseWebAuthConfig().enabled) {
-    ensureLocalBootstrapWebUser();
     config.webUsers = (config.webUsers || []).map(normalizeWebUser).filter(Boolean).filter(function (user) {
       return user.id !== resolvedId;
     });
-    if (!config.webUsers.length) {
-      config.webUsers = [buildBootstrapWebUser()];
-    }
     config = normalizeConfig(config);
     saveConfig();
     return true;
@@ -1022,7 +960,6 @@ async function deleteWebUser(userId) {
   });
   return true;
 }
-
 function parseCookieHeader(cookieHeader) {
   const cookies = {};
   for (const part of String(cookieHeader || '').split(/;\s*/)) {
@@ -1039,36 +976,351 @@ function parseCookieHeader(cookieHeader) {
   return cookies;
 }
 
-function getWebSession(req) {
-  const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
-  const token = cookies[WEB_AUTH_COOKIE_NAME];
-  if (!token || !webSessions.has(token)) {
+function getClientIp(req) {
+  const forwardedFor = String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+  const cfIp = String(req?.headers?.['cf-connecting-ip'] || '').trim();
+  return cfIp || forwardedFor || String(req?.socket?.remoteAddress || '').trim() || 'unknown';
+}
+
+function buildLoginRateLimitKey(req, scope, identifier) {
+  return [
+    String(scope || 'login').trim().toLowerCase(),
+    getClientIp(req),
+    String(identifier || '').trim().toLowerCase() || 'anonymous',
+  ].join(':');
+}
+
+function getWebSessionSecret() {
+  return String(
+    process.env.WEB_SESSION_SECRET
+    || process.env.SESSION_SECRET
+    || config?.webSessionSecret
+    || ''
+  ).trim();
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(String(value || ''), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeBase64Url(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+  return Buffer.from(normalized + padding, 'base64').toString('utf8');
+}
+
+function signWebSessionPayload(encodedPayload) {
+  const secret = getWebSessionSecret();
+  if (!secret) {
+    throw new Error('Web session secret is not configured.');
+  }
+  return crypto.createHmac('sha256', secret).update(String(encodedPayload || '')).digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function buildWebSessionToken(user) {
+  const now = Date.now();
+  const payload = {
+    sub: user.id,
+    usr: user.username,
+    role: user.role,
+    iat: now,
+    exp: now + (WEB_SESSION_MAX_AGE_SECONDS * 1000),
+  };
+  const encodedPayload = encodeBase64Url(JSON.stringify(payload));
+  return encodedPayload + '.' + signWebSessionPayload(encodedPayload);
+}
+
+function parseVerifiedWebSessionToken(token) {
+  const value = String(token || '').trim();
+  if (!value || !value.includes('.')) {
     return null;
   }
-  return webSessions.get(token);
-}
+  const parts = value.split('.');
+  if (parts.length !== 2) {
+    return null;
+  }
 
-function createWebSessionCookie(user) {
-  const token = crypto.randomBytes(24).toString('hex');
-  const sessionUser = sanitizeWebUserForClient(user);
-  webSessions.set(token, {
-    token,
-    user: sessionUser,
-    createdAt: Date.now(),
-  });
-  return `${WEB_AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${WEB_SESSION_MAX_AGE_SECONDS}`;
-}
+  const expectedSignature = signWebSessionPayload(parts[0]);
+  const actualBuffer = Buffer.from(parts[1]);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) {
+    return null;
+  }
 
-function destroyWebSession(req) {
-  const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
-  const token = cookies[WEB_AUTH_COOKIE_NAME];
-  if (token) {
-    webSessions.delete(token);
+  try {
+    const payload = JSON.parse(decodeBase64Url(parts[0]));
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    const expiresAt = Number(payload.exp || 0);
+    if (!expiresAt || Date.now() >= expiresAt) {
+      return null;
+    }
+    return payload;
+  } catch (error) {
+    return null;
   }
 }
 
-function expiredWebSessionCookie() {
-  return `${WEB_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+function loadLocalLoginRateLimits() {
+  const source = loadJsonFile(LOGIN_RATE_LIMITS_FILE, {});
+  return source && typeof source === 'object' ? source : {};
+}
+
+function saveLocalLoginRateLimits(entries) {
+  saveJsonFile(LOGIN_RATE_LIMITS_FILE, entries && typeof entries === 'object' ? entries : {});
+}
+
+function pruneExpiredLoginRateLimits(entries, now) {
+  const nextEntries = {};
+  for (const [entryKey, entryValue] of Object.entries(entries || {})) {
+    if (!entryValue || typeof entryValue !== 'object') {
+      continue;
+    }
+    const resetAt = Number(entryValue.resetAt || 0);
+    if (resetAt > now) {
+      nextEntries[entryKey] = {
+        count: Math.max(0, Number(entryValue.count || 0)),
+        resetAt,
+      };
+    }
+  }
+  return nextEntries;
+}
+
+async function consumeLoginRateLimit(key, limit, windowMs, metadata) {
+  const now = Date.now();
+  const resolvedLimit = Math.max(1, Number(limit || 1));
+  const resolvedWindowMs = Math.max(1000, Number(windowMs || LOGIN_RATE_LIMIT_WINDOW_MS));
+  const details = metadata && typeof metadata === 'object' ? metadata : {};
+  const retryAfterSeconds = Math.ceil(resolvedWindowMs / 1000);
+
+  if (getPostgresConfig().enabled) {
+    await ensurePostgresSchema();
+    const existing = await postgresQuery(
+      'select count, extract(epoch from reset_at) * 1000 as reset_at_ms from login_rate_limits where key = $1 limit 1',
+      [key],
+    );
+    const row = existing.rows[0] || null;
+    const resetAtMs = row ? Number(row.reset_at_ms || 0) : 0;
+    if (!row || now >= resetAtMs) {
+      await postgresQuery(
+        `insert into login_rate_limits (key, scope, ip_address, identifier, count, reset_at, created_at, updated_at)
+         values ($1, $2, $3, $4, $5, $6, now(), now())
+         on conflict (key) do update
+         set scope = excluded.scope,
+             ip_address = excluded.ip_address,
+             identifier = excluded.identifier,
+             count = excluded.count,
+             reset_at = excluded.reset_at,
+             updated_at = now()`,
+        [key, details.scope || 'login', details.ipAddress || null, details.identifier || null, 1, new Date(now + resolvedWindowMs).toISOString()],
+      );
+      return { allowed: true, remaining: Math.max(0, resolvedLimit - 1), retryAfterSeconds };
+    }
+
+    const nextCount = Math.max(0, Number(row.count || 0)) + 1;
+    await postgresQuery('update login_rate_limits set count = $2, updated_at = now() where key = $1', [key, nextCount]);
+    if (nextCount > resolvedLimit) {
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterSeconds: Math.max(1, Math.ceil((resetAtMs - now) / 1000)),
+      };
+    }
+
+    return {
+      allowed: true,
+      remaining: Math.max(0, resolvedLimit - nextCount),
+      retryAfterSeconds: Math.max(1, Math.ceil((resetAtMs - now) / 1000)),
+    };
+  }
+
+  const entries = pruneExpiredLoginRateLimits(loadLocalLoginRateLimits(), now);
+  const current = entries[key];
+  if (!current) {
+    entries[key] = { count: 1, resetAt: now + resolvedWindowMs };
+    saveLocalLoginRateLimits(entries);
+    return { allowed: true, remaining: Math.max(0, resolvedLimit - 1), retryAfterSeconds };
+  }
+
+  current.count = Math.max(0, Number(current.count || 0)) + 1;
+  entries[key] = current;
+  saveLocalLoginRateLimits(entries);
+  if (current.count > resolvedLimit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, resolvedLimit - current.count),
+    retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+  };
+}
+
+async function clearLoginRateLimit(key) {
+  if (!key) {
+    return;
+  }
+
+  if (getPostgresConfig().enabled) {
+    await ensurePostgresSchema();
+    await postgresQuery('delete from login_rate_limits where key = $1', [key]);
+    return;
+  }
+
+  const entries = pruneExpiredLoginRateLimits(loadLocalLoginRateLimits(), Date.now());
+  if (entries[key]) {
+    delete entries[key];
+    saveLocalLoginRateLimits(entries);
+  }
+}
+
+function shouldUseSecureCookies(req) {
+  const explicit = String(process.env.COOKIE_SECURE || '').trim().toLowerCase();
+  if (explicit === 'false' || explicit === '0' || explicit === 'no') {
+    return false;
+  }
+  if (explicit === 'true' || explicit === '1' || explicit === 'yes') {
+    return true;
+  }
+
+  const forwardedProto = String(req?.headers?.['x-forwarded-proto'] || '').trim().toLowerCase();
+  const cfVisitor = String(req?.headers?.['cf-visitor'] || '').trim().toLowerCase();
+  return forwardedProto === 'https'
+    || cfVisitor.includes('"scheme":"https"')
+    || Boolean(req?.socket?.encrypted)
+    || String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+}
+
+async function getWebSession(req) {
+  const cookies = parseCookieHeader((req && req.headers && req.headers.cookie) || '');
+  const token = cookies[WEB_AUTH_COOKIE_NAME];
+  const payload = parseVerifiedWebSessionToken(token);
+  if (!payload || !payload.sub) {
+    return null;
+  }
+
+  const user = await findWebUserById(payload.sub);
+  if (!user || !user.isActive) {
+    return null;
+  }
+
+  return {
+    token,
+    createdAt: Number(payload.iat || Date.now()),
+    expiresAt: Number(payload.exp || 0),
+    user: sanitizeWebUserForClient(user),
+  };
+}
+
+function createWebSessionCookie(req, user) {
+  const token = buildWebSessionToken(user);
+  const attributes = [
+    WEB_AUTH_COOKIE_NAME + '=' + token,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=' + WEB_SESSION_MAX_AGE_SECONDS,
+  ];
+  if (shouldUseSecureCookies(req)) {
+    attributes.push('Secure');
+  }
+  return attributes.join('; ');
+}
+
+function destroyWebSession(_req) {
+}
+
+function expiredWebSessionCookie(req) {
+  const attributes = [
+    WEB_AUTH_COOKIE_NAME + '=',
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0',
+  ];
+  if (shouldUseSecureCookies(req)) {
+    attributes.push('Secure');
+  }
+  return attributes.join('; ');
+}
+
+function buildPublicStatusPayload() {
+  return {
+    now: Date.now(),
+    runtime: {
+      isPolling: false,
+      lastRunStartedAt: null,
+      lastRunFinishedAt: null,
+      lastRunDurationMs: null,
+      lastRunMessage: 'Login required',
+      nextRunAt: null,
+      lastSnapshotAt: null,
+      lastSnapshotError: null,
+      pollInFlight: false,
+      unitCount: 0,
+      liveAlertCount: 0,
+      accountCount: 0,
+    },
+    accounts: [],
+    overview: {
+      totalUnits: 0,
+      onlineUnits: 0,
+      liveAlerts: 0,
+      criticalAlerts: 0,
+    },
+    autoFilterCards: [],
+    fleet: {
+      fetchedAt: null,
+      lastError: null,
+      rows: [],
+    },
+    liveAlerts: [],
+    podSnapshots: [],
+    units: [],
+    webAuth: buildWebAuthConfigForClient(null),
+  };
+}
+
+async function requireWebSession(req, res) {
+  const session = await getWebSession(req);
+  if (!session) {
+    sendJson(res, 401, {
+      ok: false,
+      error: 'Login dashboard required.',
+      webAuth: buildWebAuthConfigForClient(null),
+    });
+    return null;
+  }
+  return session;
+}
+
+async function requireAdminSession(req, res) {
+  const session = await requireWebSession(req, res);
+  if (!session) {
+    return null;
+  }
+  if (session.user.role !== 'admin') {
+    sendJson(res, 403, {
+      ok: false,
+      error: 'Admin access required.',
+      webAuth: buildWebAuthConfigForClient(session.user),
+    });
+    return null;
+  }
+  return session;
 }
 function serializeAccountStateForDisk(accountState) {
   const fleetVehicles = {};
@@ -1626,7 +1878,14 @@ async function initializeStorage() {
   }
 
   config = normalizeConfig(rawConfig);
-  ensureLocalBootstrapWebUser();
+  let configChanged = false;
+  if (!getWebSessionSecret()) {
+    config = normalizeConfig({
+      ...config,
+      webSessionSecret: crypto.randomBytes(32).toString('hex'),
+    });
+    configChanged = true;
+  }
   state = normalizeState(rawState);
   syncUnitsWithConfig();
   recomputeAllAnalyses();
@@ -1645,7 +1904,7 @@ async function initializeStorage() {
   }
   
   const migrationTasks = [];
-  if (astroRoutesChanged) {
+  if (astroRoutesChanged || configChanged) {
     migrationTasks.push(saveConfig());
   }
   for (const accountConfig of getAllAccountConfigs()) {
@@ -1711,10 +1970,31 @@ async function initializeStorage() {
 
 const storageInitializationPromise = initializeStorage();
 
+const RESPONSE_SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "manifest-src 'self'",
+    "worker-src 'self' blob:",
+  ].join('; '),
+};
+
 function send(res, statusCode, content, contentType, extraHeaders) {
   res.writeHead(statusCode, {
     'Content-Type': contentType,
     'Cache-Control': 'no-store',
+    ...RESPONSE_SECURITY_HEADERS,
     ...(extraHeaders || {}),
   });
   res.end(content);
@@ -1723,6 +2003,38 @@ function send(res, statusCode, content, contentType, extraHeaders) {
 function sendJson(res, statusCode, payload, extraHeaders) {
   res.__apiErrorMessage = payload && payload.error ? String(payload.error) : '';
   send(res, statusCode, JSON.stringify(payload, null, 2), 'application/json; charset=utf-8', extraHeaders);
+}
+
+function isSafePublicErrorMessage(message) {
+  const value = String(message || '').trim();
+  if (!value || value.length > 220 || /[<>]/.test(value)) {
+    return false;
+  }
+  return !/(<!doctype|<html|cloudflare|upstream request timeout|object reference not set|supabase|typeerror|referenceerror|syntaxerror|rangeerror|fetch failed|econn|enotfound|etimedout|session cookie is empty|returned html instead of json|http 5\d{2})/i.test(value);
+}
+
+function getPublicErrorMessage(error, fallbackMessage) {
+  const fallback = String(fallbackMessage || 'Aksi gagal diproses.').trim() || 'Aksi gagal diproses.';
+  const candidate = String(error?.publicMessage || error?.message || '').trim();
+  return isSafePublicErrorMessage(candidate) ? candidate : fallback;
+}
+
+function getPublicErrorStatus(error, fallbackStatusCode) {
+  const explicitStatus = Number(error?.statusCode);
+  if (Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus < 600) {
+    return explicitStatus;
+  }
+  if (isSafePublicErrorMessage(error?.publicMessage || error?.message)) {
+    return fallbackStatusCode >= 500 ? 400 : fallbackStatusCode;
+  }
+  return fallbackStatusCode;
+}
+
+function sendApiError(res, error, fallbackMessage, fallbackStatusCode = 500) {
+  sendJson(res, getPublicErrorStatus(error, fallbackStatusCode), {
+    ok: false,
+    error: getPublicErrorMessage(error, fallbackMessage),
+  });
 }
 
 function safePathFromUrl(urlPath) {
@@ -2237,6 +2549,7 @@ function logoutFromSolofleet(accountId) {
 
 function buildStatusPayload(sessionUser) {
   const now = Date.now();
+  const isAdminSession = sessionUser?.role === 'admin';
   const accountSummaries = [];
   const fleetRows = [];
   const liveAlerts = [];
@@ -2279,9 +2592,35 @@ function buildStatusPayload(sessionUser) {
     return (right.timestamp || 0) - (left.timestamp || 0);
   });
 
+  const clientConfig = isAdminSession
+    ? sanitizeConfigForClient()
+    : {
+        activeAccountId: config.activeAccountId,
+        pollIntervalSeconds: config.pollIntervalSeconds,
+        requestIntervalSeconds: config.requestIntervalSeconds,
+        accounts: accountSummaries.map(function (account) {
+          return {
+            id: account.id,
+            label: account.label,
+            authEmail: account.authEmail,
+            hasSessionCookie: account.hasSessionCookie,
+            hasVerifiedSession: account.hasSessionCookie,
+            sessionCookiePreview: null,
+            vehicleRoleId: '',
+            units: [],
+            customerProfiles: [],
+            podSites: [],
+          };
+        }),
+        customerProfiles: [],
+        podSites: [],
+        astroLocations: [],
+        astroRoutes: [],
+      };
+
   return {
     now,
-    config: sanitizeConfigForClient(),
+    config: clientConfig,
     runtime: {
       ...state.runtime,
       pollInFlight,
@@ -2926,6 +3265,17 @@ async function ensurePostgresSchema() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists login_rate_limits (
+      key text primary key,
+      scope text not null,
+      ip_address text,
+      identifier text,
+      count integer not null default 0,
+      reset_at timestamptz not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create table if not exists daily_temp_rollups (
       id text primary key,
       day date not null,
@@ -2983,6 +3333,7 @@ async function ensurePostgresSchema() {
     create index if not exists idx_pod_snapshots_day on pod_snapshots(day desc);
     create index if not exists idx_pod_snapshots_unit_id on pod_snapshots(unit_id);
     create index if not exists idx_dashboard_web_users_username on dashboard_web_users(username);
+    create index if not exists idx_login_rate_limits_reset_at on login_rate_limits(reset_at);
   `);
 }
 
@@ -4946,6 +5297,17 @@ async function handleApi(req, res, url) {
       if (!username || !password) {
         throw new Error('Username and password are required.');
       }
+      const rateLimitKey = buildLoginRateLimitKey(req, 'web-auth', username);
+      const rateLimitResult = await consumeLoginRateLimit(rateLimitKey, WEB_LOGIN_RATE_LIMIT_MAX, LOGIN_RATE_LIMIT_WINDOW_MS);
+      if (!rateLimitResult.allowed) {
+        sendJson(res, 429, {
+          ok: false,
+          error: `Terlalu banyak percobaan login. Coba lagi dalam ${rateLimitResult.retryAfterSeconds} detik.`,
+        }, {
+          'Retry-After': String(rateLimitResult.retryAfterSeconds),
+        });
+        return true;
+      }
       const user = await findWebUserByUsername(username);
       if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
         sendJson(res, 401, {
@@ -4954,7 +5316,8 @@ async function handleApi(req, res, url) {
         });
         return true;
       }
-      const cookie = createWebSessionCookie(user);
+      await clearLoginRateLimit(rateLimitKey);
+      const cookie = createWebSessionCookie(req, user);
       sendJson(res, 200, {
         ok: true,
         user: sanitizeWebUserForClient(user),
@@ -4963,10 +5326,7 @@ async function handleApi(req, res, url) {
         'Set-Cookie': cookie,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
@@ -4977,18 +5337,49 @@ async function handleApi(req, res, url) {
       ok: true,
       webAuth: buildWebAuthConfigForClient(null),
     }, {
-      'Set-Cookie': expiredWebSessionCookie(),
+      'Set-Cookie': expiredWebSessionCookie(req),
     });
     return true;
   }
 
+  if (pathname === '/api/status' && method === 'GET') {
+    const session = await getWebSession(req);
+    if (!session) {
+      sendJson(res, 200, buildPublicStatusPayload());
+      return true;
+    }
+
+    const now = Date.now();
+    for (const account of getAllAccountConfigs()) {
+      const accountState = ensureAccountState(account.id);
+      if (shouldRefreshFleetSnapshot(account, accountState, now)) {
+        try {
+          await refreshFleetSnapshot(account.id);
+          capturePodSnapshots(account, accountState, buildFleetRows(account, accountState, now, buildLiveAlerts(account, accountState, now)));
+          saveConfig();
+          saveState();
+        } catch (error) {
+          accountState.fleet.lastError = error.message;
+          accountState.runtime.lastSnapshotError = error.message;
+          saveState();
+        }
+      }
+    }
+
+    sendJson(res, 200, buildStatusPayload(session.user));
+    return true;
+  }
+
+  if (pathname.startsWith('/api/')) {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+  }
+
   if (pathname === '/api/admin/users' && method === 'GET') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, {
-        ok: false,
-        error: 'Admin access required.',
-      });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -4999,21 +5390,14 @@ async function handleApi(req, res, url) {
         webAuth: buildWebAuthConfigForClient(session.user),
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/users' && method === 'POST') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, {
-        ok: false,
-        error: 'Admin access required.',
-      });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5027,21 +5411,14 @@ async function handleApi(req, res, url) {
         webAuth: buildWebAuthConfigForClient(session.user),
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/users' && method === 'DELETE') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, {
-        ok: false,
-        error: 'Admin access required.',
-      });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5060,18 +5437,14 @@ async function handleApi(req, res, url) {
         webAuth: buildWebAuthConfigForClient(session.user),
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/db' && method === 'GET') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5090,15 +5463,14 @@ async function handleApi(req, res, url) {
         },
       });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/db/rollups' && method === 'POST') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5106,15 +5478,14 @@ async function handleApi(req, res, url) {
       const rollups = await saveAdminTempRollup(body);
       sendJson(res, 200, { ok: true, rollups, storageProvider: getStorageProvider() });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/db/rollups' && method === 'DELETE') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5122,15 +5493,14 @@ async function handleApi(req, res, url) {
       const rollups = await deleteAdminTempRollup(id);
       sendJson(res, 200, { ok: true, rollups, storageProvider: getStorageProvider() });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/db/pod-snapshots' && method === 'POST') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5138,15 +5508,14 @@ async function handleApi(req, res, url) {
       const podSnapshots = await saveAdminPodSnapshot(body);
       sendJson(res, 200, { ok: true, podSnapshots, storageProvider: getStorageProvider() });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/admin/db/pod-snapshots' && method === 'DELETE') {
-    const session = getWebSession(req);
-    if (!session || session.user.role !== 'admin') {
-      sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    const session = await requireAdminSession(req, res);
+    if (!session) {
       return true;
     }
     try {
@@ -5154,11 +5523,15 @@ async function handleApi(req, res, url) {
       const podSnapshots = await deleteAdminPodSnapshot(id);
       sendJson(res, 200, { ok: true, podSnapshots, storageProvider: getStorageProvider() });
     } catch (error) {
-      sendJson(res, 500, { ok: false, error: error.message });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
     if (pathname === '/api/auth/login' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const email = String(body.email || '').trim();
@@ -5166,24 +5539,37 @@ async function handleApi(req, res, url) {
       if (!email || !password) {
         throw new Error('Email and password are required.');
       }
+      const rateLimitKey = buildLoginRateLimitKey(req, 'solofleet-auth', email);
+      const rateLimitResult = await consumeLoginRateLimit(rateLimitKey, SOLOFLEET_LOGIN_RATE_LIMIT_MAX, LOGIN_RATE_LIMIT_WINDOW_MS);
+      if (!rateLimitResult.allowed) {
+        sendJson(res, 429, {
+          ok: false,
+          error: `Terlalu banyak percobaan login Solofleet. Coba lagi dalam ${rateLimitResult.retryAfterSeconds} detik.`,
+        }, {
+          'Retry-After': String(rateLimitResult.retryAfterSeconds),
+        });
+        return true;
+      }
       const configPayload = await loginToSolofleet(email, password, body.rememberMe !== false, {
         accountId: body.accountId,
         label: body.label,
       });
+      await clearLoginRateLimit(rateLimitKey);
       sendJson(res, 200, {
         ok: true,
         config: configPayload,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/auth/logout' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     sendJson(res, 200, {
       ok: true,
       config: logoutFromSolofleet((await readRequestBody(req)).accountId),
@@ -5191,11 +5577,19 @@ async function handleApi(req, res, url) {
     return true;
   }
   if (pathname === '/api/astro/config' && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     sendJson(res, 200, buildAstroConfigPayload());
     return true;
   }
 
   if (pathname === '/api/astro/config/locations' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(Array.isArray(body.locations) ? body.locations : []);
@@ -5208,15 +5602,16 @@ async function handleApi(req, res, url) {
       saveConfig();
       sendJson(res, 200, buildAstroConfigPayload());
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/astro/config/routes' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(config.astroLocations || []);
@@ -5229,15 +5624,16 @@ async function handleApi(req, res, url) {
       saveConfig();
       sendJson(res, 200, buildAstroConfigPayload());
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/astro/config/locations/import' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const parsed = astroCore.parseAstroLocationCsv(body.csvText || '');
@@ -5262,15 +5658,16 @@ async function handleApi(req, res, url) {
         imported: parsed.rows.length,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/astro/config/routes/import' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(config.astroLocations || []);
@@ -5299,10 +5696,7 @@ async function handleApi(req, res, url) {
         imported: parsed.rows.length,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
@@ -5312,10 +5706,7 @@ async function handleApi(req, res, url) {
       const payload = await buildAstroReportPayload(url.searchParams);
       sendJson(res, 200, payload);
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
@@ -5331,20 +5722,25 @@ async function handleApi(req, res, url) {
         'Content-Disposition': 'attachment; filename="Astro Report ' + startLabel + ' to ' + endLabel + ' ' + unitLabel + '.csv"',
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
 
   if (pathname === '/api/config' && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     sendJson(res, 200, sanitizeConfigForClient());
     return true;
   }
 
   if (pathname === '/api/config' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     const body = await readRequestBody(req);
     const targetAccountId = String(body.activeAccountId || config.activeAccountId || 'primary').trim() || 'primary';
     const nextConfig = {
@@ -5414,6 +5810,10 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/discover/units' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const body = await readRequestBody(req);
       const result = await discoverUnits(body.accountId || config.activeAccountId || 'primary');
@@ -5424,34 +5824,8 @@ async function handleApi(req, res, url) {
         config: sanitizeConfigForClient(),
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
-    return true;
-  }
-
-  if (pathname === '/api/status' && method === 'GET') {
-    const now = Date.now();
-    for (const account of getAllAccountConfigs()) {
-      const accountState = ensureAccountState(account.id);
-      if (shouldRefreshFleetSnapshot(account, accountState, now)) {
-        try {
-          await refreshFleetSnapshot(account.id);
-          capturePodSnapshots(account, accountState, buildFleetRows(account, accountState, now, buildLiveAlerts(account, accountState, now)));
-          saveConfig();
-          saveState();
-        } catch (error) {
-          accountState.fleet.lastError = error.message;
-          accountState.runtime.lastSnapshotError = error.message;
-          saveState();
-        }
-      }
-    }
-
-    const session = getWebSession(req);
-    sendJson(res, 200, buildStatusPayload(session ? session.user : null));
     return true;
   }
 
@@ -5520,10 +5894,7 @@ async function handleApi(req, res, url) {
         ...payload,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
@@ -5572,10 +5943,7 @@ async function handleApi(req, res, url) {
         records,
       });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Aksi gagal diproses.');
     }
     return true;
   }
@@ -5591,38 +5959,43 @@ async function handleApi(req, res, url) {
         ...buildUnitDetailPayload(accountId, unitId),
       });
     } catch (error) {
-      sendJson(res, 404, {
-        ok: false,
-        error: error.message,
-      });
+      sendApiError(res, error, 'Unit tidak ditemukan.', 404);
     }
     return true;
   }
 
   if (pathname === '/api/poll/run' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       const result = await runPollCycle('manual');
       sendJson(res, 200, {
         ok: true,
         result,
-        status: buildStatusPayload(),
+        status: buildStatusPayload(session.user),
       });
     } catch (error) {
-      sendJson(res, 500, {
+      sendJson(res, getPublicErrorStatus(error, 500), {
         ok: false,
-        error: error.message,
-        status: buildStatusPayload(),
+        error: getPublicErrorMessage(error, 'Aksi polling gagal diproses.'),
+        status: buildStatusPayload(session.user),
       });
     }
     return true;
   }
 
   if (pathname === '/api/poll/start' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     try {
       await startPolling();
       sendJson(res, 200, {
         ok: true,
-        status: buildStatusPayload(),
+        status: buildStatusPayload(session.user),
       });
     } catch (error) {
       state.runtime.isPolling = false;
@@ -5630,20 +6003,24 @@ async function handleApi(req, res, url) {
       config.autoStart = false;
       saveConfig();
       saveState();
-      sendJson(res, 500, {
+      sendJson(res, getPublicErrorStatus(error, 500), {
         ok: false,
-        error: error.message,
-        status: buildStatusPayload(),
+        error: getPublicErrorMessage(error, 'Aksi polling gagal diproses.'),
+        status: buildStatusPayload(session.user),
       });
     }
     return true;
   }
 
   if (pathname === '/api/poll/stop' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
     stopPolling();
     sendJson(res, 200, {
       ok: true,
-      status: buildStatusPayload(),
+      status: buildStatusPayload(session.user),
     });
     return true;
   }
@@ -5677,6 +6054,7 @@ function handleStatic(req, res, url) {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Cache-Control': 'no-store',
+        ...RESPONSE_SECURITY_HEADERS,
       });
       res.end();
       return;
@@ -5721,10 +6099,7 @@ async function requestHandler(req, res) {
     }
   } catch (error) {
     console.error('[request]', method, pathName, error);
-    sendJson(res, 500, {
-      ok: false,
-      error: error.message,
-    });
+    sendApiError(res, error, 'Aksi gagal diproses.');
   }
 }
 

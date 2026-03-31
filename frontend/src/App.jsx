@@ -573,8 +573,7 @@ export default function App() {
     { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer },
     { id: 'stop', label: 'Stop/Idle', icon: Flag },
     { id: 'api-monitor', label: 'API Monitor', icon: Activity },
-    { id: 'config', label: 'Config', icon: Settings },
-    ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Settings }] : []),
+    ...(isAdmin ? [{ id: 'config', label: 'Config', icon: Settings }, { id: 'admin', label: 'Admin', icon: Settings }] : []),
   ]), [isAdmin]);
 
   const stopBusy = () => {
@@ -685,7 +684,22 @@ export default function App() {
   const loadDashboard = async (syncConfig = false, quiet = false) => {
     if (!quiet) startBusy();
     const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
-    const [nextStatus, nextReport, nextMonitor] = await Promise.all([api('/api/status'), api(`/api/report?${query.toString()}`), api('/api/monitor')]);
+    const nextStatus = await api('/api/status');
+    if (!nextStatus.webAuth?.sessionUser) {
+      startTransition(() => {
+        setStatus(nextStatus);
+        setReport(null);
+        setApiMonitor(null);
+        setWebSessionUser(null);
+        if (syncConfig || !loaded) {
+          setLoaded(true);
+        }
+      });
+      if (!quiet) stopBusy();
+      return;
+    }
+
+    const [nextReport, nextMonitor] = await Promise.all([api(`/api/report?${query.toString()}`), api('/api/monitor')]);
     startTransition(() => {
       const nextActiveAccountId = nextStatus.config?.activeAccountId || 'primary';
       setStatus(nextStatus);
@@ -1014,6 +1028,12 @@ export default function App() {
     if (activePanel === 'admin' && isAdmin) {
       loadAdminUsers(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
       loadAdminDatabase(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
+    }
+  }, [activePanel, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin && (activePanel === 'config' || activePanel === 'admin')) {
+      setActivePanel('overview');
     }
   }, [activePanel, isAdmin]);
 
@@ -1455,7 +1475,7 @@ export default function App() {
             <div className="login-copy">
               <p className="eyebrow local-eyebrow">Ops dashboard</p>
               <h2>Login web dashboard</h2>
-              <p>Login web sekarang dipisah dari login Solofleet. Default bootstrap lokal: <strong>admin / admin</strong>.</p>
+              <p>Login web sekarang dipisah dari login Solofleet. Gunakan akun dashboard yang sudah dibuat oleh admin.</p>
             </div>
           </div>
         </CardHeader>
@@ -1555,7 +1575,7 @@ export default function App() {
         </div>
         <div className="sidebar-bottom profile-dock">
           <button type="button" className="profile-summary-button" onClick={() => {
-            setActivePanel(isAdmin ? 'admin' : 'config');
+            setActivePanel(isAdmin ? 'admin' : 'overview');
             setMobileNavOpen(false);
           }}>
             <strong>{webSessionUser?.displayName || webSessionUser?.username || 'Dashboard user'}</strong>
@@ -1563,7 +1583,7 @@ export default function App() {
           </button>
           <div className="profile-dock-actions">
             <Button variant="bordered" className="profile-dock-btn" onPress={() => {
-              setActivePanel(isAdmin ? 'admin' : 'config');
+              setActivePanel(isAdmin ? 'admin' : 'overview');
               setMobileNavOpen(false);
             }}>Profile</Button>
             <Button variant="light" className="profile-dock-btn" onPress={logoutWeb}>Logout</Button>
@@ -2971,123 +2991,3 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
