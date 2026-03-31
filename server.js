@@ -2329,6 +2329,16 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
       vehicleSnapshot?.temp2 ?? null,
       Boolean(liveSensorFaultType),
     );
+    const geofenceContext = {
+      accountId: accountConfig.id,
+      customerName: customerProfile?.name || '',
+    };
+    const geofencePresence = astroCore.findCurrentGeofencePresence(
+      unitState.records || [],
+      config.astroLocations || [],
+      geofenceContext,
+    );
+    const fallbackGeofenceStatus = (vehicleSnapshot?.speed ?? lastRecord?.speed ?? 0) > 0 ? 'En route' : 'Idle';
 
     return {
       accountId: accountConfig.id,
@@ -2383,12 +2393,60 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
         return incident.type;
       }),
       matchedPodSite: null,
+      geofenceActive: Boolean(geofencePresence),
+      geofenceLocationId: geofencePresence?.locationId || '',
+      geofenceLocationName: geofencePresence?.locationName || '',
+      geofenceLocationType: geofencePresence?.locationType || '',
+      geofenceStatusLabel: geofencePresence?.statusLabel || fallbackGeofenceStatus,
+      geofenceMatchedAt: geofencePresence?.enteredAt || null,
+      geofenceDurationMinutes: geofencePresence?.durationMinutes ?? null,
       sourceStart: analysis.sourceStart,
       sourceEnd: analysis.sourceEnd,
       lastRecordAt: lastRecord ? lastRecord.timestamp : null,
     };
   }).sort(function (left, right) {
     return left.label.localeCompare(right.label);
+  });
+}
+
+function buildGeofenceContext(accountConfig, customerProfile) {
+  return {
+    accountId: accountConfig?.id || 'primary',
+    customerName: customerProfile?.name || '',
+  };
+}
+
+function buildRecordGeofenceLabel(record, geofenceEvents) {
+  const timestamp = Number(record?.timestamp || 0);
+  if (timestamp) {
+    const matchedEvent = (geofenceEvents || []).find(function (event) {
+      return timestamp >= Number(event.enteredAt || 0) && timestamp <= Number(event.leftAt || 0);
+    });
+    if (matchedEvent) {
+      return {
+        geofenceStatusLabel: matchedEvent.statusLabel || astroCore.formatGeofenceStatusLabel({
+          type: matchedEvent.locationType,
+          name: matchedEvent.locationName,
+        }),
+        geofenceLocationName: matchedEvent.locationName || '',
+        geofenceLocationType: matchedEvent.locationType || '',
+      };
+    }
+  }
+
+  return {
+    geofenceStatusLabel: (Number(record?.speed || 0) > 0) ? 'En route' : 'Idle',
+    geofenceLocationName: '',
+    geofenceLocationType: '',
+  };
+}
+
+function annotateHistoryRecordsWithGeofence(records, geofenceEvents) {
+  return (records || []).map(function (record) {
+    return {
+      ...record,
+      ...buildRecordGeofenceLabel(record, geofenceEvents),
+    };
   });
 }
 
@@ -5332,6 +5390,7 @@ function buildUnitDetailPayload(accountId, unitId) {
     accountId: accountConfig.id,
     accountLabel: accountConfig.label,
     unit: configuredUnit,
+    customerProfile: findCustomerProfileForUnit(accountConfig, configuredUnit.id),
     snapshot,
     records: unitState.records,
     incidents: analysis.incidents,
@@ -5999,13 +6058,21 @@ async function handleApi(req, res, url) {
       if (!records.length && historyError) {
         throw historyError;
       }
+      const geofenceEvents = astroCore.buildGeofenceEvents(
+        records,
+        config.astroLocations || [],
+        buildGeofenceContext(accountConfig, detail.customerProfile),
+      );
+      const geofenceAnnotatedRecords = annotateHistoryRecordsWithGeofence(records, geofenceEvents);
       sendJson(res, 200, {
         ok: true,
         accountId,
         unit: detail.unit,
         snapshot: detail.snapshot,
         incidents: detail.incidents,
-        records,
+        customerProfile: detail.customerProfile,
+        geofenceEvents,
+        records: geofenceAnnotatedRecords,
       });
     } catch (error) {
       sendApiError(res, error, 'Aksi gagal diproses.');

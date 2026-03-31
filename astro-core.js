@@ -1,7 +1,9 @@
 const MIN_VALID_STAY_MS = 3 * 60 * 1000;
+const GEOFENCE_MIN_VALID_STAY_MS = Number(process.env.GEOFENCE_MIN_VALID_STAY_MS || (5 * 60 * 1000));
 const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 const EXPORT_TIMEZONE = String(process.env.ASTRO_EXPORT_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
 const ASTRO_SPECIAL_WH_TEMP_THRESHOLD = Number(process.env.ASTRO_SPECIAL_WH_TEMP_THRESHOLD || 10);
+const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 
 function toSolofleetLocalDate(timestamp) {
   const numeric = Number(timestamp);
@@ -108,9 +110,12 @@ function normalizeAstroLocation(value) {
   }
 
   const type = String(value.type || value.locationType || 'POD').trim().toUpperCase();
-  if (!['WH', 'POD', 'POOL'].includes(type)) {
+  if (!GEOFENCE_LOCATION_TYPES.includes(type)) {
     return null;
   }
+
+  const scopeMode = String(value.scopeMode || ((value.scopeAccountIds || value.scopeCustomers || value.scopeCustomerNames) ? 'hybrid' : 'global')).trim().toLowerCase();
+  const normalizedScopeMode = ['global', 'account', 'customer', 'hybrid'].includes(scopeMode) ? scopeMode : 'global';
 
   return {
     id: String(value.id || slugify(name, 'astro-location')).trim(),
@@ -119,6 +124,9 @@ function normalizeAstroLocation(value) {
     longitude,
     radiusMeters: Math.max(20, toNumber(value.radiusMeters ?? value.radius ?? 150) || 150),
     type,
+    scopeMode: normalizedScopeMode,
+    scopeAccountIds: splitCsvish(value.scopeAccountIds).map((item) => String(item || '').trim()).filter(Boolean),
+    scopeCustomerNames: splitCsvish(value.scopeCustomerNames ?? value.scopeCustomers).map((item) => String(item || '').trim()).filter(Boolean),
     isActive: value.isActive === undefined ? true : Boolean(value.isActive),
     notes: String(value.notes || '').trim(),
   };
@@ -182,9 +190,12 @@ function parseAstroLocationCsv(csvText) {
       longitude: parts[2],
       radiusMeters: parts[3],
       type: parts[4],
+      scopeMode: parts[5] || 'global',
+      scopeAccountIds: parts[6] || '',
+      scopeCustomerNames: parts[7] || '',
     });
     if (!location) {
-      errors.push(`Row ${index + 1} invalid. Format wajib: Nama Tempat, Latitude, Longitude, Radius, Type.`);
+      errors.push(`Row ${index + 1} invalid. Format wajib: Nama Tempat, Latitude, Longitude, Radius, Type, Scope Mode (opsional), Account Scope (opsional), Customer Scope (opsional).`);
       return;
     }
     rows.push(location);
@@ -408,6 +419,131 @@ function buildVisitEvents(records, location) {
 
   finalizeSegment();
   return events;
+}
+
+function normalizeScopeKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function locationMatchesScope(location, context) {
+  if (!location) {
+    return false;
+  }
+  const accountKeys = (location.scopeAccountIds || []).map(normalizeScopeKey).filter(Boolean);
+  const customerKeys = (location.scopeCustomerNames || []).map(normalizeScopeKey).filter(Boolean);
+  const accountKey = normalizeScopeKey(context?.accountId || 'primary');
+  const customerKey = normalizeScopeKey(context?.customerName || '');
+
+  const accountMatches = !accountKeys.length || accountKeys.includes(accountKey);
+  const customerMatches = !customerKeys.length || (customerKey && customerKeys.includes(customerKey));
+  return accountMatches && customerMatches;
+}
+
+function findNearestGeofenceMatch(point, locations, context) {
+  const latitude = toNumber(point?.latitude);
+  const longitude = toNumber(point?.longitude);
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  const matches = [];
+  for (const location of locations || []) {
+    if (!location || location.isActive === false || !locationMatchesScope(location, context)) {
+      continue;
+    }
+    const distance = distanceMeters(latitude, longitude, location.latitude, location.longitude);
+    if (distance <= location.radiusMeters) {
+      matches.push({
+        ...location,
+        distanceMeters: distance,
+      });
+    }
+  }
+
+  matches.sort((left, right) => left.distanceMeters - right.distanceMeters);
+  return matches[0] || null;
+}
+
+function formatGeofenceStatusLabel(location) {
+  if (!location) {
+    return '';
+  }
+  return `Sampai ${location.type} ${location.name}`;
+}
+
+function buildGeofenceEvents(records, locations, context, minimumStayMs = GEOFENCE_MIN_VALID_STAY_MS) {
+  const sortedRecords = [...(records || [])]
+    .filter((record) => record && Number(record.timestamp))
+    .sort((left, right) => Number(left.timestamp || 0) - Number(right.timestamp || 0));
+  const events = [];
+  let segment = null;
+
+  function finalizeSegment() {
+    if (!segment) {
+      return;
+    }
+    const durationMs = (segment.lastTimestamp || 0) - (segment.enteredAt || 0);
+    if (durationMs >= minimumStayMs) {
+      events.push({
+        locationId: segment.location.id,
+        locationName: segment.location.name,
+        locationType: segment.location.type,
+        enteredAt: segment.enteredAt,
+        leftAt: segment.lastTimestamp,
+        durationMinutes: Number((durationMs / 60000).toFixed(2)),
+        distanceMeters: Number((segment.lastDistance ?? segment.firstDistance ?? 0).toFixed(1)),
+        statusLabel: formatGeofenceStatusLabel(segment.location),
+      });
+    }
+    segment = null;
+  }
+
+  for (const record of sortedRecords) {
+    const matchedLocation = findNearestGeofenceMatch(record, locations, context);
+    if (!matchedLocation) {
+      finalizeSegment();
+      continue;
+    }
+
+    if (!segment || segment.location.id !== matchedLocation.id) {
+      finalizeSegment();
+      segment = {
+        location: matchedLocation,
+        enteredAt: Number(record.timestamp || 0),
+        lastTimestamp: Number(record.timestamp || 0),
+        firstDistance: matchedLocation.distanceMeters,
+        lastDistance: matchedLocation.distanceMeters,
+      };
+      continue;
+    }
+
+    segment.lastTimestamp = Number(record.timestamp || 0);
+    segment.lastDistance = matchedLocation.distanceMeters;
+  }
+
+  finalizeSegment();
+  return events;
+}
+
+function findCurrentGeofencePresence(records, locations, context, minimumStayMs = GEOFENCE_MIN_VALID_STAY_MS) {
+  const sortedRecords = [...(records || [])]
+    .filter((record) => record && Number(record.timestamp))
+    .sort((left, right) => Number(left.timestamp || 0) - Number(right.timestamp || 0));
+  if (!sortedRecords.length) {
+    return null;
+  }
+
+  const latestTimestamp = Number(sortedRecords[sortedRecords.length - 1].timestamp || 0);
+  const recentRecords = sortedRecords.filter((record) => Number(record.timestamp || 0) >= latestTimestamp - Math.max(minimumStayMs * 3, 30 * 60 * 1000));
+  const events = buildGeofenceEvents(recentRecords, locations, context, minimumStayMs);
+  if (!events.length) {
+    return null;
+  }
+  const latestEvent = events[events.length - 1];
+  if (latestEvent.leftAt !== latestTimestamp) {
+    return null;
+  }
+  return latestEvent;
 }
 
 function isSpecialAstroWhTemperatureFallback(location) {
@@ -875,11 +1011,17 @@ function flattenAstroRow(row, options) {
 
 module.exports = {
   MIN_VALID_STAY_MS,
+  GEOFENCE_MIN_VALID_STAY_MS,
   normalizeAstroLocation,
   normalizeAstroRoute,
   parseAstroLocationCsv,
   parseAstroRouteCsv,
   annotateFleetRowsWithAstro,
+  buildGeofenceEvents,
+  findCurrentGeofencePresence,
+  formatGeofenceStatusLabel,
+  findNearestGeofenceMatch,
+  locationMatchesScope,
   buildRouteReportRows,
   buildAstroColumns,
   flattenAstroRow,

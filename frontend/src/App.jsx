@@ -44,6 +44,14 @@ function today(offset = 0) {
   return formatInputDate(new Date(Date.now() + (offset * 24 * 60 * 60 * 1000)));
 }
 
+function splitCsvText(value) {
+  return String(value || "")
+    .split(/[;,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+
 const EMPTY_FORM = {
   baseUrl: 'https://www.solofleet.com',
   endpointPath: '/ReportTemperatureChart/getVehicleDetailDefrostJson',
@@ -72,11 +80,20 @@ const EMPTY_SOLOFLEET_LOGIN_FORM = { email: '', password: '', rememberMe: true, 
 const EMPTY_WEB_USER_FORM = { id: '', username: '', displayName: '', password: '', role: 'admin', isActive: true };
 const EMPTY_ADMIN_ROLLUP_FORM = { id: '', day: today(0), accountId: 'primary', accountLabel: '', unitId: '', unitLabel: '', vehicle: '', type: 'temp1', label: '', incidents: '0', temp1Incidents: '0', temp2Incidents: '0', bothIncidents: '0', firstStartTimestamp: '', lastEndTimestamp: '', durationMinutes: '0', totalMinutes: '0', longestMinutes: '0', temp1Min: '', temp1Max: '', temp2Min: '', temp2Max: '', minSpeed: '', maxSpeed: '', latitude: '', longitude: '', locationSummary: '', zoneName: '' };
 const EMPTY_ADMIN_POD_FORM = { id: '', day: today(0), timestamp: '', time: '', unitId: '', unitLabel: '', customerName: '', podId: '', podName: '', latitude: '', longitude: '', speed: '', distanceMeters: '', locationSummary: '' };
-const EMPTY_ASTRO_LOCATION_FORM = { id: '', name: '', latitude: '', longitude: '', radiusMeters: '150', type: 'POD', isActive: true, notes: '' };
+const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
+const GEOFENCE_LOCATION_LABELS = {
+  WH: 'Warehouse',
+  POD: 'POD',
+  POOL: 'Pool',
+  POL: 'POL',
+  REST: 'Rest Area',
+  PELABUHAN: 'Pelabuhan',
+};
+const EMPTY_ASTRO_LOCATION_FORM = { id: '', name: '', latitude: '', longitude: '', radiusMeters: '150', type: 'POD', scopeMode: 'global', scopeAccountIds: '', scopeCustomerNames: '', isActive: true, notes: '' };
 const ASTRO_GROUP_PREVIEW_LIMIT = 5;
 const ASTRO_ROUTE_MAX_PODS = 5;
 const EMPTY_ASTRO_ROUTE_FORM = { id: '', accountId: 'primary', unitId: '', customerName: 'Astro', whLocationId: '', poolLocationId: '', podSequence: [''], rit1Start: '05:00', rit1End: '14:59', rit2Enabled: false, rit2Start: '19:00', rit2End: '06:00', isActive: true, notes: '' };
-const ASTRO_LOCATION_SAMPLE_CSV = ['Nama Tempat,Latitude,Longitude,Radius,Type', 'Astro WH CBN,-6.296412,107.146281,180,WH', 'Astro POD Bekasi Timur,-6.238765,106.999321,120,POD', 'Astro Pool Cakung,-6.182450,106.935870,160,POOL'].join('\n');
+const ASTRO_LOCATION_SAMPLE_CSV = ['Nama Tempat,Latitude,Longitude,Radius,Type', 'Astro WH CBN,-6.296412,107.146281,180,WH', 'Astro POD Bekasi Timur,-6.238765,106.999321,120,POD', 'Astro Pool Cakung,-6.182450,106.935870,160,POOL', 'Rest KM 39,-6.557777,106.781111,180,REST'].join('\n');
 const ASTRO_ROUTE_SAMPLE_CSV = ['Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit2 Enabled,Rit2 Start,Rit2 End,Active,Notes', 'primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,false,19:00,06:00,true,Rit pagi only'].join('\n');
 
 const api = async (url, options = {}) => {
@@ -414,6 +431,15 @@ export default function App() {
   const astroWhLocations = useMemo(() => astroLocations.filter((location) => location.type === 'WH'), [astroLocations]);
   const astroPodLocations = useMemo(() => astroLocations.filter((location) => location.type === 'POD'), [astroLocations]);
   const astroPoolLocations = useMemo(() => astroLocations.filter((location) => location.type === 'POOL'), [astroLocations]);
+  const geofenceLocationCounts = useMemo(() => {
+    const counts = Object.fromEntries(GEOFENCE_LOCATION_TYPES.map((type) => [type, 0]));
+    astroLocations.forEach((location) => {
+      if (counts[location.type] !== undefined) {
+        counts[location.type] += 1;
+      }
+    });
+    return counts;
+  }, [astroLocations]);
   const astroRouteUnitOptions = useMemo(() => {
     const seen = new Set();
     return [...fleetRows.map((row) => ({ accountId: row.accountId || 'primary', accountLabel: row.accountLabel || row.accountId || 'primary', id: row.id, label: row.label })), ...availableAccounts.flatMap((account) => (account.units || []).map((unit) => ({ accountId: account.id, accountLabel: account.label || account.authEmail || account.id, id: unit.id, label: unit.label })))]
@@ -435,10 +461,11 @@ export default function App() {
   }, [astroRouteUnitOptions]);
   const astroRouteFilteredUnitOptions = useMemo(() => astroRouteUnitOptions.filter((unit) => unit.accountId === astroRouteForm.accountId).map((unit) => ({ value: unit.id, label: `${unit.accountLabel} | ${unit.label || unit.id}` })), [astroRouteUnitOptions, astroRouteForm.accountId]);
   const historyTripMetrics = useMemo(() => calculateTripMetrics(unitDetail?.records || []), [unitDetail?.records]);
+  const historicalGeofenceEvents = useMemo(() => unitDetail?.geofenceEvents || [], [unitDetail?.geofenceEvents]);
   const astroWhOptions = useMemo(() => astroWhLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label)), [astroWhLocations]);
   const astroPoolOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPoolLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPoolLocations]);
   const astroPodOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPodLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPodLocations]);
-  const astroLocationGroups = useMemo(() => ['WH', 'POD', 'POOL'].map((type) => ({ key: type, title: type === 'WH' ? 'Warehouse' : type === 'POOL' ? 'Pool' : 'POD', items: astroLocations.filter((location) => location.type === type).sort((left, right) => Number(right.isActive !== false) - Number(left.isActive !== false) || String(left.name).localeCompare(String(right.name))) })).filter((group) => group.items.length > 0), [astroLocations]);
+  const astroLocationGroups = useMemo(() => GEOFENCE_LOCATION_TYPES.map((type) => ({ key: type, title: GEOFENCE_LOCATION_LABELS[type] || type, items: astroLocations.filter((location) => location.type === type).sort((left, right) => Number(right.isActive !== false) - Number(left.isActive !== false) || String(left.name).localeCompare(String(right.name))) })).filter((group) => group.items.length > 0), [astroLocations]);
   const astroRouteGroups = useMemo(() => {
     const grouped = new globalThis.Map();
     astroRoutes.forEach((route) => {
@@ -461,7 +488,7 @@ export default function App() {
     if (!query) return astroLocationGroups;
     return astroLocationGroups.map((group) => ({
       ...group,
-      items: group.items.filter((location) => [location.name, location.id, location.type, location.notes].some((value) => String(value || '').toLowerCase().includes(query))),
+      items: group.items.filter((location) => [location.name, location.id, location.type, location.notes, location.scopeMode, ...(location.scopeAccountIds || []), ...(location.scopeCustomerNames || [])].some((value) => String(value || '').toLowerCase().includes(query))),
     })).filter((group) => group.items.length > 0);
   }, [astroLocationGroups, astroLocationSearch]);
   const astroFilteredRouteGroups = useMemo(() => {
@@ -1214,6 +1241,9 @@ export default function App() {
     longitude: Number(draft.longitude),
     radiusMeters: Number(draft.radiusMeters || 150),
     type: draft.type,
+    scopeMode: draft.scopeMode || 'global',
+    scopeAccountIds: splitCsvText(draft.scopeAccountIds),
+    scopeCustomerNames: splitCsvText(draft.scopeCustomerNames),
     isActive: Boolean(draft.isActive),
     notes: draft.notes.trim(),
   });
@@ -1276,10 +1306,13 @@ export default function App() {
       longitude: String(location.longitude ?? ''),
       radiusMeters: String(location.radiusMeters ?? 150),
       type: location.type || 'POD',
+      scopeMode: location.scopeMode || 'global',
+      scopeAccountIds: (location.scopeAccountIds || []).join(', '),
+      scopeCustomerNames: (location.scopeCustomerNames || []).join(', '),
       isActive: location.isActive !== false,
       notes: location.notes || '',
     });
-    focusAstroEditor(astroLocationCardRef, `Editing Astro location ${location.name || location.id || ''}`.trim());
+    focusAstroEditor(astroLocationCardRef, `Editing geofence ${location.name || location.id || ''}`.trim());
   };
 
   const saveAstroLocationEntry = async () => {
@@ -1291,11 +1324,11 @@ export default function App() {
         : [...astroLocations, entry];
       await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations }) });
       setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
-      setBanner({ tone: 'success', message: 'Astro location saved.' });
+      setBanner({ tone: 'success', message: 'Geofence saved.' });
       await loadDashboard(true, true);
     } catch (error) {
-      setAuthModal({ open: true, message: error.message || 'Astro location gagal disimpan.' });
-      setBanner({ tone: 'error', message: error.message || 'Astro location gagal disimpan.' });
+      setAuthModal({ open: true, message: error.message || 'Geofence gagal disimpan.' });
+      setBanner({ tone: 'error', message: error.message || 'Geofence gagal disimpan.' });
     } finally {
       stopBusy();
     }
@@ -1307,11 +1340,11 @@ export default function App() {
       const nextLocations = astroLocations.filter((location) => location.id !== locationId);
       await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations }) });
       if (astroLocationForm.id === locationId) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
-      setBanner({ tone: 'success', message: 'Astro location deleted.' });
+      setBanner({ tone: 'success', message: 'Geofence deleted.' });
       await loadDashboard(true, true);
     } catch (error) {
-      setAuthModal({ open: true, message: error.message || 'Astro location gagal dihapus.' });
-      setBanner({ tone: 'error', message: error.message || 'Astro location gagal dihapus.' });
+      setAuthModal({ open: true, message: error.message || 'Geofence gagal dihapus.' });
+      setBanner({ tone: 'error', message: error.message || 'Geofence gagal dihapus.' });
     } finally {
       stopBusy();
     }
@@ -1723,7 +1756,7 @@ export default function App() {
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
                             <td><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
-                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div>{row.astroActive ? <div className="subtle-line astro-inline-status">{row.astroStatusLabel}</div> : null}</div></td>
+                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div>{row.geofenceStatusLabel ? <div className="subtle-line astro-inline-status">{row.geofenceStatusLabel}</div> : null}{row.astroActive ? <div className="subtle-line astro-inline-status">{row.astroStatusLabel}</div> : null}</div></td>
                             <td><div><div>{row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : '-'}</div><div className="subtle-line">{row.setpointLabel || 'No rule'}</div></div></td>
                             <td><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
                             <td>{fmtNum(row.speed, 0)}</td>
@@ -1887,16 +1920,6 @@ export default function App() {
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setActivePanel('fleet')}>Back to Fleet Live</Button>
-                  {selectedHistoricalRow && selectedHistoricalRow.latitude !== null && selectedHistoricalRow.longitude !== null ? (
-                    <a
-                      className="sf-btn sf-btn-bordered"
-                      href={`https://www.google.com/maps?q=${selectedHistoricalRow.latitude},${selectedHistoricalRow.longitude}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open map
-                    </a>
-                  ) : null}
                   <Button variant="bordered" onPress={exportHistory}>Export history CSV</Button>
                 </div>
               </CardHeader>
@@ -1948,7 +1971,9 @@ export default function App() {
                     </div>
                     <TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
                     <div className="spacer-16" />
-                    <DataTable columns={['Timestamp', 'Speed', 'Temp 1', 'Temp 2', 'Location', 'Lat', 'Lng', 'Power supply']} emptyMessage="Belum ada historical rows untuk unit ini di range ini." rows={[...(unitDetail?.records || [])].reverse().map((row) => [fmtDate(row.timestamp), fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, fmtCoord(row.latitude), fmtCoord(row.longitude), fmtNum(row.powerSupply, 2)])} />
+                    <DataTable columns={["Status", "Masuk", "Keluar", "Durasi", "Jarak", "Lokasi"]} emptyMessage="Belum ada event geofence yang valid di range ini." rows={historicalGeofenceEvents.map((event) => [event.statusLabel || "-", fmtDate(event.enteredAt), fmtDate(event.leftAt), formatMinutesText(event.durationMinutes), event.distanceMeters != null ? `${fmtNum(event.distanceMeters, 0)} m` : "-", <div><div>{event.locationName || "-"}</div><div className="subtle-line">{event.locationType || "-"}</div></div>])} />
+                    <div className="spacer-16" />
+                    <DataTable pagination={{ initialRowsPerPage: 30, rowsPerPageOptions: [30, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Lat", "Lng", "Power supply", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range ini." rows={[...(unitDetail?.records || [])].reverse().map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || "-"}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || "Outside geofence"}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || "-"}</div><div className="subtle-line">{row.zoneName || "No zone"}</div></div>, fmtCoord(row.latitude), fmtCoord(row.longitude), fmtNum(row.powerSupply, 2), row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : "-"])} />
                   </> : <div className="empty-state">Belum ada unit yang cocok dengan filter historical.</div>}
                 </> : <div className="empty-state">Belum ada unit dari fleet live untuk dipilih.</div>}
               </CardContent>
@@ -1970,12 +1995,12 @@ export default function App() {
             <Card ref={astroLocationCardRef} className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
-                  <h2>Astro set location</h2>
-                  <p>Kelola lokasi WH, POD, dan POOL untuk kebutuhan report Astro.</p>
+                  <h2>Geofence locations</h2>
+                  <p>Kelola lokasi umum untuk Fleet Live dan Historical, termasuk WH, POD, POOL, POL, REST, dan PELABUHAN.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => setAstroLocationSectionOpen((current) => !current)}>{astroLocationSectionOpen ? 'Collapse' : 'Expand'}</Button>
-                  {astroLocationSectionOpen ? <Button color="primary" onPress={saveAstroLocationEntry}>{astroLocationForm.id ? 'Update location' : 'Save location'}</Button> : null}
+                  {astroLocationSectionOpen ? <Button color="primary" onPress={saveAstroLocationEntry}>{astroLocationForm.id ? 'Update geofence' : 'Save geofence'}</Button> : null}
                 </div>
               </CardHeader>
               {astroLocationSectionOpen ? <CardContent>
@@ -1985,8 +2010,13 @@ export default function App() {
                     <label className="field"><span>Latitude</span><input type="number" step="any" value={astroLocationForm.latitude} onChange={(event) => setAstroLocationForm((current) => ({ ...current, latitude: event.target.value }))} placeholder="-6.2" /></label>
                     <label className="field"><span>Longitude</span><input type="number" step="any" value={astroLocationForm.longitude} onChange={(event) => setAstroLocationForm((current) => ({ ...current, longitude: event.target.value }))} placeholder="106.8" /></label>
                     <label className="field"><span>Radius (m)</span><input type="number" min="20" value={astroLocationForm.radiusMeters} onChange={(event) => setAstroLocationForm((current) => ({ ...current, radiusMeters: event.target.value }))} /></label>
-                    <label className="field"><span>Type</span><select value={astroLocationForm.type} onChange={(event) => setAstroLocationForm((current) => ({ ...current, type: event.target.value }))}><option value="WH">WH</option><option value="POD">POD</option><option value="POOL">POOL</option></select></label>
+                    <label className="field"><span>Type</span><select value={astroLocationForm.type} onChange={(event) => setAstroLocationForm((current) => ({ ...current, type: event.target.value }))}>{GEOFENCE_LOCATION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                    <label className="field"><span>Scope</span><select value={astroLocationForm.scopeMode} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeMode: event.target.value }))}><option value="global">Global</option><option value="account">By account</option><option value="customer">By customer</option><option value="hybrid">Account + customer</option></select></label>
                     <label className="field checkbox-field"><input type="checkbox" checked={astroLocationForm.isActive} onChange={(event) => setAstroLocationForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
+                  </div>
+                  <div className="form-grid astro-config-grid">
+                    <label className="field"><span>Account scope</span><input type="text" value={astroLocationForm.scopeAccountIds} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeAccountIds: event.target.value }))} placeholder="primary, vendor-mti" /></label>
+                    <label className="field"><span>Customer scope</span><input type="text" value={astroLocationForm.scopeCustomerNames} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeCustomerNames: event.target.value }))} placeholder="Astro, Starbucks" /></label>
                   </div>
                   <label className="field"><span>Notes</span><input type="text" value={astroLocationForm.notes} onChange={(event) => setAstroLocationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional note" /></label>
                   <div className="inline-buttons">
@@ -2002,7 +2032,7 @@ export default function App() {
                     </div>
                     <pre className="astro-sample-pre">{ASTRO_LOCATION_SAMPLE_CSV}</pre>
                   </div>
-                  <label className="field"><span>Bulk CSV import</span><textarea rows="5" value={astroCsvText} onChange={(event) => setAstroCsvText(event.target.value)} placeholder="Nama Tempat, Latitude, Longitude, Radius, Type" /></label>
+                  <label className="field"><span>Bulk CSV import</span><textarea rows="5" value={astroCsvText} onChange={(event) => setAstroCsvText(event.target.value)} placeholder="Nama Tempat, Latitude, Longitude, Radius, Type, Scope Mode, Account Scope, Customer Scope" /></label>
                   <div className="inline-buttons">
                     <input type="file" accept=".csv,text/csv" onChange={loadAstroCsvFile} />
                     <Button variant="bordered" onPress={() => importAstroLocations(false)}>Import merge</Button>
@@ -2012,15 +2042,13 @@ export default function App() {
                     <span>Search saved locations</span>
                     <div className="search-box historical-search-box">
                       <Search size={16} className="search-icon" />
-                      <input type="search" value={astroLocationSearch} onChange={(event) => setAstroLocationSearch(event.target.value)} placeholder="Cari nama lokasi, type, note..." />
+                      <input type="search" value={astroLocationSearch} onChange={(event) => setAstroLocationSearch(event.target.value)} placeholder="Cari nama lokasi, type, scope, note..." />
                     </div>
                   </label>
                   {astroFilteredLocationGroups.length ? <div className="astro-group-stack">
                     <div className="astro-group-summary">
                       <Chip>{astroLocations.length} lokasi</Chip>
-                      <Chip color="info">WH {astroWhLocations.length}</Chip>
-                      <Chip color="warning">POD {astroPodLocations.length}</Chip>
-                      <Chip color="default">POOL {astroPoolLocations.length}</Chip>
+                      {GEOFENCE_LOCATION_TYPES.map((type) => <Chip key={type} color={type === 'WH' ? 'info' : type === 'POD' ? 'warning' : 'default'}>{type} {geofenceLocationCounts[type] || 0}</Chip>)}
                     </div>
                     {astroFilteredLocationGroups.map((group) => {
                       const expanded = astroLocationExpanded[group.key] === true;
@@ -2038,7 +2066,7 @@ export default function App() {
                             <div className="astro-entity-card-head">
                               <div>
                                 <strong>{location.name}</strong>
-                                <span>{location.type} | {location.radiusMeters} m</span>
+                                <span>{location.type} | {location.radiusMeters} m | {location.scopeMode || 'global'}</span>
                               </div>
                               <Chip color={location.isActive !== false ? 'success' : 'default'}>{location.isActive !== false ? 'Active' : 'Inactive'}</Chip>
                             </div>
@@ -2047,6 +2075,7 @@ export default function App() {
                               <span>Lng {fmtCoord(location.longitude)}</span>
                             </div>
                             <p className={location.notes ? 'astro-entity-note' : 'astro-entity-note astro-entity-note-muted'}>{location.notes || 'No note'}</p>
+                            <p className="astro-entity-note astro-entity-note-muted">{(location.scopeAccountIds || []).length ? `Account: ${(location.scopeAccountIds || []).join(', ')}` : 'Account: all'} | {(location.scopeCustomerNames || []).length ? `Customer: ${(location.scopeCustomerNames || []).join(', ')}` : 'Customer: all'}</p>
                             <div className="inline-buttons astro-entity-actions">
                               <Button variant="bordered" onPress={() => editAstroLocationEntry(location)}>Edit</Button>
                               <Button variant="light" onPress={() => deleteAstroLocationEntry(location.id)}>Delete</Button>
@@ -2482,6 +2511,7 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
           <Chip variant="flat">Updated {fmtAgo(row.minutesSinceUpdate)}</Chip>
           <Chip variant="flat">Auto refresh {autoRefreshSeconds}s</Chip>
           {row.matchedPodSite ? <Chip color="success" variant="flat">POD {row.matchedPodSite.name}</Chip> : null}
+          {row.geofenceStatusLabel ? <Chip color={row.geofenceActive ? 'success' : row.isMoving ? 'primary' : 'default'} variant="flat">{row.geofenceStatusLabel}</Chip> : null}
           {row.astroActive ? <Chip color={row.astroCurrentLocation ? 'warning' : 'default'} variant="flat">{row.astroStatusLabel}</Chip> : null}
         </div>
       </div>
@@ -3040,3 +3070,13 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
+
