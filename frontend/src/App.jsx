@@ -194,11 +194,58 @@ const haversineKm = (leftLat, leftLng, rightLat, rightLng) => {
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
-const calculateTripMetrics = (records = []) => {
+const sanitizeRouteRecords = (records = []) => {
   const ordered = [...(records || [])]
-    .map((record) => ({ ...record, parsedTimestamp: parseDateValue(record.timestamp) }))
-    .filter((record) => record.parsedTimestamp)
-    .sort((left, right) => left.parsedTimestamp.getTime() - right.parsedTimestamp.getTime());
+    .map((record) => ({
+      ...record,
+      timestampMs: toTimestampMs(record.timestamp),
+      latitude: Number(record.latitude),
+      longitude: Number(record.longitude),
+      speed: Number(record.speed ?? 0),
+    }))
+    .filter((record) => Number.isFinite(record.timestampMs) && Number.isFinite(record.latitude) && Number.isFinite(record.longitude))
+    .sort((left, right) => left.timestampMs - right.timestampMs);
+
+  const cleaned = [];
+  let previous = null;
+  for (const record of ordered) {
+    if (!previous) {
+      cleaned.push(record);
+      previous = record;
+      continue;
+    }
+
+    const diffMinutes = (record.timestampMs - previous.timestampMs) / 60000;
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) {
+      continue;
+    }
+
+    const distanceKm = haversineKm(previous.latitude, previous.longitude, record.latitude, record.longitude);
+    const inferredSpeedKmh = diffMinutes > 0 ? distanceKm / (diffMinutes / 60) : 0;
+    const bothSlow = (previous.speed || 0) <= 5 && (record.speed || 0) <= 5;
+
+    if (bothSlow && distanceKm <= 0.03) {
+      cleaned[cleaned.length - 1] = record;
+      previous = record;
+      continue;
+    }
+
+    if (inferredSpeedKmh > 130) {
+      continue;
+    }
+
+    if (bothSlow && distanceKm > 0.3) {
+      continue;
+    }
+
+    cleaned.push(record);
+    previous = record;
+  }
+
+  return cleaned;
+};
+const calculateTripMetrics = (records = []) => {
+  const ordered = sanitizeRouteRecords(records);
   if (ordered.length < 2) return { distanceKm: 0, movingMinutes: 0, stoppedMinutes: 0 };
   let distanceKm = 0;
   let movingMinutes = 0;
@@ -206,7 +253,7 @@ const calculateTripMetrics = (records = []) => {
   for (let index = 1; index < ordered.length; index += 1) {
     const previous = ordered[index - 1];
     const current = ordered[index];
-    const diffMinutes = (current.parsedTimestamp.getTime() - previous.parsedTimestamp.getTime()) / 60000;
+    const diffMinutes = (current.timestampMs - previous.timestampMs) / 60000;
     if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) continue;
     distanceKm += haversineKm(previous.latitude, previous.longitude, current.latitude, current.longitude);
     const moving = Number(previous.speed ?? current.speed ?? 0) > 0;
@@ -2673,21 +2720,16 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
   const trackPoints = useMemo(() => {
     const next = [];
     let previousKey = '';
-    for (const record of (records || []).slice().sort((left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp))) {
-      const latitude = Number(record?.latitude);
-      const longitude = Number(record?.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        continue;
-      }
-      const key = `${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
+    for (const record of sanitizeRouteRecords(records)) {
+      const key = `${record.latitude.toFixed(6)}:${record.longitude.toFixed(6)}`;
       if (key === previousKey) {
         continue;
       }
       previousKey = key;
       next.push({
-        latitude,
-        longitude,
-        timestamp: toTimestampMs(record.timestamp) || null,
+        latitude: record.latitude,
+        longitude: record.longitude,
+        timestamp: record.timestampMs || null,
         locationSummary: record.locationSummary || '',
       });
     }
@@ -3109,6 +3151,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 
