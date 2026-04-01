@@ -2021,7 +2021,7 @@ const storageInitializationPromise = initializeStorage();
 const RESPONSE_SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'same-origin',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'X-DNS-Prefetch-Control': 'off',
@@ -6350,6 +6350,7 @@ if (require.main === module) {
     }
   });
 }
+
 
 
 
