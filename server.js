@@ -2032,11 +2032,11 @@ const RESPONSE_SECURITY_HEADERS = {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org",
-    "font-src 'self' data:",
-    "connect-src 'self'",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https://static.cloudflareinsights.com https://cloudflareinsights.com",
     "manifest-src 'self'",
     "worker-src 'self' blob:",
   ].join('; '),
@@ -6350,6 +6350,7 @@ if (require.main === module) {
     }
   });
 }
+
 
 
 

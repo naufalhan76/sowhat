@@ -156,6 +156,10 @@ const parseDateValue = (value) => {
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+const toTimestampMs = (value) => {
+  const parsed = parseDateValue(value);
+  return parsed ? parsed.getTime() : 0;
+};
 const formatStayText = (startValue, endValue) => {
   const start = parseDateValue(startValue);
   const end = parseDateValue(endValue);
@@ -720,7 +724,7 @@ export default function App() {
       setBanner({ tone: 'error', message: error.message });
       setAuthModal({ open: true, message: error.message || 'Initial dashboard load failed.' });
     });
-  }, [leaflet]);
+  }, []);
 
   useEffect(() => {
     if (!banner.message) return undefined;
@@ -732,7 +736,7 @@ export default function App() {
 
   useEffect(() => () => {
     if (busyTimeoutRef.current) window.clearTimeout(busyTimeoutRef.current);
-  }, [leaflet]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1160,7 +1164,7 @@ export default function App() {
       mobileNavMedia.removeEventListener?.('change', syncLayout);
       compactTopbarMedia.removeEventListener?.('change', syncLayout);
     };
-  }, [leaflet]);
+  }, []);
 
   const discoverUnits = async (targetAccountId = activeAccountId) => {
     const resolvedAccountId = targetAccountId || activeAccountId;
@@ -2669,7 +2673,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
   const trackPoints = useMemo(() => {
     const next = [];
     let previousKey = '';
-    for (const record of (records || []).slice().sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0))) {
+    for (const record of (records || []).slice().sort((left, right) => toTimestampMs(left.timestamp) - toTimestampMs(right.timestamp))) {
       const latitude = Number(record?.latitude);
       const longitude = Number(record?.longitude);
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -2683,7 +2687,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       next.push({
         latitude,
         longitude,
-        timestamp: record.timestamp || null,
+        timestamp: toTimestampMs(record.timestamp) || null,
         locationSummary: record.locationSummary || '',
       });
     }
@@ -2698,7 +2702,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
     return {
       latitude,
       longitude,
-      timestamp: row?.lastUpdatedAt || null,
+      timestamp: toTimestampMs(row?.lastUpdatedAt) || null,
       locationSummary: row?.locationSummary || '',
     };
   }, [row?.latitude, row?.longitude, row?.lastUpdatedAt, row?.locationSummary]);
@@ -2836,9 +2840,8 @@ function TemperatureChart({ records, busy, title, description, compact = false }
   const chartId = useId().replace(/:/g, '');
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
-    .slice()
-    .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0))
-    .slice(), [records]);
+    .map((record) => ({ ...record, timestamp: toTimestampMs(record.timestamp) || null }))
+    .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0)), [records]);
   const [zoomRange, setZoomRange] = useState({ start: 0, end: 0 });
   const [hoverIndex, setHoverIndex] = useState(null);
   const [dragState, setDragState] = useState(null);
@@ -3054,7 +3057,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = 'Sear
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [leaflet]);
+  }, []);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = normalizedQuery
@@ -3106,6 +3109,9 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
 
 
 
