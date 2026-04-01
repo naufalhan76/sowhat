@@ -79,6 +79,7 @@ const EMPTY_SOLOFLEET_LOGIN_FORM = { email: '', password: '', rememberMe: true, 
 const EMPTY_WEB_USER_FORM = { id: '', username: '', displayName: '', password: '', role: 'admin', isActive: true };
 const EMPTY_ADMIN_ROLLUP_FORM = { id: '', day: today(0), accountId: 'primary', accountLabel: '', unitId: '', unitLabel: '', vehicle: '', type: 'temp1', label: '', incidents: '0', temp1Incidents: '0', temp2Incidents: '0', bothIncidents: '0', firstStartTimestamp: '', lastEndTimestamp: '', durationMinutes: '0', totalMinutes: '0', longestMinutes: '0', temp1Min: '', temp1Max: '', temp2Min: '', temp2Max: '', minSpeed: '', maxSpeed: '', latitude: '', longitude: '', locationSummary: '', zoneName: '' };
 const EMPTY_ADMIN_POD_FORM = { id: '', day: today(0), timestamp: '', time: '', unitId: '', unitLabel: '', customerName: '', podId: '', podName: '', latitude: '', longitude: '', speed: '', distanceMeters: '', locationSummary: '' };
+const EMPTY_REMOTE_RESET_FORM = { enabled: false, selectedAccountIds: [] };
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 const GEOFENCE_LOCATION_LABELS = {
   WH: 'Warehouse',
@@ -356,6 +357,10 @@ const formFromConfig = (config, accountId = 'primary') => {
     autoStart: Boolean(config.autoStart),
   };
 };
+const remoteResetFormFromConfig = (config) => ({
+  enabled: Boolean(config?.remoteResetAutomation?.enabled),
+  selectedAccountIds: Array.isArray(config?.remoteResetAutomation?.selectedAccountIds) ? config.remoteResetAutomation.selectedAccountIds : [],
+});
 const csv = (name, rows) => {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
@@ -488,6 +493,8 @@ export default function App() {
   const [adminPodSnapshots, setAdminPodSnapshots] = useState([]);
   const [adminRollupForm, setAdminRollupForm] = useState(EMPTY_ADMIN_ROLLUP_FORM);
   const [adminPodForm, setAdminPodForm] = useState(EMPTY_ADMIN_POD_FORM);
+  const [remoteResetForm, setRemoteResetForm] = useState(EMPTY_REMOTE_RESET_FORM);
+  const [remoteResetLogs, setRemoteResetLogs] = useState([]);
   const [astroLocationForm, setAstroLocationForm] = useState(EMPTY_ASTRO_LOCATION_FORM);
   const [astroRouteForm, setAstroRouteForm] = useState(EMPTY_ASTRO_ROUTE_FORM);
   const [astroLocationSectionOpen, setAstroLocationSectionOpen] = useState(false);
@@ -712,6 +719,7 @@ export default function App() {
   const autoFilterCards = status?.autoFilterCards || [];
   const hasSolofleetAccounts = connectedAccounts.length > 0;
   const isAdmin = webSessionUser?.role === 'admin';
+  const remoteResetStatus = status?.remoteReset || null;
   const showOverviewChrome = activePanel === 'overview';
   const navItems = useMemo(() => ([
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -839,6 +847,7 @@ export default function App() {
         setReport(null);
         setApiMonitor(null);
         setWebSessionUser(null);
+        setRemoteResetLogs([]);
         if (syncConfig || !loaded) {
           setLoaded(true);
         }
@@ -857,6 +866,7 @@ export default function App() {
       if (syncConfig || !loaded) {
         setActiveAccountId(nextActiveAccountId);
         setForm(formFromConfig(nextStatus.config, nextActiveAccountId));
+        setRemoteResetForm(remoteResetFormFromConfig(nextStatus.config));
         setLoaded(true);
       }
       setAuthModal((current) => current.open ? { open: false, message: '' } : current);
@@ -896,6 +906,52 @@ export default function App() {
     }
   };
 
+  const loadRemoteResetLogs = async (quiet = false) => {
+    if (!isAdmin) return;
+    if (!quiet) startBusy('Mengambil remote reset logs...');
+    try {
+      const payload = await api('/api/admin/remote-reset/logs');
+      startTransition(() => {
+        setRemoteResetLogs(payload.logs || []);
+      });
+    } finally {
+      if (!quiet) stopBusy();
+    }
+  };
+
+  const toggleRemoteResetAccount = (accountId) => {
+    setRemoteResetForm((current) => {
+      const selected = new Set(current.selectedAccountIds || []);
+      if (selected.has(accountId)) {
+        selected.delete(accountId);
+      } else {
+        selected.add(accountId);
+      }
+      return {
+        ...current,
+        selectedAccountIds: [...selected],
+      };
+    });
+  };
+
+  const runRemoteResetNow = async () => {
+    startBusy('Menjalankan remote CPU reset...');
+    try {
+      const payload = await api('/api/admin/remote-reset/run', { method: 'POST', body: JSON.stringify({}) });
+      startTransition(() => {
+        setRemoteResetLogs(payload.logs || []);
+        if (payload.status) {
+          setStatus(payload.status);
+          setWebSessionUser(payload.status.webAuth?.sessionUser || webSessionUser);
+        }
+        setBanner({ tone: 'success', message: payload.remoteReset?.lastRunMessage || 'Remote CPU reset dijalankan.' });
+      });
+    } catch (error) {
+      setBanner({ tone: 'error', message: error.message || 'Remote CPU reset gagal dijalankan.' });
+    } finally {
+      stopBusy();
+    }
+  };
   const loginToWeb = async () => {
     startBusy('Mencoba login dashboard...');
     try {
@@ -962,13 +1018,22 @@ export default function App() {
     try {
       const payload = {
         activeAccountId, solofleetBaseUrl: form.baseUrl.trim(), endpointPath: form.endpointPath.trim(), refererPath: form.refererPath.trim(), vehiclePagePath: form.vehiclePagePath.trim(), discoveryEndpointPath: form.discoveryEndpointPath.trim(), vehicleRoleId: form.vehicleRoleId.trim(), units: parseUnits(form.unitsText), customerProfiles: parseCustomerProfiles(form.customerProfilesText), podSites: parsePodSites(form.podSitesText), pollIntervalSeconds: Number(form.pollIntervalSeconds || 60), requestLookbackMinutes: Number(form.requestLookbackMinutes || 30), requestIntervalSeconds: Number(form.requestIntervalSeconds || 120), historyRetentionDays: Number(form.historyRetentionDays || 7), minDurationMinutes: Number(form.minDurationMinutes || 5), maxGapMinutes: form.maxGapMinutes === '' ? null : Number(form.maxGapMinutes), archiveType: form.archiveType.trim(), tempProfile: form.tempProfile.trim(), temperatureProcessing: form.temperatureProcessing.trim(), autoStart: Boolean(form.autoStart),
-      };
+        remoteResetAutomation: {
+          enabled: Boolean(remoteResetForm.enabled),
+          intervalHours: 3,
+          selectedAccountIds: remoteResetForm.selectedAccountIds || [],
+          tempErrorOnly: true,
+          maxUnitsPerRun: 10,
+          requestSpacingSeconds: 3,
+          onlyWhenPollingActive: true,
+        },      };
       if (form.sessionCookie.trim()) payload.sessionCookie = form.sessionCookie.trim();
       const result = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
       startTransition(() => {
         const nextActive = result.config.activeAccountId || activeAccountId;
         setActiveAccountId(nextActive);
         setForm(formFromConfig(result.config, nextActive));
+        setRemoteResetForm(remoteResetFormFromConfig(result.config));
         if (!keepBanner) setBanner({ tone: 'success', message: 'Config saved.' });
       });
       await loadDashboard(false, true);
@@ -1178,7 +1243,11 @@ export default function App() {
       loadAdminDatabase(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
     }
   }, [activePanel, isAdmin]);
-
+  useEffect(() => {
+    if (activePanel === 'config' && isAdmin) {
+      loadRemoteResetLogs(true).catch((error) => setBanner({ tone: 'error', message: error.message }));
+    }
+  }, [activePanel, isAdmin]);
   useEffect(() => {
     if (!isAdmin && (activePanel === 'config' || activePanel === 'admin')) {
       setActivePanel('overview');
@@ -2074,7 +2143,7 @@ export default function App() {
           </> : null}
                     {activePanel === 'config' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>
+            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Automated remote CPU reset</h2><p>Kirim cpureset otomatis setiap 3 jam untuk unit yang masih live temp error, hanya pada account yang dipilih.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => loadRemoteResetLogs(false)}>Refresh logs</Button><Button variant="bordered" onPress={runRemoteResetNow} disabled={!remoteResetForm.enabled}>Run reset now</Button><Button color="primary" onPress={() => saveConfig(false)}>Save reset settings</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field checkbox-field"><input type="checkbox" checked={remoteResetForm.enabled} onChange={(event) => setRemoteResetForm((current) => ({ ...current, enabled: event.target.checked }))} /><span>Enable automated CPU reset</span></label><div className="metric-strip admin-storage-strip"><div className="mini-metric"><span>Interval</span><strong>3 jam</strong></div><div className="mini-metric"><span>Target</span><strong>Temp error only</strong></div><div className="mini-metric"><span>Max / run</span><strong>10 unit</strong></div><div className="mini-metric"><span>Next run</span><strong>{fmtDate(remoteResetStatus?.nextRunAt) || '-'}</strong></div><div className="mini-metric"><span>Last run</span><strong>{fmtDate(remoteResetStatus?.lastRunAt) || '-'}</strong></div><div className="mini-metric"><span>Selected</span><strong>{(remoteResetForm.selectedAccountIds || []).length}</strong></div></div><div className="subtle-line">Rule tetap: hanya saat polling aktif, sequential, jeda 3 detik per request, dan unit yang sama hanya dicoba sekali per window 3 jam.</div><div className="settings-stack"><strong>Selected accounts</strong><div className="account-config-list">{availableAccounts.map((account) => { const checked = (remoteResetForm.selectedAccountIds || []).includes(account.id); return <div key={'remote-reset-' + account.id} className={'account-config-item' + (checked ? ' account-config-item-active' : '')}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><label className="checkbox-field"><input type="checkbox" checked={checked} onChange={() => toggleRemoteResetAccount(account.id)} /><span>Use</span></label></div>; })}</div></div><div className="subtle-line">Last summary: {remoteResetStatus?.lastRunMessage || 'Belum ada run remote reset.'}</div><DataTable columns={['Time', 'Account', 'Unit', 'Error', 'Status', 'HTTP', 'Reason']} pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }} emptyMessage="Belum ada remote reset log." rows={remoteResetLogs.map((row) => [fmtDate(row.triggeredAt), row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>, row.errorType || '-', row.status || '-', row.httpStatus ?? '-', row.reason || row.responseExcerpt || '-'])} /></div></CardContent></Card>
             <Card ref={astroLocationCardRef} className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
@@ -3151,6 +3220,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 

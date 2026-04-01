@@ -18,6 +18,17 @@ const DATA_ROOT = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(DATA_ROOT, 'config.json');
 const STATE_FILE = path.join(DATA_ROOT, 'state.json');
 const LOGIN_RATE_LIMITS_FILE = path.join(DATA_ROOT, 'login-rate-limits.json');
+const REMOTE_RESET_LOGS_FILE = path.join(DATA_ROOT, 'remote-reset-logs.json');
+
+const DEFAULT_REMOTE_RESET_AUTOMATION = {
+  enabled: false,
+  intervalHours: 3,
+  selectedAccountIds: [],
+  tempErrorOnly: true,
+  maxUnitsPerRun: 10,
+  requestSpacingSeconds: 3,
+  onlyWhenPollingActive: true,
+};
 
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -59,6 +70,7 @@ const DEFAULT_CONFIG = {
   linkedAccounts: [],
   activeAccountId: 'primary',
   webSessionSecret: '',
+  remoteResetAutomation: DEFAULT_REMOTE_RESET_AUTOMATION,
 };
 
 const DEFAULT_STATE = {
@@ -86,7 +98,9 @@ const DEFAULT_STATE = {
 let config = null;
 let state = null;
 let pollTimer = null;
+let remoteResetTimer = null;
 let pollInFlight = false;
+let remoteResetInFlight = false;
 const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
@@ -96,6 +110,14 @@ const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MIN
 const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || (15 * 60 * 1000));
 const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 10);
 const SOLOFLEET_LOGIN_RATE_LIMIT_MAX = Number(process.env.SOLOFLEET_LOGIN_RATE_LIMIT_MAX || 8);
+const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
+const remoteResetRuntime = {
+  nextRunAt: null,
+  lastRunStartedAt: null,
+  lastRunFinishedAt: null,
+  lastRunSummary: null,
+  lastRunMessage: 'Idle',
+};
 
 function recordApiMonitorEvent(entry) {
   apiMonitorLog.push(entry);
@@ -390,6 +412,22 @@ function normalizeWebUser(value) {
     updatedAt,
   };
 }
+
+function normalizeRemoteResetAutomation(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: Boolean(source.enabled),
+    intervalHours: 3,
+    selectedAccountIds: Array.isArray(source.selectedAccountIds)
+      ? [...new Set(source.selectedAccountIds.map(function (item) { return String(item || '').trim() || null; }).filter(Boolean))]
+      : [],
+    tempErrorOnly: true,
+    maxUnitsPerRun: 10,
+    requestSpacingSeconds: 3,
+    onlyWhenPollingActive: true,
+  };
+}
+
 function normalizeConfig(raw) {
   const merged = {
     ...clone(DEFAULT_CONFIG),
@@ -436,6 +474,7 @@ function normalizeConfig(raw) {
     : [];
   merged.activeAccountId = String(merged.activeAccountId || 'primary').trim() || 'primary';
   merged.webSessionSecret = String(merged.webSessionSecret || '').trim();
+  merged.remoteResetAutomation = normalizeRemoteResetAutomation(merged.remoteResetAutomation);
   merged.webUsers = Array.isArray(merged.webUsers)
     ? merged.webUsers.map(normalizeWebUser).filter(Boolean)
     : [];
@@ -560,6 +599,9 @@ function ensureDataFiles() {
     if (!fs.existsSync(LOGIN_RATE_LIMITS_FILE)) {
       fs.writeFileSync(LOGIN_RATE_LIMITS_FILE, JSON.stringify({}, null, 2));
     }
+    if (!fs.existsSync(REMOTE_RESET_LOGS_FILE)) {
+      fs.writeFileSync(REMOTE_RESET_LOGS_FILE, JSON.stringify([], null, 2));
+    }
   } catch (error) {
     console.error('Failed to ensure local data files:', error.message);
   }
@@ -579,6 +621,16 @@ function saveJsonFile(filePath, value) {
   } catch (error) {
     console.error('Failed to write local json file', filePath, error.message);
   }
+}
+
+function loadLocalRemoteResetLogs() {
+  const rows = loadJsonFile(REMOTE_RESET_LOGS_FILE, []);
+  return Array.isArray(rows) ? rows.filter(function (row) { return row && typeof row === 'object'; }) : [];
+}
+
+function saveLocalRemoteResetLogs(rows) {
+  const normalizedRows = Array.isArray(rows) ? rows.filter(function (row) { return row && typeof row === 'object'; }) : [];
+  saveJsonFile(REMOTE_RESET_LOGS_FILE, normalizedRows.slice(0, 1000));
 }
 
 async function saveConfig() {
@@ -2323,6 +2375,7 @@ function sanitizeConfigForClient() {
     podSites: config.podSites,
     astroLocations: config.astroLocations,
     astroRoutes: config.astroRoutes,
+    remoteResetAutomation: config.remoteResetAutomation,
     activeAccountId: config.activeAccountId,
     accounts: getAllAccountConfigs().map(function (account) {
       return {
@@ -2339,6 +2392,401 @@ function sanitizeConfigForClient() {
       };
     }),
   };
+}
+
+function getRemoteResetAutomationConfig() {
+  return normalizeRemoteResetAutomation(config?.remoteResetAutomation);
+}
+
+function buildRemoteResetStatusPayload() {
+  const automation = getRemoteResetAutomationConfig();
+  return {
+    enabled: automation.enabled,
+    intervalHours: automation.intervalHours,
+    selectedAccountIds: automation.selectedAccountIds,
+    tempErrorOnly: automation.tempErrorOnly,
+    maxUnitsPerRun: automation.maxUnitsPerRun,
+    requestSpacingSeconds: automation.requestSpacingSeconds,
+    onlyWhenPollingActive: automation.onlyWhenPollingActive,
+    nextRunAt: remoteResetRuntime.nextRunAt,
+    lastRunAt: remoteResetRuntime.lastRunFinishedAt || remoteResetRuntime.lastRunStartedAt,
+    lastRunStartedAt: remoteResetRuntime.lastRunStartedAt,
+    lastRunFinishedAt: remoteResetRuntime.lastRunFinishedAt,
+    lastRunSummary: remoteResetRuntime.lastRunSummary,
+    lastRunMessage: remoteResetRuntime.lastRunMessage,
+    inFlight: remoteResetInFlight,
+  };
+}
+
+function parseHttpStatusCode(value) {
+  const match = String(value || '').match(/\bHTTP\s+(\d{3})\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function clipResponseExcerpt(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 280);
+}
+
+function waitMs(durationMs) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, Math.max(0, Number(durationMs) || 0));
+  });
+}
+
+function buildRemoteResetRunWindow(now, intervalHours) {
+  const intervalMs = Math.max(1, Number(intervalHours || 3)) * 60 * 60 * 1000;
+  const startMs = Math.floor(now / intervalMs) * intervalMs;
+  return {
+    intervalMs,
+    startMs,
+    endMs: startMs + intervalMs,
+  };
+}
+
+async function listRemoteResetLogs(limit) {
+  const resolvedLimit = Math.max(1, Math.min(200, Number(limit || REMOTE_RESET_DEFAULT_LOG_LIMIT)));
+  if (getPostgresConfig().enabled) {
+    await ensurePostgresSchema();
+    const result = await postgresQuery(
+      `select id, triggered_at, account_id, account_label, unit_id, unit_label, error_type, command,
+              status, http_status, response_excerpt, reason
+       from remote_reset_logs
+       order by triggered_at desc
+       limit $1`,
+      [resolvedLimit],
+    );
+    return result.rows.map(function (row) {
+      return {
+        id: String(row.id || ''),
+        triggeredAt: row.triggered_at ? new Date(row.triggered_at).toISOString() : null,
+        accountId: String(row.account_id || 'primary'),
+        accountLabel: String(row.account_label || row.account_id || 'primary'),
+        unitId: String(row.unit_id || ''),
+        unitLabel: String(row.unit_label || row.unit_id || ''),
+        errorType: String(row.error_type || ''),
+        command: String(row.command || 'cpureset'),
+        status: String(row.status || 'unknown'),
+        httpStatus: row.http_status === null || row.http_status === undefined ? null : Number(row.http_status),
+        responseExcerpt: String(row.response_excerpt || ''),
+        reason: String(row.reason || ''),
+      };
+    });
+  }
+
+  return loadLocalRemoteResetLogs()
+    .sort(function (left, right) {
+      return (toTimestampMaybe(right.triggeredAt) || 0) - (toTimestampMaybe(left.triggeredAt) || 0);
+    })
+    .slice(0, resolvedLimit);
+}
+
+async function appendRemoteResetLog(entry) {
+  const nowIso = new Date().toISOString();
+  const row = {
+    id: String(entry.id || crypto.randomUUID()),
+    triggeredAt: entry.triggeredAt || nowIso,
+    accountId: String(entry.accountId || 'primary'),
+    accountLabel: String(entry.accountLabel || resolveAccountLabel(entry.accountId || 'primary')),
+    unitId: String(entry.unitId || ''),
+    unitLabel: String(entry.unitLabel || entry.unitId || ''),
+    errorType: String(entry.errorType || ''),
+    command: String(entry.command || 'cpureset'),
+    status: String(entry.status || 'unknown'),
+    httpStatus: entry.httpStatus === null || entry.httpStatus === undefined ? null : Number(entry.httpStatus),
+    responseExcerpt: clipResponseExcerpt(entry.responseExcerpt),
+    reason: String(entry.reason || ''),
+  };
+
+  if (getPostgresConfig().enabled) {
+    await ensurePostgresSchema();
+    await postgresUpsertRows(
+      'remote_reset_logs',
+      [{
+        id: row.id,
+        triggered_at: row.triggeredAt,
+        account_id: row.accountId,
+        account_label: row.accountLabel,
+        unit_id: row.unitId,
+        unit_label: row.unitLabel,
+        error_type: row.errorType,
+        command: row.command,
+        status: row.status,
+        http_status: row.httpStatus,
+        response_excerpt: row.responseExcerpt,
+        reason: row.reason,
+      }],
+      ['id', 'triggered_at', 'account_id', 'account_label', 'unit_id', 'unit_label', 'error_type', 'command', 'status', 'http_status', 'response_excerpt', 'reason'],
+      ['id'],
+    );
+    return row;
+  }
+
+  const rows = loadLocalRemoteResetLogs();
+  rows.unshift(row);
+  saveLocalRemoteResetLogs(rows);
+  return row;
+}
+
+async function listRemoteResetAttemptedKeysForWindow(windowStartMs, windowEndMs) {
+  if (getPostgresConfig().enabled) {
+    await ensurePostgresSchema();
+    const result = await postgresQuery(
+      `select account_id, unit_id
+       from remote_reset_logs
+       where triggered_at >= $1 and triggered_at < $2`,
+      [new Date(windowStartMs).toISOString(), new Date(windowEndMs).toISOString()],
+    );
+    return new Set(result.rows.map(function (row) {
+      return `${String(row.account_id || 'primary')}::${String(row.unit_id || '')}`;
+    }));
+  }
+
+  return new Set(loadLocalRemoteResetLogs().filter(function (row) {
+    const timestamp = toTimestampMaybe(row.triggeredAt);
+    return timestamp !== null && timestamp >= windowStartMs && timestamp < windowEndMs;
+  }).map(function (row) {
+    return `${String(row.accountId || 'primary')}::${String(row.unitId || '')}`;
+  }));
+}
+
+function getRemoteResetSelectedAccounts() {
+  const automation = getRemoteResetAutomationConfig();
+  if (!automation.enabled) {
+    return [];
+  }
+  return automation.selectedAccountIds
+    .map(function (accountId) { return getAccountConfigById(accountId); })
+    .filter(function (account) { return account && account.sessionCookie; });
+}
+
+function buildRemoteResetCandidates(now) {
+  const automation = getRemoteResetAutomationConfig();
+  const candidates = [];
+  for (const accountConfig of getRemoteResetSelectedAccounts()) {
+    const accountState = ensureAccountState(accountConfig.id);
+    syncFleetSnapshotRecords(accountConfig, accountState, now);
+    const alerts = buildLiveAlerts(accountConfig, accountState, now)
+      .filter(function (alert) {
+        return alert.isCurrent !== false
+          && ['temp1', 'temp2', 'temp1+temp2'].includes(String(alert.type || '').trim());
+      });
+    const unitsById = new Map((accountConfig.units || []).map(function (unit) {
+      return [String(unit.id || '').trim().toUpperCase(), unit];
+    }));
+    const byUnit = new Map();
+    for (const alert of alerts) {
+      const unitId = String(alert.unitId || '').trim();
+      if (!unitId) {
+        continue;
+      }
+      const existing = byUnit.get(unitId);
+      if (!existing || (existing.type !== 'temp1+temp2' && alert.type === 'temp1+temp2') || ((alert.endTimestamp || 0) > (existing.endTimestamp || 0))) {
+        const unitConfig = unitsById.get(unitId.toUpperCase());
+        byUnit.set(unitId, {
+          accountId: accountConfig.id,
+          accountLabel: accountConfig.label || accountConfig.authEmail || accountConfig.id,
+          unitId,
+          unitLabel: alert.unitLabel || unitConfig?.label || alert.vehicle || unitId,
+          errorType: alert.type,
+          endTimestamp: alert.endTimestamp || 0,
+        });
+      }
+    }
+    candidates.push(...byUnit.values());
+  }
+
+  candidates.sort(function (left, right) {
+    const severityLeft = left.errorType === 'temp1+temp2' ? 2 : 1;
+    const severityRight = right.errorType === 'temp1+temp2' ? 2 : 1;
+    return severityRight - severityLeft
+      || (right.endTimestamp || 0) - (left.endTimestamp || 0)
+      || String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitLabel || left.unitId).localeCompare(String(right.unitLabel || right.unitId));
+  });
+  return candidates;
+}
+
+async function sendSolofleetRemoteCommand(accountConfig, unitId, command) {
+  const baseUrl = new URL(accountConfig.solofleetBaseUrl || config.solofleetBaseUrl);
+  const endpointUrl = new URL('/SupportSendCommand/sendcommandtoVehicleSingle', baseUrl);
+  const refererUrl = new URL(accountConfig.vehiclePagePath || config.vehiclePagePath || '/Vehicle', baseUrl);
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      Cookie: accountConfig.sessionCookie,
+      Referer: refererUrl.toString(),
+    },
+    body: JSON.stringify({
+      vehicleid: String(unitId || '').trim(),
+      deviceid: null,
+      command: String(command || 'cpureset').trim() || 'cpureset',
+    }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}: ${text.slice(0, 180)}`);
+    error.statusCode = response.status;
+    throw error;
+  }
+  return {
+    statusCode: response.status,
+    text,
+  };
+}
+
+function clearRemoteResetSchedule() {
+  clearTimeout(remoteResetTimer);
+  remoteResetTimer = null;
+  remoteResetRuntime.nextRunAt = null;
+}
+
+function scheduleNextRemoteReset() {
+  clearRemoteResetSchedule();
+  const automation = getRemoteResetAutomationConfig();
+  if (!automation.enabled || !state.runtime.isPolling || automation.onlyWhenPollingActive && !state.runtime.isPolling || !getRemoteResetSelectedAccounts().length) {
+    return;
+  }
+
+  const windowInfo = buildRemoteResetRunWindow(Date.now(), automation.intervalHours);
+  const nextRunMs = windowInfo.endMs;
+  const delayMs = Math.max(1000, nextRunMs - Date.now());
+  remoteResetRuntime.nextRunAt = new Date(nextRunMs).toISOString();
+  remoteResetTimer = setTimeout(function () {
+    runRemoteResetCycle('scheduled').catch(function (error) {
+      remoteResetRuntime.lastRunMessage = error.message;
+      scheduleNextRemoteReset();
+    });
+  }, delayMs);
+}
+
+async function runRemoteResetCycle(trigger) {
+  const automation = getRemoteResetAutomationConfig();
+  if (!automation.enabled) {
+    remoteResetRuntime.lastRunMessage = 'Automation disabled.';
+    clearRemoteResetSchedule();
+    return { attempted: 0, success: 0, failed: 0, skipped: 0 };
+  }
+  if (automation.onlyWhenPollingActive && !state.runtime.isPolling) {
+    remoteResetRuntime.lastRunMessage = 'Polling is off. Remote reset skipped.';
+    clearRemoteResetSchedule();
+    return { attempted: 0, success: 0, failed: 0, skipped: 0 };
+  }
+  if (remoteResetInFlight) {
+    return {
+      attempted: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      reason: 'Remote reset already in progress.',
+    };
+  }
+
+  const now = Date.now();
+  const selectedAccounts = getRemoteResetSelectedAccounts();
+  if (!selectedAccounts.length) {
+    remoteResetRuntime.lastRunMessage = 'No selected account with valid Solofleet session.';
+    clearRemoteResetSchedule();
+    return { attempted: 0, success: 0, failed: 0, skipped: 0 };
+  }
+
+  const windowInfo = buildRemoteResetRunWindow(now, automation.intervalHours);
+  const attemptedKeys = await listRemoteResetAttemptedKeysForWindow(windowInfo.startMs, windowInfo.endMs);
+  const candidates = buildRemoteResetCandidates(now)
+    .filter(function (candidate) {
+      return !attemptedKeys.has(`${candidate.accountId}::${candidate.unitId}`);
+    })
+    .slice(0, automation.maxUnitsPerRun);
+
+  remoteResetInFlight = true;
+  remoteResetRuntime.lastRunStartedAt = new Date(now).toISOString();
+  remoteResetRuntime.lastRunFinishedAt = null;
+  remoteResetRuntime.lastRunSummary = null;
+  remoteResetRuntime.lastRunMessage = `Running ${trigger} remote reset for ${candidates.length} unit(s).`;
+
+  let attempted = 0;
+  let success = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  try {
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const accountConfig = getAccountConfigById(candidate.accountId);
+      if (!accountConfig || !accountConfig.sessionCookie) {
+        skipped += 1;
+        await appendRemoteResetLog({
+          accountId: candidate.accountId,
+          accountLabel: candidate.accountLabel,
+          unitId: candidate.unitId,
+          unitLabel: candidate.unitLabel,
+          errorType: candidate.errorType,
+          command: 'cpureset',
+          status: 'skipped',
+          reason: 'Missing Solofleet session cookie.',
+        });
+        continue;
+      }
+
+      attempted += 1;
+      try {
+        const result = await sendSolofleetRemoteCommand(accountConfig, candidate.unitId, 'cpureset');
+        success += 1;
+        await appendRemoteResetLog({
+          accountId: candidate.accountId,
+          accountLabel: candidate.accountLabel,
+          unitId: candidate.unitId,
+          unitLabel: candidate.unitLabel,
+          errorType: candidate.errorType,
+          command: 'cpureset',
+          status: 'success',
+          httpStatus: result.statusCode,
+          responseExcerpt: result.text,
+        });
+      } catch (error) {
+        failed += 1;
+        await appendRemoteResetLog({
+          accountId: candidate.accountId,
+          accountLabel: candidate.accountLabel,
+          unitId: candidate.unitId,
+          unitLabel: candidate.unitLabel,
+          errorType: candidate.errorType,
+          command: 'cpureset',
+          status: 'failed',
+          httpStatus: Number.isInteger(error?.statusCode) ? error.statusCode : parseHttpStatusCode(error?.message),
+          responseExcerpt: error?.message || '',
+          reason: getPublicErrorMessage(error, 'Remote reset failed.'),
+        });
+      }
+
+      if (index < candidates.length - 1) {
+        await waitMs(automation.requestSpacingSeconds * 1000);
+      }
+    }
+  } finally {
+    remoteResetInFlight = false;
+    remoteResetRuntime.lastRunFinishedAt = new Date().toISOString();
+    remoteResetRuntime.lastRunSummary = {
+      attempted,
+      success,
+      failed,
+      skipped,
+      trigger: trigger || 'scheduled',
+      accountCount: selectedAccounts.length,
+    };
+    remoteResetRuntime.lastRunMessage = attempted
+      ? `Remote reset selesai: ${success} sukses, ${failed} gagal, ${skipped} skip.`
+      : 'No live temp-error units eligible for remote reset.';
+    if (state.runtime.isPolling) {
+      scheduleNextRemoteReset();
+    } else {
+      clearRemoteResetSchedule();
+    }
+  }
+
+  return remoteResetRuntime.lastRunSummary;
 }
 
 function detectLiveSensorFaultType(temp1, temp2) {
@@ -2821,6 +3269,7 @@ function buildStatusPayload(sessionUser) {
     liveAlerts,
     podSnapshots,
     units: astroAnnotatedRows,
+    remoteReset: isAdminSession ? buildRemoteResetStatusPayload() : null,
     webAuth: buildWebAuthConfigForClient(sessionUser),
   };
 }
@@ -3490,6 +3939,22 @@ async function ensurePostgresSchema() {
       created_at timestamptz not null default now()
     );
 
+    create table if not exists remote_reset_logs (
+      id text primary key,
+      triggered_at timestamptz not null,
+      account_id text,
+      account_label text,
+      unit_id text not null,
+      unit_label text,
+      error_type text,
+      command text not null default 'cpureset',
+      status text not null,
+      http_status integer,
+      response_excerpt text,
+      reason text,
+      created_at timestamptz not null default now()
+    );
+
     create index if not exists idx_daily_temp_rollups_day on daily_temp_rollups(day desc);
     create index if not exists idx_daily_temp_rollups_unit_id on daily_temp_rollups(unit_id);
     create index if not exists idx_daily_temp_rollups_account_id on daily_temp_rollups(account_id);
@@ -3501,6 +3966,8 @@ async function ensurePostgresSchema() {
     create index if not exists idx_dashboard_web_users_role_active on dashboard_web_users(role, is_active);
     create index if not exists idx_login_rate_limits_reset_at on login_rate_limits(reset_at);
     create index if not exists idx_login_rate_limits_scope_reset on login_rate_limits(scope, reset_at);
+    create index if not exists idx_remote_reset_logs_triggered_at on remote_reset_logs(triggered_at desc);
+    create index if not exists idx_remote_reset_logs_account_unit_time on remote_reset_logs(account_id, unit_id, triggered_at desc);
   `);
 }
 
@@ -5344,6 +5811,7 @@ function scheduleNextPoll() {
     runPollCycle('scheduled').catch(function (error) {
       state.runtime.lastRunMessage = error.message;
       scheduleNextPoll();
+      scheduleNextRemoteReset();
     });
   }, delayMs);
 }
@@ -5408,6 +5876,7 @@ async function runPollCycle(trigger) {
 
   if (state.runtime.isPolling) {
     scheduleNextPoll();
+    scheduleNextRemoteReset();
     saveState();
   }
 
@@ -5431,6 +5900,7 @@ function stopPolling() {
   config.autoStart = false;
   clearTimeout(pollTimer);
   pollTimer = null;
+  clearRemoteResetSchedule();
   saveConfig();
   saveState();
 }
@@ -5715,6 +6185,46 @@ async function handleApi(req, res, url) {
     }
     return true;
   }
+
+  if (pathname === '/api/admin/remote-reset/logs' && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const logs = await listRemoteResetLogs(Number(url.searchParams.get('limit') || REMOTE_RESET_DEFAULT_LOG_LIMIT));
+      sendJson(res, 200, {
+        ok: true,
+        logs,
+        remoteReset: buildRemoteResetStatusPayload(),
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Aksi gagal diproses.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/admin/remote-reset/run' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await runRemoteResetCycle('manual');
+      const logs = await listRemoteResetLogs(REMOTE_RESET_DEFAULT_LOG_LIMIT);
+      sendJson(res, 200, {
+        ok: true,
+        result,
+        logs,
+        remoteReset: buildRemoteResetStatusPayload(),
+        status: buildStatusPayload(session.user),
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Aksi gagal diproses.');
+    }
+    return true;
+  }
+
     if (pathname === '/api/auth/login' && method === 'POST') {
     const session = await requireAdminSession(req, res);
     if (!session) {
@@ -5948,6 +6458,7 @@ async function handleApi(req, res, url) {
       tempProfile: body.tempProfile ?? config.tempProfile,
       temperatureProcessing: body.temperatureProcessing ?? config.temperatureProcessing,
       autoStart: body.autoStart ?? config.autoStart,
+      remoteResetAutomation: Object.prototype.hasOwnProperty.call(body, 'remoteResetAutomation') ? body.remoteResetAutomation : config.remoteResetAutomation,
       linkedAccounts: Array.isArray(body.linkedAccounts) ? body.linkedAccounts : config.linkedAccounts,
       activeAccountId: targetAccountId,
     };
@@ -5988,6 +6499,9 @@ async function handleApi(req, res, url) {
 
     if (state.runtime.isPolling) {
       scheduleNextPoll();
+      scheduleNextRemoteReset();
+    } else {
+      clearRemoteResetSchedule();
     }
 
     sendJson(res, 200, {
