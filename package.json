@@ -8,7 +8,9 @@
     "dev:ui": "vite",
     "start:api": "node server.js",
     "start": "node tools/dev-runner.js",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "test:integration": "node tools/smoke-test.mjs",
+    "test:e2e": "node tools/smoke-test.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.0.1",

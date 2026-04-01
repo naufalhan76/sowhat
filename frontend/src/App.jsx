@@ -5,7 +5,6 @@ import {
   Flag, LayoutDashboard, Map as MapIcon, Menu, Navigation,
   RefreshCw, Settings, ShieldAlert, Thermometer, X, Zap, Search
 } from 'lucide-react';
-import L from 'leaflet';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
   const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
   return <button type="button" className={`sf-btn ${baseClass} ${className}`} onClick={onPress} {...props}>{children}</button>;
@@ -96,6 +95,39 @@ const EMPTY_ASTRO_ROUTE_FORM = { id: '', accountId: 'primary', unitId: '', custo
 const ASTRO_LOCATION_SAMPLE_CSV = ['Nama Tempat,Latitude,Longitude,Radius,Type', 'Astro WH CBN,-6.296412,107.146281,180,WH', 'Astro POD Bekasi Timur,-6.238765,106.999321,120,POD', 'Astro Pool Cakung,-6.182450,106.935870,160,POOL', 'Rest KM 39,-6.557777,106.781111,180,REST'].join('\n');
 const ASTRO_ROUTE_SAMPLE_CSV = ['Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit2 Enabled,Rit2 Start,Rit2 End,Active,Notes', 'primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,false,19:00,06:00,true,Rit pagi only'].join('\n');
 
+let leafletModulePromise = null;
+
+function loadLeafletModule() {
+  if (!leafletModulePromise) {
+    leafletModulePromise = import('leaflet').then((module) => module.default || module);
+  }
+  return leafletModulePromise;
+}
+
+function useLeafletModule(enabled = true) {
+  const [leaflet, setLeaflet] = useState(null);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    loadLeafletModule()
+      .then((module) => {
+        if (!cancelled) {
+          setLeaflet(module);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLeaflet(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  return leaflet;
+}
 const api = async (url, options = {}) => {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
   const payload = await response.json().catch(() => ({ ok: false, error: 'Invalid server response.' }));
@@ -688,7 +720,7 @@ export default function App() {
       setBanner({ tone: 'error', message: error.message });
       setAuthModal({ open: true, message: error.message || 'Initial dashboard load failed.' });
     });
-  }, []);
+  }, [leaflet]);
 
   useEffect(() => {
     if (!banner.message) return undefined;
@@ -700,7 +732,7 @@ export default function App() {
 
   useEffect(() => () => {
     if (busyTimeoutRef.current) window.clearTimeout(busyTimeoutRef.current);
-  }, []);
+  }, [leaflet]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1128,7 +1160,7 @@ export default function App() {
       mobileNavMedia.removeEventListener?.('change', syncLayout);
       compactTopbarMedia.removeEventListener?.('change', syncLayout);
     };
-  }, []);
+  }, [leaflet]);
 
   const discoverUnits = async (targetAccountId = activeAccountId) => {
     const resolvedAccountId = targetAccountId || activeAccountId;
@@ -2543,6 +2575,7 @@ function FleetStatusMap({ rows }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const lastFitKeyRef = useRef('');
+  const leaflet = useLeafletModule(true);
   const plottedRows = useMemo(() => (rows || []).filter((row) => Number.isFinite(Number(row.latitude)) && Number.isFinite(Number(row.longitude))), [rows]);
   const plottedRowsFitKey = useMemo(() => plottedRows.map((row) => `${row.accountId || 'primary'}:${row.id}`).sort().join('|'), [plottedRows]);
   const legendItems = useMemo(() => [
@@ -2554,13 +2587,13 @@ function FleetStatusMap({ rows }) {
   ], []);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return undefined;
-    const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    if (!leaflet || !containerRef.current || mapRef.current) return undefined;
+    const map = leaflet.map(containerRef.current, { zoomControl: true, attributionControl: true });
+    leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
-    const layer = L.layerGroup().addTo(map);
+    const layer = leaflet.layerGroup().addTo(map);
     mapRef.current = map;
     layerRef.current = layer;
     window.setTimeout(() => map.invalidateSize(), 80);
@@ -2569,12 +2602,12 @@ function FleetStatusMap({ rows }) {
       mapRef.current = null;
       layerRef.current = null;
     };
-  }, []);
+  }, [leaflet]);
 
   useEffect(() => {
     const map = mapRef.current;
     const layer = layerRef.current;
-    if (!map || !layer) return;
+    if (!leaflet || !map || !layer) return;
     layer.clearLayers();
     if (!plottedRows.length) {
       if (lastFitKeyRef.current !== '__empty__') {
@@ -2589,7 +2622,7 @@ function FleetStatusMap({ rows }) {
       const longitude = Number(row.longitude);
       const statusMeta = getMapStatusMeta(row);
       const region = resolveFleetRegion(row);
-      const marker = L.circleMarker([latitude, longitude], {
+      const marker = leaflet.circleMarker([latitude, longitude], {
         radius: 8,
         color: statusMeta.color,
         fillColor: statusMeta.color,
@@ -2607,7 +2640,7 @@ function FleetStatusMap({ rows }) {
       lastFitKeyRef.current = plottedRowsFitKey;
     }
     window.setTimeout(() => map.invalidateSize(), 50);
-  }, [plottedRows, plottedRowsFitKey]);
+  }, [leaflet, plottedRows, plottedRowsFitKey]);
 
   return <div className="unit-map-shell unit-map-shell-dark fleet-status-map-shell">
     <div className="unit-map-head">
@@ -2621,7 +2654,8 @@ function FleetStatusMap({ rows }) {
     </div>
     <div className="unit-map-frame fleet-status-map-frame">
       <div ref={containerRef} className="unit-map-canvas fleet-status-map-canvas" />
-      {!plottedRows.length ? <div className="unit-map-overlay">Belum ada unit dengan koordinat live untuk digambar di map.</div> : null}
+      {!leaflet ? <div className="unit-map-overlay">Loading map...</div> : null}
+      {leaflet && !plottedRows.length ? <div className="unit-map-overlay">Belum ada unit dengan koordinat live untuk digambar di map.</div> : null}
     </div>
   </div>;
 }
@@ -2631,6 +2665,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
   const layerRef = useRef(null);
   const containerRef = useRef(null);
   const [showRoute, setShowRoute] = useState(true);
+  const leaflet = useLeafletModule(true);
   const trackPoints = useMemo(() => {
     const next = [];
     let previousKey = '';
@@ -2675,19 +2710,19 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
   ].filter(Boolean).join('<br/>');
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) {
+    if (!leaflet || !containerRef.current || mapRef.current) {
       return undefined;
     }
-    const map = L.map(containerRef.current, {
+    const map = leaflet.map(containerRef.current, {
       zoomControl: true,
       attributionControl: true,
       preferCanvas: true,
     }).setView([row?.latitude || -6.2, row?.longitude || 106.8], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
-    const layer = L.layerGroup().addTo(map);
+    const layer = leaflet.layerGroup().addTo(map);
     mapRef.current = map;
     layerRef.current = layer;
     window.setTimeout(() => map.invalidateSize(), 80);
@@ -2697,12 +2732,12 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       mapRef.current = null;
       layerRef.current = null;
     };
-  }, [row?.latitude, row?.longitude]);
+  }, [leaflet, row?.latitude, row?.longitude]);
 
   useEffect(() => {
     const map = mapRef.current;
     const layer = layerRef.current;
-    if (!map || !layer) {
+    if (!leaflet || !map || !layer) {
       return;
     }
 
@@ -2720,7 +2755,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
         bounds.push(latLng);
         return latLng;
       });
-      L.polyline(latLngs, {
+      leaflet.polyline(latLngs, {
         color: '#ff7a2f',
         weight: 4,
         opacity: 0.92,
@@ -2730,7 +2765,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
     if (trackPoints.length) {
       const startPoint = trackPoints[0];
       bounds.push([startPoint.latitude, startPoint.longitude]);
-      L.circleMarker([startPoint.latitude, startPoint.longitude], {
+      leaflet.circleMarker([startPoint.latitude, startPoint.longitude], {
         radius: 6,
         weight: 2,
         color: '#0f172a',
@@ -2740,7 +2775,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
 
       const endPoint = trackPoints[trackPoints.length - 1];
       bounds.push([endPoint.latitude, endPoint.longitude]);
-      L.circleMarker([endPoint.latitude, endPoint.longitude], {
+      leaflet.circleMarker([endPoint.latitude, endPoint.longitude], {
         radius: 7,
         weight: 2,
         color: '#0f172a',
@@ -2751,7 +2786,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
 
     if (currentPoint && !currentMatchesLastTrack) {
       bounds.push([currentPoint.latitude, currentPoint.longitude]);
-      L.circleMarker([currentPoint.latitude, currentPoint.longitude], {
+      leaflet.circleMarker([currentPoint.latitude, currentPoint.longitude], {
         radius: 8,
         weight: 2,
         color: '#0f172a',
@@ -2768,7 +2803,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
     }
     window.setTimeout(() => map.invalidateSize(), 50);
-  }, [trackPoints, currentPoint, showRoute]);
+  }, [leaflet, trackPoints, currentPoint, showRoute]);
 
   const routePointCount = trackPoints.length;
   const hasMapData = routePointCount > 0 || Boolean(currentPoint);
@@ -2790,8 +2825,9 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
     </div>
     <div className="unit-map-frame">
       <div ref={containerRef} className="unit-map-canvas" />
-      {busy ? <div className="unit-map-overlay">Loading route map...</div> : null}
-      {!busy && !hasMapData ? <div className="unit-map-overlay">Belum ada koordinat historis untuk digambar di map.</div> : null}
+      {!leaflet ? <div className="unit-map-overlay">Loading map...</div> : null}
+      {leaflet && busy ? <div className="unit-map-overlay">Loading route map...</div> : null}
+      {leaflet && !busy && !hasMapData ? <div className="unit-map-overlay">Belum ada koordinat historis untuk digambar di map.</div> : null}
     </div>
   </div>;
 }
@@ -3018,7 +3054,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = 'Sear
     };
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, []);
+  }, [leaflet]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = normalizedQuery
@@ -3070,6 +3106,13 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
 
 
 

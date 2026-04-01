@@ -19,6 +19,22 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'web-dist'),
     emptyOutDir: true,
+    modulePreload: {
+      resolveDependencies(url, deps) {
+        return deps.filter((dependency) => !dependency.includes('vendor-leaflet'));
+      },
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('leaflet')) return 'vendor-leaflet';
+          if (id.includes('react')) return 'vendor-react';
+          if (id.includes('@heroui') || id.includes('framer-motion')) return 'vendor-ui';
+          if (id.includes('lucide-react')) return 'vendor-icons';
+          return 'vendor';
+        },
+      },
+    },
   },
 });
-

@@ -3,6 +3,7 @@ const http = require('http');
 const crypto = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('node:zlib');
 const { Pool } = require('pg');
 const { URL } = require('url');
 const core = require('./web/report-core.js');
@@ -24,6 +25,10 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 const DEFAULT_CONFIG = {
@@ -2019,6 +2024,8 @@ const RESPONSE_SECURITY_HEADERS = {
   'Referrer-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Cross-Origin-Opener-Policy': 'same-origin',
+  'X-DNS-Prefetch-Control': 'off',
+  'Origin-Agent-Cluster': '?1',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Content-Security-Policy': [
     "default-src 'self'",
@@ -2035,10 +2042,63 @@ const RESPONSE_SECURITY_HEADERS = {
   ].join('; '),
 };
 
+const STATIC_IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const STATIC_DEFAULT_CACHE_CONTROL = 'public, max-age=86400, stale-while-revalidate=3600';
+const STATIC_ENTRY_CACHE_CONTROL = 'no-cache';
+
+function isCompressibleContentType(contentType) {
+  const normalized = String(contentType || '').toLowerCase();
+  return normalized.startsWith('text/')
+    || normalized.includes('javascript')
+    || normalized.includes('json')
+    || normalized.includes('svg')
+    || normalized.includes('manifest');
+}
+
+function buildStaticCacheControl(filePath) {
+  const normalized = String(filePath || '').replace(/\\/g, '/');
+  if (normalized.endsWith('/index.html') || normalized.endsWith('/sw.js') || normalized.endsWith('/manifest.webmanifest')) {
+    return STATIC_ENTRY_CACHE_CONTROL;
+  }
+  if (normalized.includes('/assets/')) {
+    return STATIC_IMMUTABLE_CACHE_CONTROL;
+  }
+  return STATIC_DEFAULT_CACHE_CONTROL;
+}
+
+function buildWeakEtag(stats) {
+  return `W/"${Number(stats.size || 0).toString(16)}-${Math.trunc(Number(stats.mtimeMs || 0)).toString(16)}"`;
+}
+
+function compressStaticContent(req, content, contentType) {
+  const buffer = Buffer.isBuffer(content) ? content : Buffer.from(String(content || ''));
+  if (!isCompressibleContentType(contentType) || buffer.length < 1024) {
+    return { content: buffer, encoding: '' };
+  }
+  const acceptEncoding = String(req.headers['accept-encoding'] || '').toLowerCase();
+  if (acceptEncoding.includes('br')) {
+    return {
+      content: zlib.brotliCompressSync(buffer, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+        },
+      }),
+      encoding: 'br',
+    };
+  }
+  if (acceptEncoding.includes('gzip')) {
+    return {
+      content: zlib.gzipSync(buffer, { level: 6 }),
+      encoding: 'gzip',
+    };
+  }
+  return { content: buffer, encoding: '' };
+}
+
 function send(res, statusCode, content, contentType, extraHeaders) {
   res.writeHead(statusCode, {
     'Content-Type': contentType,
-    'Cache-Control': 'no-store',
+    'Cache-Control': 'no-store, private',
     ...RESPONSE_SECURITY_HEADERS,
     ...(extraHeaders || {}),
   });
@@ -3433,10 +3493,14 @@ async function ensurePostgresSchema() {
     create index if not exists idx_daily_temp_rollups_day on daily_temp_rollups(day desc);
     create index if not exists idx_daily_temp_rollups_unit_id on daily_temp_rollups(unit_id);
     create index if not exists idx_daily_temp_rollups_account_id on daily_temp_rollups(account_id);
+    create index if not exists idx_daily_temp_rollups_day_account_unit on daily_temp_rollups(day desc, account_id, unit_id);
     create index if not exists idx_pod_snapshots_day on pod_snapshots(day desc);
     create index if not exists idx_pod_snapshots_unit_id on pod_snapshots(unit_id);
+    create index if not exists idx_pod_snapshots_timestamp on pod_snapshots(snapshot_timestamp desc);
     create index if not exists idx_dashboard_web_users_username on dashboard_web_users(username);
+    create index if not exists idx_dashboard_web_users_role_active on dashboard_web_users(role, is_active);
     create index if not exists idx_login_rate_limits_reset_at on login_rate_limits(reset_at);
+    create index if not exists idx_login_rate_limits_scope_reset on login_rate_limits(scope, reset_at);
   `);
 }
 
@@ -6181,11 +6245,28 @@ function handleStatic(req, res, url) {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const cacheControl = buildStaticCacheControl(filePath);
+    const etag = buildWeakEtag(stats);
+
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, {
+        'Cache-Control': cacheControl,
+        ETag: etag,
+        Vary: 'Accept-Encoding',
+        ...RESPONSE_SECURITY_HEADERS,
+      });
+      res.end();
+      return;
+    }
 
     if (method === 'HEAD') {
       res.writeHead(200, {
         'Content-Type': contentType,
-        'Cache-Control': 'no-store',
+        'Content-Length': String(stats.size || 0),
+        'Cache-Control': cacheControl,
+        ETag: etag,
+        'Last-Modified': stats.mtime.toUTCString(),
+        Vary: 'Accept-Encoding',
         ...RESPONSE_SECURITY_HEADERS,
       });
       res.end();
@@ -6197,7 +6278,15 @@ function handleStatic(req, res, url) {
         send(res, 500, 'Internal Server Error', 'text/plain; charset=utf-8');
         return;
       }
-      send(res, 200, content, contentType);
+      const compressed = compressStaticContent(req, content, contentType);
+      send(res, 200, compressed.content, contentType, {
+        'Cache-Control': cacheControl,
+        ETag: etag,
+        'Last-Modified': stats.mtime.toUTCString(),
+        'Content-Length': String(compressed.content.length),
+        Vary: 'Accept-Encoding',
+        ...(compressed.encoding ? { 'Content-Encoding': compressed.encoding } : {}),
+      });
     });
   });
 }
