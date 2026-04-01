@@ -508,6 +508,8 @@ export default function App() {
   const [adminPodForm, setAdminPodForm] = useState(EMPTY_ADMIN_POD_FORM);
   const [remoteResetForm, setRemoteResetForm] = useState(EMPTY_REMOTE_RESET_FORM);
   const [remoteResetLogs, setRemoteResetLogs] = useState([]);
+  const [selectedAstroLocationIds, setSelectedAstroLocationIds] = useState([]);
+  const [selectedAstroRouteIds, setSelectedAstroRouteIds] = useState([]);
   const [astroLocationForm, setAstroLocationForm] = useState(EMPTY_ASTRO_LOCATION_FORM);
   const [astroRouteForm, setAstroRouteForm] = useState(EMPTY_ASTRO_ROUTE_FORM);
   const [astroLocationSectionOpen, setAstroLocationSectionOpen] = useState(false);
@@ -851,6 +853,26 @@ export default function App() {
       setExpandedFleetRowKey('');
     }
   }, [expandedFleetRowKey, prioritizedFleet]);
+
+  useEffect(() => {
+    setSelectedAstroLocationIds((current) => {
+      const next = current.filter((id) => astroLocations.some((location) => location.id === id));
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [astroLocations]);
+
+  useEffect(() => {
+    setSelectedAstroRouteIds((current) => {
+      const next = current.filter((id) => astroRoutes.some((route) => route.id === id));
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current;
+      }
+      return next;
+    });
+  }, [astroRoutes]);
   const loadDashboard = async (syncConfig = false, quiet = false) => {
     if (!quiet) startBusy();
     const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
@@ -1499,14 +1521,33 @@ export default function App() {
       stopBusy();
     }
   };
+  const toggleAstroLocationSelection = (locationId) => {
+    setSelectedAstroLocationIds((current) => current.includes(locationId)
+      ? current.filter((id) => id !== locationId)
+      : [...current, locationId]);
+  };
 
-  const deleteAstroLocationEntry = async (locationId) => {
+  const selectVisibleAstroLocations = () => {
+    setSelectedAstroLocationIds(Array.from(new Set(astroFilteredLocationGroups.flatMap((group) => group.items.map((location) => location.id)))));
+  };
+
+  const clearSelectedAstroLocations = () => {
+    setSelectedAstroLocationIds([]);
+  };
+
+  const deleteAstroLocations = async (locationIds) => {
+    const uniqueIds = Array.from(new Set((locationIds || []).filter(Boolean)));
+    if (!uniqueIds.length) return;
     startBusy();
     try {
-      const nextLocations = astroLocations.filter((location) => location.id !== locationId);
-      await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations }) });
-      if (astroLocationForm.id === locationId) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
-      setBanner({ tone: 'success', message: 'Geofence deleted.' });
+      const selectedIdSet = new Set(uniqueIds);
+      const nextLocations = astroLocations.filter((location) => !selectedIdSet.has(location.id));
+      const nextRoutes = astroRoutes.filter((route) => !selectedIdSet.has(route.whLocationId) && !selectedIdSet.has(route.poolLocationId) && !(route.podSequence || []).some((locationId) => selectedIdSet.has(locationId)));
+      await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations, routes: nextRoutes }) });
+      if (astroLocationForm.id && selectedIdSet.has(astroLocationForm.id)) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
+      if (astroRouteForm.id && !nextRoutes.some((route) => route.id === astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      setSelectedAstroLocationIds([]);
+      setBanner({ tone: 'success', message: uniqueIds.length === 1 ? 'Geofence deleted.' : `${uniqueIds.length} geofence deleted.` });
       await loadDashboard(true, true);
     } catch (error) {
       setAuthModal({ open: true, message: error.message || 'Geofence gagal dihapus.' });
@@ -1514,6 +1555,10 @@ export default function App() {
     } finally {
       stopBusy();
     }
+  };
+
+  const deleteAstroLocationEntry = async (locationId) => {
+    await deleteAstroLocations([locationId]);
   };
 
   const editAstroRouteEntry = (route) => {
@@ -1556,13 +1601,31 @@ export default function App() {
     }
   };
 
-  const deleteAstroRouteEntry = async (routeId) => {
+  const toggleAstroRouteSelection = (routeId) => {
+    setSelectedAstroRouteIds((current) => current.includes(routeId)
+      ? current.filter((id) => id !== routeId)
+      : [...current, routeId]);
+  };
+
+  const selectVisibleAstroRoutes = () => {
+    setSelectedAstroRouteIds(Array.from(new Set(astroFilteredRouteGroups.flatMap((group) => group.items.map((route) => route.id)))));
+  };
+
+  const clearSelectedAstroRoutes = () => {
+    setSelectedAstroRouteIds([]);
+  };
+
+  const deleteAstroRoutes = async (routeIds) => {
+    const uniqueIds = Array.from(new Set((routeIds || []).filter(Boolean)));
+    if (!uniqueIds.length) return;
     startBusy();
     try {
-      const nextRoutes = astroRoutes.filter((route) => route.id !== routeId);
+      const selectedIdSet = new Set(uniqueIds);
+      const nextRoutes = astroRoutes.filter((route) => !selectedIdSet.has(route.id));
       await api('/api/astro/config/routes', { method: 'POST', body: JSON.stringify({ routes: nextRoutes }) });
-      if (astroRouteForm.id === routeId) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
-      setBanner({ tone: 'success', message: 'Astro route deleted.' });
+      if (astroRouteForm.id && selectedIdSet.has(astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      setSelectedAstroRouteIds([]);
+      setBanner({ tone: 'success', message: uniqueIds.length === 1 ? 'Astro route deleted.' : `${uniqueIds.length} Astro route deleted.` });
       await loadDashboard(true, true);
     } catch (error) {
       setAuthModal({ open: true, message: error.message || 'Astro route gagal dihapus.' });
@@ -1572,6 +1635,9 @@ export default function App() {
     }
   };
 
+  const deleteAstroRouteEntry = async (routeId) => {
+    await deleteAstroRoutes([routeId]);
+  };
   const importAstroLocations = async (replace = false) => {
     if (!astroCsvText.trim()) return;
     startBusy();
@@ -2241,6 +2307,11 @@ export default function App() {
                       <Chip>{astroLocations.length} lokasi</Chip>
                       {GEOFENCE_LOCATION_TYPES.map((type) => <Chip key={type} color={type === 'WH' ? 'info' : type === 'POD' ? 'warning' : 'default'}>{type} {geofenceLocationCounts[type] || 0}</Chip>)}
                     </div>
+                    <div className="inline-buttons astro-bulk-actions">
+                      <Button variant="bordered" onPress={selectVisibleAstroLocations} disabled={!astroFilteredLocationGroups.length}>Select visible</Button>
+                      <Button variant="bordered" onPress={clearSelectedAstroLocations} disabled={!selectedAstroLocationIds.length}>Clear selected</Button>
+                      <Button variant="light" onPress={() => deleteAstroLocations(selectedAstroLocationIds)} disabled={!selectedAstroLocationIds.length}>Delete selected ({selectedAstroLocationIds.length})</Button>
+                    </div>
                     {astroFilteredLocationGroups.map((group) => {
                       const expanded = astroLocationExpanded[group.key] === true;
                       const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
@@ -2255,6 +2326,9 @@ export default function App() {
                         <div className="astro-card-grid">
                           {visibleItems.map((location) => <div key={location.id} className="astro-entity-card">
                             <div className="astro-entity-card-head">
+                              <label className="astro-card-select">
+                                <input type="checkbox" checked={selectedAstroLocationIds.includes(location.id)} onChange={() => toggleAstroLocationSelection(location.id)} />
+                              </label>
                               <div>
                                 <strong>{location.name}</strong>
                                 <span>{location.type} | {location.radiusMeters} m | {location.scopeMode || 'global'}</span>
@@ -2349,6 +2423,11 @@ export default function App() {
                       <Chip color="info">Account {astroRouteGroups.length}</Chip>
                       <Chip color="warning">Max POD {ASTRO_ROUTE_MAX_PODS}</Chip>
                     </div>
+                    <div className="inline-buttons astro-bulk-actions">
+                      <Button variant="bordered" onPress={selectVisibleAstroRoutes} disabled={!astroFilteredRouteGroups.length}>Select visible</Button>
+                      <Button variant="bordered" onPress={clearSelectedAstroRoutes} disabled={!selectedAstroRouteIds.length}>Clear selected</Button>
+                      <Button variant="light" onPress={() => deleteAstroRoutes(selectedAstroRouteIds)} disabled={!selectedAstroRouteIds.length}>Delete selected ({selectedAstroRouteIds.length})</Button>
+                    </div>
                     {astroFilteredRouteGroups.map((group) => {
                       const expanded = astroRouteExpanded[group.key] === true;
                       const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
@@ -2363,6 +2442,9 @@ export default function App() {
                         <div className="astro-card-grid astro-card-grid-routes">
                           {visibleItems.map((route) => <div key={route.id} className="astro-entity-card astro-route-card">
                             <div className="astro-entity-card-head">
+                              <label className="astro-card-select">
+                                <input type="checkbox" checked={selectedAstroRouteIds.includes(route.id)} onChange={() => toggleAstroRouteSelection(route.id)} />
+                              </label>
                               <div>
                                 <strong>{astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId}</strong>
                                 <span>{route.customerName || 'Astro'} | {route.unitId}</span>
@@ -3259,6 +3341,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 

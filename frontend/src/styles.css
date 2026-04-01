@@ -2128,6 +2128,9 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
+.astro-bulk-actions {
+  margin-top: calc(var(--space-sm) * -1);
+}
 .astro-group-card {
   display: grid;
   gap: var(--space-md);
@@ -2181,6 +2184,18 @@ textarea:focus {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-sm);
+}
+
+.astro-card-select {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.astro-card-select input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
 }
 
 .astro-entity-card-head strong {
@@ -3135,5 +3150,7 @@ textarea:focus {
     display: inline-flex;
   }
 }
+
+
 
 

@@ -111,6 +111,7 @@ const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS
 const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 10);
 const SOLOFLEET_LOGIN_RATE_LIMIT_MAX = Number(process.env.SOLOFLEET_LOGIN_RATE_LIMIT_MAX || 8);
 const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
+const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 5000);
 const remoteResetRuntime = {
   nextRunAt: null,
   lastRunStartedAt: null,
@@ -738,11 +739,27 @@ async function supabaseRestRequest(method, resource, options) {
     ...(requestOptions.headers || {}),
   };
 
-  const response = await fetch(`${runtime.url}/rest/v1/${resource}`, {
-    method,
-    headers,
-    body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(function () {
+    controller.abort(new Error('Supabase request timeout'));
+  }, Math.max(1000, SUPABASE_REQUEST_TIMEOUT_MS));
+
+  let response;
+  try {
+    response = await fetch(`${runtime.url}/rest/v1/${resource}`, {
+      method,
+      headers,
+      body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error && (error.name === 'AbortError' || /timeout/i.test(String(error.message || '')))) {
+      throw new Error(`Supabase web auth request timed out after ${Math.max(1000, SUPABASE_REQUEST_TIMEOUT_MS)}ms.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`Supabase web auth request failed. HTTP ${response.status}: ${text.slice(0, 180)}`);
@@ -2069,6 +2086,24 @@ async function initializeStorage() {
 }
 
 const storageInitializationPromise = initializeStorage();
+
+async function waitForStorageInitialization(timeoutMs) {
+  if (isStorageInitialized) {
+    return true;
+  }
+  try {
+    const completed = await Promise.race([
+      storageInitializationPromise.then(function () { return true; }).catch(function () { return false; }),
+      new Promise(function (resolve) {
+        setTimeout(function () { resolve(false); }, Math.max(0, Number(timeoutMs) || 0));
+      }),
+    ]);
+    return Boolean(completed) && isStorageInitialized;
+  } catch (error) {
+    console.error('Storage initialization wait failed:', error.message);
+    return false;
+  }
+}
 
 const RESPONSE_SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -6291,7 +6326,7 @@ async function handleApi(req, res, url) {
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(Array.isArray(body.locations) ? body.locations : []);
-      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], nextLocations);
+      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : (config.astroRoutes || []), nextLocations);
       config = normalizeConfig({
         ...config,
         astroLocations: nextLocations,
@@ -6806,11 +6841,31 @@ function handleStatic(req, res, url) {
 }
 
 async function requestHandler(req, res) {
-  await storageInitializationPromise;
   const url = new URL(req.url || '/', `http://${HOST}:${PORT}`);
   const startedAt = Date.now();
   const method = req.method || 'GET';
   const pathName = url.pathname || '/';
+
+  if (!pathName.startsWith('/api/')) {
+    handleStatic(req, res, url);
+    return;
+  }
+
+  const storageReady = await waitForStorageInitialization(pathName === '/api/status' ? 2500 : 8000);
+  if (!storageReady) {
+    if (pathName === '/api/status' && method === 'GET') {
+      sendJson(res, 200, buildPublicStatusPayload(), {
+        'X-App-Bootstrap': 'degraded',
+      });
+      return;
+    }
+    sendJson(res, 503, {
+      ok: false,
+      error: 'Storage initialization still in progress.',
+      webAuth: buildWebAuthConfigForClient(null),
+    });
+    return;
+  }
 
   res.once('finish', function () {
     if (!pathName.startsWith('/api/')) {
