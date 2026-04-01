@@ -6291,7 +6291,7 @@ async function handleApi(req, res, url) {
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(Array.isArray(body.locations) ? body.locations : []);
-      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], nextLocations);
+      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : (config.astroRoutes || []), nextLocations);
       config = normalizeConfig({
         ...config,
         astroLocations: nextLocations,

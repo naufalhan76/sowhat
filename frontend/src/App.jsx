@@ -518,6 +518,8 @@ export default function App() {
   const [astroRouteExpanded, setAstroRouteExpanded] = useState({});
   const [astroLocationSearch, setAstroLocationSearch] = useState('');
   const [astroRouteSearch, setAstroRouteSearch] = useState('');
+  const [selectedAstroLocationIds, setSelectedAstroLocationIds] = useState([]);
+  const [selectedAstroRouteIds, setSelectedAstroRouteIds] = useState([]);
   const [astroRouteCsvText, setAstroRouteCsvText] = useState('');
   const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', unitId: '' });
   const [astroReport, setAstroReport] = useState(null);
@@ -609,6 +611,8 @@ export default function App() {
       }),
     })).filter((group) => group.items.length > 0);
   }, [astroRouteGroups, astroRouteSearch, astroUnitLabelByKey, astroLocations]);
+  const visibleAstroLocationIds = useMemo(() => astroFilteredLocationGroups.flatMap((group) => group.items.map((location) => location.id)), [astroFilteredLocationGroups]);
+  const visibleAstroRouteIds = useMemo(() => astroFilteredRouteGroups.flatMap((group) => group.items.map((route) => route.id)), [astroFilteredRouteGroups]);
   const astroReportAccountOptions = useMemo(() => [{ value: 'all', label: 'All accounts' }, ...availableAccounts.map((account) => ({ value: account.id, label: account.label || account.authEmail || account.id })).sort((left, right) => left.label.localeCompare(right.label))], [availableAccounts]);
   const astroReportUnitOptions = useMemo(() => astroRoutes.map((route) => {
     const accountId = route.accountId || 'primary';
@@ -851,6 +855,14 @@ export default function App() {
       setExpandedFleetRowKey('');
     }
   }, [expandedFleetRowKey, prioritizedFleet]);
+
+  useEffect(() => {
+    setSelectedAstroLocationIds((current) => current.filter((id) => astroLocations.some((location) => location.id === id)));
+  }, [astroLocations]);
+
+  useEffect(() => {
+    setSelectedAstroRouteIds((current) => current.filter((id) => astroRoutes.some((route) => route.id === id)));
+  }, [astroRoutes]);
   const loadDashboard = async (syncConfig = false, quiet = false) => {
     if (!quiet) startBusy();
     const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
@@ -1500,13 +1512,31 @@ export default function App() {
     }
   };
 
-  const deleteAstroLocationEntry = async (locationId) => {
+  const toggleAstroLocationSelection = (locationId) => {
+    setSelectedAstroLocationIds((current) => current.includes(locationId) ? current.filter((id) => id !== locationId) : [...current, locationId]);
+  };
+
+  const deleteAstroLocations = async (locationIds, { bulk = false } = {}) => {
+    const nextIds = [...new Set((locationIds || []).filter(Boolean))];
+    if (!nextIds.length) return;
+    const selectedSet = new Set(nextIds);
+    const dependentRoutes = astroRoutes.filter((route) => selectedSet.has(route.whLocationId) || selectedSet.has(route.poolLocationId) || (route.podSequence || []).some((locationId) => selectedSet.has(locationId)));
+    const confirmMessage = dependentRoutes.length
+      ? `Hapus ${nextIds.length} geofence terpilih? ${dependentRoutes.length} Astro route yang bergantung ke lokasi ini juga akan ikut dihapus.`
+      : `Hapus ${nextIds.length} geofence terpilih?`;
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
     startBusy();
     try {
-      const nextLocations = astroLocations.filter((location) => location.id !== locationId);
-      await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations }) });
-      if (astroLocationForm.id === locationId) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
-      setBanner({ tone: 'success', message: 'Geofence deleted.' });
+      const nextLocations = astroLocations.filter((location) => !selectedSet.has(location.id));
+      const dependentRouteIds = new Set(dependentRoutes.map((route) => route.id));
+      const nextRoutes = astroRoutes.filter((route) => !dependentRouteIds.has(route.id));
+      await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations, routes: nextRoutes }) });
+      if (nextIds.includes(astroLocationForm.id)) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
+      if (dependentRouteIds.has(astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      setSelectedAstroLocationIds((current) => current.filter((id) => !selectedSet.has(id)));
+      setSelectedAstroRouteIds((current) => current.filter((id) => !dependentRouteIds.has(id)));
+      const routeCleanupText = dependentRoutes.length ? ` ${dependentRoutes.length} route ikut dibersihkan.` : '';
+      setBanner({ tone: 'success', message: bulk ? `${nextIds.length} geofence deleted.${routeCleanupText}` : `Geofence deleted.${routeCleanupText}` });
       await loadDashboard(true, true);
     } catch (error) {
       setAuthModal({ open: true, message: error.message || 'Geofence gagal dihapus.' });
@@ -1514,6 +1544,10 @@ export default function App() {
     } finally {
       stopBusy();
     }
+  };
+
+  const deleteAstroLocationEntry = async (locationId) => {
+    await deleteAstroLocations([locationId]);
   };
 
   const editAstroRouteEntry = (route) => {
@@ -1556,13 +1590,23 @@ export default function App() {
     }
   };
 
-  const deleteAstroRouteEntry = async (routeId) => {
+  const toggleAstroRouteSelection = (routeId) => {
+    setSelectedAstroRouteIds((current) => current.includes(routeId) ? current.filter((id) => id !== routeId) : [...current, routeId]);
+  };
+
+  const deleteAstroRoutes = async (routeIds, { bulk = false } = {}) => {
+    const nextIds = [...new Set((routeIds || []).filter(Boolean))];
+    if (!nextIds.length) return;
+    const confirmMessage = bulk ? `Hapus ${nextIds.length} Astro route terpilih?` : 'Hapus Astro route ini?';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
     startBusy();
     try {
-      const nextRoutes = astroRoutes.filter((route) => route.id !== routeId);
+      const selectedSet = new Set(nextIds);
+      const nextRoutes = astroRoutes.filter((route) => !selectedSet.has(route.id));
       await api('/api/astro/config/routes', { method: 'POST', body: JSON.stringify({ routes: nextRoutes }) });
-      if (astroRouteForm.id === routeId) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
-      setBanner({ tone: 'success', message: 'Astro route deleted.' });
+      if (nextIds.includes(astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      setSelectedAstroRouteIds((current) => current.filter((id) => !selectedSet.has(id)));
+      setBanner({ tone: 'success', message: bulk ? `${nextIds.length} Astro route deleted.` : 'Astro route deleted.' });
       await loadDashboard(true, true);
     } catch (error) {
       setAuthModal({ open: true, message: error.message || 'Astro route gagal dihapus.' });
@@ -1570,6 +1614,10 @@ export default function App() {
     } finally {
       stopBusy();
     }
+  };
+
+  const deleteAstroRouteEntry = async (routeId) => {
+    await deleteAstroRoutes([routeId]);
   };
 
   const importAstroLocations = async (replace = false) => {
@@ -2236,6 +2284,12 @@ export default function App() {
                       <input type="search" value={astroLocationSearch} onChange={(event) => setAstroLocationSearch(event.target.value)} placeholder="Cari nama lokasi, type, scope, note..." />
                     </div>
                   </label>
+                  <div className="inline-buttons astro-bulk-actions">
+                    <Button variant="bordered" onPress={() => setSelectedAstroLocationIds((current) => [...new Set([...current, ...visibleAstroLocationIds])])} disabled={!visibleAstroLocationIds.length}>Select visible</Button>
+                    <Button variant="bordered" onPress={() => setSelectedAstroLocationIds([])} disabled={!selectedAstroLocationIds.length}>Clear selected</Button>
+                    <Button variant="light" onPress={() => deleteAstroLocations(selectedAstroLocationIds, { bulk: true })} disabled={!selectedAstroLocationIds.length}>Delete selected ({selectedAstroLocationIds.length})</Button>
+                  </div>
+                  <div className="subtle-line">Menghapus geofence akan sekalian membersihkan Astro route yang masih memakai lokasi terpilih.</div>
                   {astroFilteredLocationGroups.length ? <div className="astro-group-stack">
                     <div className="astro-group-summary">
                       <Chip>{astroLocations.length} lokasi</Chip>
@@ -2259,7 +2313,7 @@ export default function App() {
                                 <strong>{location.name}</strong>
                                 <span>{location.type} | {location.radiusMeters} m | {location.scopeMode || 'global'}</span>
                               </div>
-                              <Chip color={location.isActive !== false ? 'success' : 'default'}>{location.isActive !== false ? 'Active' : 'Inactive'}</Chip>
+                              <div className="inline-buttons astro-card-select"><label className="checkbox-field"><input type="checkbox" checked={selectedAstroLocationIds.includes(location.id)} onChange={() => toggleAstroLocationSelection(location.id)} /><span>Select</span></label><Chip color={location.isActive !== false ? 'success' : 'default'}>{location.isActive !== false ? 'Active' : 'Inactive'}</Chip></div>
                             </div>
                             <div className="astro-entity-card-body">
                               <span>Lat {fmtCoord(location.latitude)}</span>
@@ -2343,6 +2397,11 @@ export default function App() {
                       <input type="search" value={astroRouteSearch} onChange={(event) => setAstroRouteSearch(event.target.value)} placeholder="Cari nopol, WH, POD, customer..." />
                     </div>
                   </label>
+                  <div className="inline-buttons astro-bulk-actions">
+                    <Button variant="bordered" onPress={() => setSelectedAstroRouteIds((current) => [...new Set([...current, ...visibleAstroRouteIds])])} disabled={!visibleAstroRouteIds.length}>Select visible</Button>
+                    <Button variant="bordered" onPress={() => setSelectedAstroRouteIds([])} disabled={!selectedAstroRouteIds.length}>Clear selected</Button>
+                    <Button variant="light" onPress={() => deleteAstroRoutes(selectedAstroRouteIds, { bulk: true })} disabled={!selectedAstroRouteIds.length}>Delete selected ({selectedAstroRouteIds.length})</Button>
+                  </div>
                   {astroFilteredRouteGroups.length ? <div className="astro-group-stack">
                     <div className="astro-group-summary">
                       <Chip>{astroRoutes.length} route</Chip>
@@ -2367,7 +2426,7 @@ export default function App() {
                                 <strong>{astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId}</strong>
                                 <span>{route.customerName || 'Astro'} | {route.unitId}</span>
                               </div>
-                              <Chip color={route.isActive !== false ? 'success' : 'default'}>{route.isActive !== false ? 'Active' : 'Inactive'}</Chip>
+                              <div className="inline-buttons astro-card-select"><label className="checkbox-field"><input type="checkbox" checked={selectedAstroRouteIds.includes(route.id)} onChange={() => toggleAstroRouteSelection(route.id)} /><span>Select</span></label><Chip color={route.isActive !== false ? 'success' : 'default'}>{route.isActive !== false ? 'Active' : 'Inactive'}</Chip></div>
                             </div>
                             <div className="astro-route-meta">
                               <span><strong>WH</strong>{astroLocations.find((location) => location.id === route.whLocationId)?.name || '-'}</span>

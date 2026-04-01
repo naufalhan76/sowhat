@@ -1008,6 +1008,9 @@ input:focus, select:focus, textarea:focus {
 .spacer-16 { height: 16px; }
 .inline-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.astro-bulk-actions { margin-top: -4px; }
+.astro-card-select { align-items: center; gap: 10px; }
+.astro-card-select .checkbox-field { margin: 0; }
 
 /* Account Stack (Config) */
 .account-stack { display: flex; flex-direction: column; gap: 12px; }
@@ -3135,5 +3138,7 @@ textarea:focus {
     display: inline-flex;
   }
 }
+
+
 
 
