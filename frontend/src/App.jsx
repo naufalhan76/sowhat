@@ -423,6 +423,19 @@ const getMapStatusMeta = (row) => {
   if (row?.isMoving || Number(row?.speed || 0) > 0) return { key: 'moving', label: 'Moving', color: '#22c55e' };
   return { key: 'stop', label: 'Stop', color: '#94a3b8' };
 };
+const geofenceChipTone = (row) => {
+  const label = String(row?.geofenceStatusLabel || '').trim().toLowerCase();
+  if (!label) return 'default';
+  if (label.startsWith('sampai pod')) return 'success';
+  if (label.startsWith('sampai wh')) return 'info';
+  if (label.startsWith('sampai pool')) return 'primary';
+  if (label.startsWith('sampai pol')) return 'warning';
+  if (label.startsWith('sampai pelabuhan')) return 'danger';
+  if (label.startsWith('sampai rest')) return 'default';
+  if (label === 'en route') return 'primary';
+  if (label === 'idle') return 'default';
+  return row?.geofenceActive ? 'success' : (row?.isMoving ? 'primary' : 'default');
+};
 const sortFleetRows = (rows) => [...rows].sort((left, right) => {
   const priorityGap = rowPriority(right) - rowPriority(left);
   if (priorityGap !== 0) return priorityGap;
@@ -1909,7 +1922,7 @@ export default function App() {
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
                             <td><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
-                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div>{row.geofenceStatusLabel ? <div className="subtle-line astro-inline-status">{row.geofenceStatusLabel}</div> : null}{row.astroActive ? <div className="subtle-line astro-inline-status">{row.astroStatusLabel}</div> : null}</div></td>
+                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div>{row.geofenceStatusLabel ? <div className="subtle-line astro-inline-status"><Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip></div> : null}{row.astroActive ? <div className="subtle-line astro-inline-status">{row.astroStatusLabel}</div> : null}</div></td>
                             <td><div><div>{row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : '-'}</div><div className="subtle-line">{row.setpointLabel || 'No rule'}</div></div></td>
                             <td><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
                             <td>{fmtNum(row.speed, 0)}</td>
@@ -2689,7 +2702,7 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
           <Chip variant="flat">Updated {fmtAgo(row.minutesSinceUpdate)}</Chip>
           <Chip variant="flat">Auto refresh {autoRefreshSeconds}s</Chip>
           {row.matchedPodSite ? <Chip color="success" variant="flat">POD {row.matchedPodSite.name}</Chip> : null}
-          {row.geofenceStatusLabel ? <Chip color={row.geofenceActive ? 'success' : row.isMoving ? 'primary' : 'default'} variant="flat">{row.geofenceStatusLabel}</Chip> : null}
+          {row.geofenceStatusLabel ? <Chip color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip> : null}
           {row.astroActive ? <Chip color={row.astroCurrentLocation ? 'warning' : 'default'} variant="flat">{row.astroStatusLabel}</Chip> : null}
         </div>
       </div>
