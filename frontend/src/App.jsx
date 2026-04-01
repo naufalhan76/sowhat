@@ -990,11 +990,9 @@ export default function App() {
         setBanner({ tone: 'success', message: `Welcome ${payload.user?.displayName || payload.user?.username || ''}`.trim() });
         setAuthModal({ open: false, message: '' });
       });
-      loadDashboard(true, true).catch((error) => {
-        setBanner({ tone: 'warning', message: error.message || 'Login berhasil, tapi data dashboard belum selesai dimuat.' });
-      });
+      await loadDashboard(true, true);
       if ((payload.user?.role || '') === 'admin') {
-        loadAdminUsers(true).catch(() => {});
+        await loadAdminUsers(true).catch(() => {});
       }
     } catch (error) {
       setAuthModal({ open: true, message: error.message || 'Web login failed.' });
@@ -3320,3 +3318,27 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

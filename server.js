@@ -101,7 +101,6 @@ let pollTimer = null;
 let remoteResetTimer = null;
 let pollInFlight = false;
 let remoteResetInFlight = false;
-const statusSnapshotRefreshInFlight = new Set();
 const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
@@ -3295,32 +3294,6 @@ function shouldRefreshFleetSnapshot(accountConfig, accountState, now) {
   return now - fetchedAtMs >= refreshAfterMs;
 }
 
-function refreshFleetSnapshotInBackground(account) {
-  const accountId = account?.id || 'primary';
-  if (statusSnapshotRefreshInFlight.has(accountId)) {
-    return;
-  }
-
-  statusSnapshotRefreshInFlight.add(accountId);
-  Promise.resolve()
-    .then(async function () {
-      const accountState = ensureAccountState(accountId);
-      await refreshFleetSnapshot(accountId);
-      capturePodSnapshots(account, accountState, buildFleetRows(account, accountState, Date.now(), buildLiveAlerts(account, accountState, Date.now())));
-      saveConfig();
-      saveState();
-    })
-    .catch(function (error) {
-      const accountState = ensureAccountState(accountId);
-      accountState.fleet.lastError = error.message;
-      accountState.runtime.lastSnapshotError = error.message;
-      saveState();
-    })
-    .finally(function () {
-      statusSnapshotRefreshInFlight.delete(accountId);
-    });
-}
-
 function buildLiveAlerts(accountConfig, accountState, now) {
   const freshnessMs = Math.max(
     10 * 60 * 1000,
@@ -6032,7 +6005,16 @@ async function handleApi(req, res, url) {
     for (const account of getAllAccountConfigs()) {
       const accountState = ensureAccountState(account.id);
       if (shouldRefreshFleetSnapshot(account, accountState, now)) {
-        refreshFleetSnapshotInBackground(account);
+        try {
+          await refreshFleetSnapshot(account.id);
+          capturePodSnapshots(account, accountState, buildFleetRows(account, accountState, now, buildLiveAlerts(account, accountState, now)));
+          saveConfig();
+          saveState();
+        } catch (error) {
+          accountState.fleet.lastError = error.message;
+          accountState.runtime.lastSnapshotError = error.message;
+          saveState();
+        }
       }
     }
 
