@@ -468,6 +468,9 @@ export default function App() {
   const [stopReport, setStopReport] = useState(null);
   const [unitDetail, setUnitDetail] = useState(null);
   const [detailBusy, setDetailBusy] = useState(false);
+  const [historicalDetail, setHistoricalDetail] = useState(null);
+  const [historicalDetailBusy, setHistoricalDetailBusy] = useState(false);
+  const [historicalAppliedSelection, setHistoricalAppliedSelection] = useState(null);
   const [banner, setBanner] = useState({ tone: 'info', message: '' });
   const [authModal, setAuthModal] = useState({ open: false, message: '' });
   const [busy, setBusy] = useState(false);
@@ -521,7 +524,7 @@ export default function App() {
   const [astroLocationSearch, setAstroLocationSearch] = useState('');
   const [astroRouteSearch, setAstroRouteSearch] = useState('');
   const [astroRouteCsvText, setAstroRouteCsvText] = useState('');
-  const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', unitId: '' });
+  const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', routeId: '' });
   const [astroReport, setAstroReport] = useState(null);
   const [astroDiagnosticsOpen, setAstroDiagnosticsOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
@@ -566,8 +569,8 @@ export default function App() {
     return map;
   }, [astroRouteUnitOptions]);
   const astroRouteFilteredUnitOptions = useMemo(() => astroRouteUnitOptions.filter((unit) => unit.accountId === astroRouteForm.accountId).map((unit) => ({ value: unit.id, label: `${unit.accountLabel} | ${unit.label || unit.id}` })), [astroRouteUnitOptions, astroRouteForm.accountId]);
-  const historyTripMetrics = useMemo(() => calculateTripMetrics(unitDetail?.records || []), [unitDetail?.records]);
-  const historicalGeofenceEvents = useMemo(() => unitDetail?.geofenceEvents || [], [unitDetail?.geofenceEvents]);
+  const historicalTripMetrics = useMemo(() => calculateTripMetrics(historicalDetail?.records || []), [historicalDetail?.records]);
+  const historicalGeofenceEvents = useMemo(() => historicalDetail?.geofenceEvents || [], [historicalDetail?.geofenceEvents]);
   const astroWhOptions = useMemo(() => astroWhLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label)), [astroWhLocations]);
   const astroPoolOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPoolLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPoolLocations]);
   const astroPodOptions = useMemo(() => [{ value: '', label: 'Optional' }, ...astroPodLocations.map((location) => ({ value: location.id, label: location.name })).sort((left, right) => left.label.localeCompare(right.label))], [astroPodLocations]);
@@ -617,13 +620,15 @@ export default function App() {
     const accountLabel = accountName(availableAccounts.find((account) => account.id === accountId));
     const unitLabel = astroUnitLabelByKey.get(`${accountId}::${route.unitId}`) || route.unitId;
     const whName = astroLocations.find((location) => location.id === route.whLocationId)?.name || 'WH';
-    const podSummary = (route.podSequence || [])
-      .map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId)
-      .slice(0, 2)
-      .join(' -> ');
+    const podNames = (route.podSequence || []).map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId);
+    const routePreview = `${accountLabel} | ${unitLabel}${podNames.length ? ` | ${whName} -> ${podNames.join(' -> ')}` : ` | ${whName}`}`;
+    const statusLabel = route.isActive === false ? 'Inactive' : 'Active';
     return {
-      value: `${accountId}::${route.unitId}::${route.id}`,
-      label: `${accountLabel} | ${unitLabel}${podSummary ? ` | ${whName} -> ${podSummary}` : ` | ${whName}`}`,
+      value: route.id,
+      accountId,
+      isActive: route.isActive !== false,
+      label: `${routePreview}${route.isActive === false ? ' | Inactive' : ''}`,
+      preview: `${routePreview}\nStatus: ${statusLabel}${route.rit1Start && route.rit1End ? `\nRit 1: ${route.rit1Start} to ${route.rit1End}` : ''}${route.rit2Enabled && route.rit2Start && route.rit2End ? `\nRit 2: ${route.rit2Start} to ${route.rit2End}` : ''}`,
     };
   }).sort((left, right) => left.label.localeCompare(right.label)), [astroRoutes, availableAccounts, astroUnitLabelByKey, astroLocations]);
   const astroReportMaxPods = astroReport?.summary?.maxPods || 0;
@@ -725,6 +730,10 @@ export default function App() {
     return sortFleetRows(filtered);
   }, [deferredHistoricalSearch, fleetRows]);
   const selectedHistoricalRow = useMemo(() => historicalFleet.find((row) => row.id === selectedUnitId && row.accountId === selectedUnitAccountId) || historicalFleet[0] || explicitSelectedFleetRow || fleetRows[0] || null, [historicalFleet, explicitSelectedFleetRow, fleetRows, selectedUnitId, selectedUnitAccountId]);
+  const historicalAppliedRow = useMemo(() => {
+    if (!historicalAppliedSelection?.unitId) return null;
+    return historicalFleet.find((row) => row.id === historicalAppliedSelection.unitId && row.accountId === historicalAppliedSelection.accountId) || fleetRows.find((row) => row.id === historicalAppliedSelection.unitId && row.accountId === historicalAppliedSelection.accountId) || null;
+  }, [historicalAppliedSelection, historicalFleet, fleetRows]);
   const activeDetailRow = activePanel === 'historical' ? selectedHistoricalRow : selectedFleetRow;
   const activeHistoricalRange = activePanel === 'historical' ? historicalRangeApplied : range;
   const errorRows = useMemo(() => [...(report?.tempErrorIncidents || [])].sort((left, right) => (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0)), [report]);
@@ -826,27 +835,23 @@ export default function App() {
   }, [prioritizedFleet, selectedUnitId, selectedUnitAccountId, fleetRows]);
 
   useEffect(() => {
-    const detailRow = activePanel === 'historical' ? selectedHistoricalRow : selectedFleetRow;
+    const detailRow = selectedFleetRow;
     if (!detailRow) return;
-    if (!['fleet', 'temp-errors', 'historical'].includes(activePanel)) return;
-    const detailSource = activePanel === 'historical' ? 'remote' : 'merged';
-    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, false, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
-  }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, selectedHistoricalRow?.id, selectedHistoricalRow?.accountId, range.startDate, range.endDate, historicalRangeApplied.startDate, historicalRangeApplied.endDate]);
+    if (!['fleet', 'temp-errors'].includes(activePanel)) return;
+    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, false, 'merged', range).catch(() => {});
+  }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, range.startDate, range.endDate]);
 
   useEffect(() => {
-    const detailRow = activePanel === 'historical' ? selectedHistoricalRow : selectedFleetRow;
+    const detailRow = selectedFleetRow;
     if (!detailRow) return;
-    if (!['fleet', 'temp-errors', 'historical'].includes(activePanel)) return;
+    if (!['fleet', 'temp-errors'].includes(activePanel)) return;
     const intervalMs = Math.max(30000, Number(status?.config?.pollIntervalSeconds || 60) * 1000);
-    const detailSource = activePanel === 'historical' ? 'remote' : 'merged';
     const timer = window.setInterval(() => {
-      loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
-      if (activePanel !== 'historical') {
-        loadDashboard(false, true).catch(() => {});
-      }
+      loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, 'merged', range).catch(() => {});
+      loadDashboard(false, true).catch(() => {});
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, selectedHistoricalRow?.id, selectedHistoricalRow?.accountId, range.startDate, range.endDate, historicalRangeApplied.startDate, historicalRangeApplied.endDate, status?.config?.pollIntervalSeconds]);
+  }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, range.startDate, range.endDate, status?.config?.pollIntervalSeconds]);
 
   useEffect(() => {
     if (!expandedFleetRowKey) return;
@@ -1050,6 +1055,30 @@ export default function App() {
     if (!quiet) setDetailBusy(false);
   };
 
+  const loadHistoricalDetail = async (accountId, unitId, rangeOverride = null, quiet = false) => {
+    if (!unitId) return;
+    if (!quiet) setHistoricalDetailBusy(true);
+    try {
+      const detailRange = rangeOverride || historicalRangeDraft;
+      const query = new URLSearchParams({ accountId: accountId || 'primary', unitId, startDate: detailRange.startDate, endDate: detailRange.endDate, source: 'remote' });
+      const payload = await api(`/api/unit-history?${query.toString()}`);
+      startTransition(() => {
+        setHistoricalDetail(payload);
+        setHistoricalAppliedSelection({ accountId: accountId || 'primary', unitId });
+        setHistoricalRangeApplied({ ...detailRange });
+        setSelectedUnitId(unitId);
+        setSelectedUnitAccountId(accountId || 'primary');
+      });
+    } catch (error) {
+      startTransition(() => {
+        setHistoricalDetail({ unit: { id: unitId }, records: [], incidents: [], geofenceEvents: [] });
+        setHistoricalAppliedSelection({ accountId: accountId || 'primary', unitId });
+        setHistoricalRangeApplied({ ...(rangeOverride || historicalRangeDraft) });
+        setBanner({ tone: 'error', message: error.message });
+      });
+    }
+    if (!quiet) setHistoricalDetailBusy(false);
+  };
   const saveConfig = async (keepBanner = false) => {
     startBusy('Menyimpan config...');
     try {
@@ -1410,17 +1439,18 @@ export default function App() {
     openUnit(accountId || 'primary', unitId, 'historical');
   };
   const pullHistoricalData = () => {
-    setHistoricalRangeApplied({ ...historicalRangeDraft });
+    if (!selectedHistoricalRow) return;
+    loadHistoricalDetail(selectedHistoricalRow.accountId || 'primary', selectedHistoricalRow.id, historicalRangeDraft, false).catch(() => {});
   };
   const exportFleet = async () => runQuickBlockingAction('Menyiapkan Fleet CSV...', () => csv('solofleet-fleet-live.csv', prioritizedFleet.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, unit_id: row.id, label: row.label, alias: row.alias, group_name: row.group, speed: row.speed, live_temp1: row.liveTemp1, live_temp2: row.liveTemp2, temp_gap: row.liveTempDelta, sensor_error: row.errSensor, gps_error: row.errGps, location: row.locationSummary, zone_name: row.zoneName, latitude: row.latitude, longitude: row.longitude, last_updated_at: row.lastUpdatedAt }))));
   const exportAlerts = async () => runQuickBlockingAction('Menyiapkan Alerts CSV...', () => csv('solofleet-temp-alerts.csv', errorRows.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, error_date: row.day, start_time: row.startTime, end_time: row.endTime, duration_minutes: row.durationMinutes, incidents: row.incidents, unit_id: row.unitId, unit_label: row.unitLabel, type: row.label, temp1_min: row.temp1Min, temp1_max: row.temp1Max, temp2_min: row.temp2Min, temp2_max: row.temp2Max, speed_min: row.minSpeed, speed_max: row.maxSpeed, latitude: row.latitude, longitude: row.longitude, location: row.locationSummary }))));
   const exportStop = async () => runQuickBlockingAction('Menyiapkan Stop CSV...', () => csv('solofleet-stop-idle.csv', (stopReport?.rows || []).map((row) => ({ account_id: stopForm.accountId, account_label: accountName(availableAccounts.find((account) => account.id === stopForm.accountId)), unit_id: row.unitId, alias: row.alias, start_time: row.startTimestamp ? new Date(row.startTimestamp).toISOString() : '', end_time: row.endTimestamp ? new Date(row.endTimestamp).toISOString() : '', duration_minutes: row.durationMinutes, movement_distance_km: row.movementDistance, avg_temp: row.avgTemp, location: row.locationSummary, latitude: row.latitude, longitude: row.longitude, zone_name: row.zoneName, google_maps_url: row.googleMapsUrl }))));
-  const historyTargetRow = selectedHistoricalRow || selectedFleetRow;
+  const historyTargetRow = historicalAppliedRow || selectedHistoricalRow || selectedFleetRow;
   const exportHistory = async () => {
     const unitPlate = String(historyTargetRow?.label || historyTargetRow?.alias || historyTargetRow?.id || selectedUnitId || 'Unit').trim() || 'Unit';
     const rangeLabel = `${historicalRangeApplied.startDate} to ${historicalRangeApplied.endDate}`;
     const fileName = `Historical Temperature ${rangeLabel} ${unitPlate}.csv`;
-    await runQuickBlockingAction('Menyiapkan Historical CSV...', () => csv(fileName, (unitDetail?.records || []).map((row) => ({ account_id: historyTargetRow?.accountId || selectedUnitAccountId, account_label: historyTargetRow?.accountLabel || accountName(availableAccounts.find((account) => account.id === (historyTargetRow?.accountId || selectedUnitAccountId)) || currentAccount), unit_id: historyTargetRow?.id || selectedUnitId, timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : '', speed: row.speed, temp1: row.temp1, temp2: row.temp2, location: row.locationSummary, latitude: row.latitude, longitude: row.longitude, power_supply: row.powerSupply, zone_name: row.zoneName }))));
+    await runQuickBlockingAction('Menyiapkan Historical CSV...', () => csv(fileName, (historicalDetail?.records || []).map((row) => ({ account_id: historyTargetRow?.accountId || selectedUnitAccountId, account_label: historyTargetRow?.accountLabel || accountName(availableAccounts.find((account) => account.id === (historyTargetRow?.accountId || selectedUnitAccountId)) || currentAccount), unit_id: historyTargetRow?.id || selectedUnitId, timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : '', speed: row.speed, temp1: row.temp1, temp2: row.temp2, location: row.locationSummary, latitude: row.latitude, longitude: row.longitude, power_supply: row.powerSupply, zone_name: row.zoneName }))));
   };
   const exportCompile = async () => runQuickBlockingAction('Menyiapkan Compile CSV...', () => csv('solofleet-compile-by-unit-day.csv', errorUnitsSummary.map((row) => ({ day: row.day, account_id: row.accountId, account_label: row.accountLabel, unit_id: row.unitId, unit_label: row.unitLabel, incidents: row.incidents, temp1_incidents: row.temp1Incidents, temp2_incidents: row.temp2Incidents, both_incidents: row.bothIncidents, total_minutes: row.totalMinutes, longest_minutes: row.longestMinutes }))));
   const exportPods = async () => runQuickBlockingAction('Menyiapkan POD CSV...', () => csv('solofleet-pod-snapshots.csv', podRows.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, day: row.day, time: row.time, unit_id: row.unitId, unit_label: row.unitLabel, customer_name: row.customerName, pod_name: row.podName, distance_meters: row.distanceMeters, speed: row.speed, latitude: row.latitude, longitude: row.longitude, location: row.locationSummary }))));
@@ -1691,10 +1721,10 @@ export default function App() {
     try {
       const query = new URLSearchParams({ startDate: astroReportFilters.startDate, endDate: astroReportFilters.endDate });
       if (astroReportFilters.accountId && astroReportFilters.accountId !== 'all') query.set('accountId', astroReportFilters.accountId);
-      if (astroReportFilters.unitId) {
-        const [routeAccountId, routeUnitId] = astroReportFilters.unitId.split('::');
-        if (routeAccountId) query.set('accountId', routeAccountId);
-        if (routeUnitId) query.set('unitId', routeUnitId);
+      if (astroReportFilters.routeId) {
+        const selectedRoute = astroRoutes.find((route) => route.id === astroReportFilters.routeId);
+        if (selectedRoute?.accountId) query.set('accountId', selectedRoute.accountId);
+        query.set('routeId', astroReportFilters.routeId);
       }
       const payload = await api(`/api/astro/report?${query.toString()}`);
       setAstroReport(payload);
@@ -1713,12 +1743,13 @@ export default function App() {
       const query = new URLSearchParams({ startDate: astroReportFilters.startDate, endDate: astroReportFilters.endDate });
       let nopolPrefix = '';
       if (astroReportFilters.accountId && astroReportFilters.accountId !== 'all') query.set('accountId', astroReportFilters.accountId);
-      if (astroReportFilters.unitId) {
-        const [routeAccountId, routeUnitId] = astroReportFilters.unitId.split('::');
-        if (routeAccountId) query.set('accountId', routeAccountId);
-        if (routeUnitId) query.set('unitId', routeUnitId);
-        
-        const unitLabel = astroUnitLabelByKey.get(`${routeAccountId || astroReportFilters.accountId || 'primary'}::${routeUnitId}`) || routeUnitId;
+      if (astroReportFilters.routeId) {
+        const selectedRoute = astroRoutes.find((route) => route.id === astroReportFilters.routeId);
+        if (selectedRoute?.accountId) query.set('accountId', selectedRoute.accountId);
+        query.set('routeId', astroReportFilters.routeId);
+        const routeAccountId = selectedRoute?.accountId || astroReportFilters.accountId || 'primary';
+        const routeUnitId = selectedRoute?.unitId || '';
+        const unitLabel = astroUnitLabelByKey.get(`${routeAccountId}::${routeUnitId}`) || routeUnitId;
         const sanitizedNopol = unitLabel.replace(/[^a-zA-Z0-9]/g, '');
         nopolPrefix = `${sanitizedNopol}-`;
       }
@@ -2134,8 +2165,9 @@ export default function App() {
                   <label className="historical-field">
                     <span>End date</span>
                     <input type="date" value={astroReportFilters.endDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, endDate: event.target.value }))} />
-                  </label>                  <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', unitId: '' }))} placeholder="Search account..." />
-                  <SearchableSelect label="Nopol route" value={astroReportFilters.unitId} options={[{ value: '', label: 'All configured routes' }, ...astroReportUnitOptions.filter((option) => astroReportFilters.accountId === 'all' || option.value.startsWith(`${astroReportFilters.accountId}::`))]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, unitId: nextValue || '' }))} placeholder="Search route..." />
+                  </label>
+                  <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', routeId: '' }))} placeholder="Search account..." />
+                  <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportUnitOptions.filter((option) => astroReportFilters.accountId === 'all' || option.accountId === astroReportFilters.accountId)]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
                   <div className="historical-action-field">
                     <span>Action</span>
                     <Button color="primary" onPress={generateAstroReport}>Generate report</Button>
@@ -2164,9 +2196,8 @@ export default function App() {
               <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error incidents</h2><p>Klik baris untuk membuka detail grafik unit terkait.</p></div></CardHeader><CardContent><DataTable className="temp-error-table" shellClassName="temp-error-table-shell" pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} columns={['Tanggal', 'Mulai', 'Selesai', 'Durasi', 'Account', 'Nopol', 'Severity', 'Temp 1', 'Temp 2', 'Speed']} emptyMessage="Belum ada temp error incident di range ini." rows={errorRows.map((row) => [row.day ? fmtDateOnly(row.day) : '-', row.startTime || '-', row.endTime || '-', row.durationMinutes != null ? fmtNum(row.durationMinutes, 1) : '-', row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId}</strong><div className="subtle-line">{row.unitId}</div></div>, <Chip className="wrap-chip" color={row.type === 'temp1+temp2' ? 'danger' : 'warning'} variant="flat">{row.label}</Chip>, `${fmtNum(row.temp1Min)} to ${fmtNum(row.temp1Max)}`, `${fmtNum(row.temp2Min)} to ${fmtNum(row.temp2Max)}`, `${fmtNum(row.minSpeed, 0)} - ${fmtNum(row.maxSpeed, 0)}`])} getRowProps={(row, rowIndex) => ({ key: `${errorRows[rowIndex]?.accountId || 'account'}-${errorRows[rowIndex]?.unitId || 'alert'}-${errorRows[rowIndex]?.day || rowIndex}`, className: errorRows[rowIndex]?.type === 'temp1+temp2' ? 'data-row data-row-danger' : 'data-row data-row-warning', onClick: () => openUnit(errorRows[rowIndex].accountId || 'primary', errorRows[rowIndex].unitId, 'temp-errors') })} /></CardContent></Card>
               <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Selected unit chart</h2><p>Grafik suhu untuk unit yang dipilih dari daftar error.</p></div></CardHeader><CardContent>{selectedFleetRow ? <><div className="focus-side-meta"><strong>{selectedFleetRow.id} | {selectedFleetRow.label}</strong><div className="subtle-line">{selectedFleetRow.accountLabel || selectedFleetRow.accountId}</div><div className="subtle-line">{selectedFleetRow.locationSummary || '-'}</div></div><TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Sensor trend" description="Grafik menampilkan data historical Solofleet sesuai tanggal aktif yang dipilih." compact /></> : <div className="empty-state">Klik salah satu incident buat lihat chart unit.</div>}</CardContent></Card>
             </div>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Unit compile by day</h2><p>Section ini selalu 1 hari 1 row. Detail unit tetap dipakai waktu export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile error by day di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card>
           </> : null}
-
+          {activePanel === 'temp-errors' ? <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Unit compile by day</h2><p>Section ini selalu 1 hari 1 row. Detail unit tetap dipakai waktu export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile error by day di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card> : null}
           {activePanel === 'historical' ? <>
             <Card className="panel-card">
               <CardHeader className="panel-card-header">
@@ -2196,8 +2227,8 @@ export default function App() {
                     </label>
                     <label className="historical-field historical-unit-field">
                       <span>Unit</span>
-                      <select value={selectedHistoricalRow ? unitRowKey(selectedHistoricalRow) : ''} onChange={(event) => selectHistoricalUnit(event.target.value)}>
-                        {historicalFleet.map((row) => <option key={row.rowKey || unitRowKey(row)} value={unitRowKey(row)}>{row.accountLabel || row.accountId || 'Account'} | {row.id} | {row.label}</option>)}
+                      <select value={selectedHistoricalRow ? unitRowKey(selectedHistoricalRow) : ""} onChange={(event) => selectHistoricalUnit(event.target.value)}>
+                        {historicalFleet.map((row) => <option key={row.rowKey || unitRowKey(row)} value={unitRowKey(row)}>{row.accountLabel || row.accountId || "Account"} | {row.id} | {row.label}</option>)}
                       </select>
                     </label>
                     <label className="historical-field historical-date-field">
@@ -2210,27 +2241,28 @@ export default function App() {
                     </label>
                     <div className="historical-action-field">
                       <span>Action</span>
-                      <Button color="primary" onPress={pullHistoricalData}>Tarik Data</Button>
+                      <Button color="primary" onPress={pullHistoricalData}>{historicalDetailBusy ? <><Spinner size="sm" /> Menarik...</> : "Tarik Data"}</Button>
                     </div>
                   </div>
                   <div className="historical-summary">{historicalFleet.length} unit tersedia buat dipilih dari fleet live. Menampilkan {historicalRangeApplied.startDate} to {historicalRangeApplied.endDate}.</div>
-                  {selectedHistoricalRow ? <>
-                                        <div className="focus-side-meta">
-                      <strong>{selectedHistoricalRow.id} | {selectedHistoricalRow.label}</strong>
-                      <div className="subtle-line">{selectedHistoricalRow.accountLabel || selectedHistoricalRow.accountId}</div>
-                      <div className="subtle-line">{selectedHistoricalRow.customerName || 'No customer profile'}</div>
+                  {selectedHistoricalRow && historicalAppliedRow && unitRowKey(selectedHistoricalRow) !== unitRowKey(historicalAppliedRow) ? <div className="subtle-line historical-pending-hint">Pilihan unit atau range berubah. Klik Tarik Data untuk memuat historical terbaru.</div> : null}
+                  {historicalAppliedRow ? <>
+                    <div className="focus-side-meta">
+                      <strong>{historicalAppliedRow.id} | {historicalAppliedRow.label}</strong>
+                      <div className="subtle-line">{historicalAppliedRow.accountLabel || historicalAppliedRow.accountId}</div>
+                      <div className="subtle-line">{historicalAppliedRow.customerName || "No customer profile"}</div>
                     </div>
                     <div className="unit-summary-grid historical-metrics-grid">
                       <SummaryMetric label="Trip km" value={fmtNum(historyTripMetrics.distanceKm, 1)} />
                       <SummaryMetric label="Moving" value={formatMinutesText(historyTripMetrics.movingMinutes)} />
                       <SummaryMetric label="Stopped" value={formatMinutesText(historyTripMetrics.stoppedMinutes)} />
                     </div>
-                    <TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
+                    <TemperatureChart records={historicalDetail?.records || []} busy={historicalDetailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
                     <div className="spacer-16" />
                     <DataTable columns={["Status", "Masuk", "Keluar", "Durasi", "Jarak", "Lokasi"]} emptyMessage="Belum ada event geofence yang valid di range ini." rows={historicalGeofenceEvents.map((event) => [event.statusLabel || "-", fmtDate(event.enteredAt), fmtDate(event.leftAt), formatMinutesText(event.durationMinutes), event.distanceMeters != null ? `${fmtNum(event.distanceMeters, 0)} m` : "-", <div><div>{event.locationName || "-"}</div><div className="subtle-line">{event.locationType || "-"}</div></div>])} />
                     <div className="spacer-16" />
-                    <DataTable pagination={{ initialRowsPerPage: 30, rowsPerPageOptions: [30, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Lat", "Lng", "Power supply", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range ini." rows={[...(unitDetail?.records || [])].reverse().map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || "-"}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || "Outside geofence"}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || "-"}</div><div className="subtle-line">{row.zoneName || "No zone"}</div></div>, fmtCoord(row.latitude), fmtCoord(row.longitude), fmtNum(row.powerSupply, 2), row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : "-"])} />
-                  </> : <div className="empty-state">Belum ada unit yang cocok dengan filter historical.</div>}
+                    <DataTable pagination={{ initialRowsPerPage: 30, rowsPerPageOptions: [30, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Lat", "Lng", "Power supply", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range ini." rows={[...(historicalDetail?.records || [])].reverse().map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || "-"}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || "Outside geofence"}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || "-"}</div><div className="subtle-line">{row.zoneName || "No zone"}</div></div>, fmtCoord(row.latitude), fmtCoord(row.longitude), fmtNum(row.powerSupply, 2), row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : "-"])} />
+                  </> : selectedHistoricalRow ? <div className="empty-state">Pilih unit dan range, lalu klik Tarik Data untuk memuat historical dari Solofleet.</div> : <div className="empty-state">Belum ada unit yang cocok dengan filter historical.</div>}
                 </> : <div className="empty-state">Belum ada unit dari fleet live untuk dipilih.</div>}
               </CardContent>
             </Card>
@@ -2245,7 +2277,7 @@ export default function App() {
               <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Recent requests</h2><p>Request data terbaru ke Solofleet beserta status HTTP-nya.</p></div></CardHeader><CardContent><DataTable columns={['Time', 'Method', 'Path', 'Status', 'Duration', 'Error']} pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} emptyMessage="Belum ada recent request." rows={(apiMonitor?.recent || []).map((row) => [fmtDate(row.timestamp), row.method, `${row.path}${row.query || ''}`, row.statusCode, `${fmtNum(row.durationMs, 0)} ms`, row.error || '-'])} /></CardContent></Card>
             </div>
           </> : null}
-                    {activePanel === 'config' ? <>
+          {activePanel === 'config' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>            <Card className="panel-card">
               <CardHeader className="panel-card-header">
@@ -3317,7 +3349,10 @@ function SearchableSelect({ label, value, options, onChange, placeholder = 'Sear
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = normalizedQuery
-    ? options.filter((option) => String(option.label || '').toLowerCase().includes(normalizedQuery) || String(option.value || '').toLowerCase().includes(normalizedQuery))
+    ? options.filter((option) => {
+      const haystacks = [option.label, option.value, option.preview];
+      return haystacks.some((candidate) => String(candidate || '').toLowerCase().includes(normalizedQuery));
+    })
     : options;
 
   const pickOption = (nextValue) => {
@@ -3326,7 +3361,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = 'Sear
     setQuery('');
   };
 
-  return <label className="field searchable-field" ref={wrapperRef}><span>{label}</span><button type="button" className={`searchable-trigger ${open ? 'is-open' : ''}`} onClick={() => setOpen((current) => !current)}><span className={`searchable-trigger-text ${selectedOption ? '' : 'is-placeholder'}`}>{selectedOption?.label || placeholder}</span><span className="searchable-trigger-icon">v</span></button>{open ? <div className="searchable-dropdown"><div className="searchable-dropdown-search"><Search size={14} /><input ref={searchInputRef} type="text" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} /></div><div className="searchable-dropdown-list">{filteredOptions.length ? filteredOptions.map((option) => <button key={`${label}-${option.value || 'empty'}`} type="button" className={`searchable-option ${option.value === value ? 'is-selected' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => pickOption(option.value)}>{option.label}</button>) : <div className="searchable-empty">No match found</div>}</div></div> : null}</label>;
+  return <label className="field searchable-field" ref={wrapperRef}><span>{label}</span><button type="button" className={`searchable-trigger ${open ? 'is-open' : ''}`} title={selectedOption?.preview || selectedOption?.label || placeholder} onClick={() => setOpen((current) => !current)}><span className={`searchable-trigger-text ${selectedOption ? '' : 'is-placeholder'}`}>{selectedOption?.label || placeholder}</span><span className="searchable-trigger-icon">v</span></button>{open ? <div className="searchable-dropdown"><div className="searchable-dropdown-search"><Search size={14} /><input ref={searchInputRef} type="text" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} /></div><div className="searchable-dropdown-list">{filteredOptions.length ? filteredOptions.map((option) => <button key={`${label}-${option.value || 'empty'}`} type="button" className={`searchable-option ${option.value === value ? 'is-selected' : ''}`} title={option.preview || option.label} onMouseDown={(event) => event.preventDefault()} onClick={() => pickOption(option.value)}>{option.label}</button>) : <div className="searchable-empty">No match found</div>}</div></div> : null}</label>;
 }
 
 function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', shellClassName = '', pagination = null }) {
@@ -3365,6 +3400,15 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
 
 
 

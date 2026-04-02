@@ -5053,9 +5053,13 @@ async function buildAstroReportPayload(searchParams) {
   const startDate = searchParams.get('startDate') || searchParams.get('start') || formatLocalDay(range.rangeStartMs);
   const endDate = searchParams.get('endDate') || searchParams.get('end') || formatLocalDay(range.rangeEndMs);
   const accountId = String(searchParams.get('accountId') || 'all').trim() || 'all';
+  const routeId = String(searchParams.get('routeId') || '').trim();
   const unitId = String(searchParams.get('unitId') || '').trim().toUpperCase();
   const activeRoutes = (config.astroRoutes || []).filter(function (route) {
-    if (route.isActive === false) {
+    if (routeId && String(route.id || '').trim() !== routeId) {
+      return false;
+    }
+    if (!routeId && route.isActive === false) {
       return false;
     }
     if (accountId !== 'all' && String(route.accountId || 'primary') !== accountId) {
@@ -5211,6 +5215,7 @@ async function buildAstroReportPayload(searchParams) {
     rangeEndMs: range.rangeEndMs,
     filters: {
       accountId,
+      routeId,
       unitId,
       startDate,
       endDate,
