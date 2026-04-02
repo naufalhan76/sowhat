@@ -3154,3 +3154,56 @@ textarea:focus {
 
 
 
+
+.astro-report-panel {
+  overflow: visible;
+}
+
+.astro-report-panel .sf-card-content {
+  overflow: visible;
+}
+
+.astro-report-panel .historical-toolbar {
+  grid-template-columns: minmax(170px, 0.8fr) minmax(170px, 0.8fr) minmax(220px, 0.95fr) minmax(340px, 1.7fr) minmax(150px, 0.55fr);
+  align-items: end;
+}
+
+.astro-report-panel .historical-toolbar > * {
+  min-width: 0;
+}
+
+.astro-report-panel .historical-action-field {
+  min-width: 150px;
+}
+
+.astro-report-panel .historical-action-field .sf-btn {
+  min-width: 150px;
+}
+
+.astro-report-panel .searchable-field {
+  z-index: 6;
+}
+
+.astro-report-panel .searchable-field:has(.searchable-trigger.is-open) {
+  z-index: 20;
+}
+
+.astro-report-panel .searchable-dropdown {
+  z-index: 60;
+}
+
+@media (max-width: 1380px) {
+  .astro-report-panel .historical-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .astro-report-panel .historical-action-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .astro-report-panel .historical-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
