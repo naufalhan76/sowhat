@@ -2015,6 +2015,9 @@ async function initializeStorage() {
     });
   }
 
+  state.runtime.isPolling = false;
+  state.runtime.nextRunAt = null;
+  isStorageInitialized = true;
 
   if (getPostgresConfig().enabled) {
     await migrateSupabaseDataToPostgres();
@@ -2039,10 +2042,6 @@ async function initializeStorage() {
     }
   }
   
-  state.runtime.isPolling = false;
-  state.runtime.nextRunAt = null;
-  isStorageInitialized = true;
-
   try {
     if (getPostgresConfig().enabled) {
       const postgresUsers = await postgresQuery('select count(*)::int as count from dashboard_web_users');
@@ -6854,7 +6853,12 @@ async function requestHandler(req, res) {
     return;
   }
 
-  const storageReady = await waitForStorageInitialization(pathName === '/api/status' ? 2500 : 8000);
+  const storageWaitTimeoutMs = pathName === '/api/status'
+    ? 2500
+    : pathName === '/api/web-auth/login'
+      ? 30000
+      : 8000;
+  const storageReady = await waitForStorageInitialization(storageWaitTimeoutMs);
   if (!storageReady) {
     if (pathName === '/api/status' && method === 'GET') {
       sendJson(res, 200, buildPublicStatusPayload(), {
