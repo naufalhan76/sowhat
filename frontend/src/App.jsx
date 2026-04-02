@@ -1967,11 +1967,10 @@ export default function App() {
                       <tr>
                         <th>Health</th>
                         <th>Account</th>
-                        <th>Unit</th>
+                        <th style={{ minWidth: 180, maxWidth: 180 }}>Unit</th>
                         <th>Status</th>
                         <th>Customer</th>
-                        <th>Setpoint</th>
-                        <th>Location</th>
+                        <th style={{ minWidth: 220, maxWidth: 220 }}>Location</th>
                         <th>Speed</th>
                         <th>Temp 1</th>
                         <th>Temp 2</th>
@@ -1990,11 +1989,10 @@ export default function App() {
                           <tr className={`${rowPriority(row) >= 5 ? 'data-row data-row-danger' : rowPriority(row) >= 3 ? 'data-row data-row-warning' : 'data-row'}${expanded ? ' data-row-active' : ''}`}>
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
-                            <td><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
-                            <td><div>{row.geofenceStatusLabel ? <div className="astro-inline-status"><Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip></div> : (row.astroActive ? <div className="astro-inline-status">{row.astroStatusLabel}</div> : <Chip className="wrap-chip" color="default" variant="flat">IDLE</Chip>)}</div></td>
+                            <td style={{ minWidth: 180, maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
+                            <td><div>{row.geofenceStatusLabel ? <div className="astro-inline-status"><Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip></div> : (row.astroActive ? <div className="astro-inline-status">{row.astroStatusLabel}</div> : <Chip className="wrap-chip" color="default" variant="flat">{row.locationSummary || row.zoneName || 'IDLE'}</Chip>)}</div></td>
                             <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div></div></td>
-                            <td><div><div>{row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : '-'}</div><div className="subtle-line">{row.setpointLabel || 'No rule'}</div></div></td>
-                            <td><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
+                            <td style={{ minWidth: 220, maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
                             <td>{fmtNum(row.speed, 0)}</td>
                             <td>{fmtNum(row.liveTemp1)}</td>
                             <td>{fmtNum(row.liveTemp2)}</td>
