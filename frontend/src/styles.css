@@ -2725,14 +2725,22 @@ textarea:focus {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.02em;
+}
+
+.astro-toolbar .field > span,
+.astro-toolbar .searchable-field > span {
+  text-transform: none;
 }
 
 .astro-toolbar .historical-field input,
 .astro-toolbar .historical-field select,
-.astro-toolbar .searchable-field {
+.astro-toolbar .searchable-trigger,
+.astro-toolbar .historical-action-field .sf-btn {
   height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 .astro-toolbar .historical-action-field {
@@ -2747,12 +2755,11 @@ textarea:focus {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.02em;
 }
 
 .astro-toolbar .historical-action-field .sf-btn {
-  height: 40px;
   min-width: 140px;
 }
 
