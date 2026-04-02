@@ -1968,8 +1968,7 @@ export default function App() {
                         <th>Health</th>
                         <th>Account</th>
                         <th style={{ minWidth: 180, maxWidth: 180 }}>Unit</th>
-                        <th>Status</th>
-                        <th>Customer</th>
+                        <th style={{ minWidth: 240, maxWidth: 240 }}>Status</th>
                         <th style={{ minWidth: 220, maxWidth: 220 }}>Location</th>
                         <th>Speed</th>
                         <th>Temp 1</th>
@@ -1990,8 +1989,31 @@ export default function App() {
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
                             <td style={{ minWidth: 180, maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
-                            <td><div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>{row.geofenceStatusLabel ? <Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip> : null}{row.astroActive ? <Chip className="wrap-chip" color={row.astroCurrentLocation ? 'warning' : 'default'} variant="flat">{row.astroStatusLabel}</Chip> : null}{!row.geofenceStatusLabel && !row.astroActive ? <Chip className="wrap-chip" color="default" variant="flat">{row.locationSummary || row.zoneName || 'IDLE'}</Chip> : null}</div></td>
-                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div></div></td>
+                            <td style={{ minWidth: 240, maxWidth: 240, whiteSpace: 'normal' }}>
+                              <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                {(() => {
+                                  const chips = [];
+                                  if (row.geofenceStatusLabel) {
+                                    chips.push({ text: row.geofenceStatusLabel, color: geofenceChipTone(row) });
+                                  }
+                                  if (row.astroActive && row.astroStatusLabel) {
+                                    chips.push({ text: row.astroStatusLabel, color: row.astroCurrentLocation ? 'warning' : 'default' });
+                                  }
+                                  if (chips.length === 0) {
+                                    chips.push({ text: row.locationSummary || row.zoneName || 'IDLE', color: 'default' });
+                                  }
+
+                                  const displayChips = chips.filter((c, idx) => {
+                                    const t = c.text.toLowerCase();
+                                    if (chips.findIndex(oc => oc.text.toLowerCase() === t) < idx) return false;
+                                    if (t === 'en route' && chips.some(oc => oc.text.toLowerCase().includes('en route astro'))) return false;
+                                    return true;
+                                  });
+
+                                  return displayChips.map((c, i) => <Chip key={i} className="wrap-chip" color={c.color} variant="flat">{c.text}</Chip>);
+                                })()}
+                              </div>
+                            </td>
                             <td style={{ minWidth: 220, maxWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
                             <td>{fmtNum(row.speed, 0)}</td>
                             <td>{fmtNum(row.liveTemp1)}</td>
