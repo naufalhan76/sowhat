@@ -1,0 +1,168 @@
+Security Retest Report
+Target: https://app.mabox.tech
+Date: 2026-04-01
+Mode: Non-destructive production verification
+
+Summary
+- Public read access to sensitive API endpoints is blocked without login.
+- Public /api/status is reduced to a minimal payload.
+- Security headers are present in production responses.
+- Login rate limiting is active in production.
+- Same-origin mutation guard works on general mutating endpoints.
+- Important remaining loophole: /api/web-auth/login still appears to bypass the new same-origin mutation guard because of route ordering.
+
+1. Root Response Headers
+Command:
+curl.exe -i https://app.mabox.tech/
+
+Key output:
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Cache-Control: no-store
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:
+
+Result:
+PASS - Security headers are present on the main app response.
+
+2. Public /api/status Payload
+Command:
+curl.exe -i https://app.mabox.tech/api/status
+
+Key output:
+HTTP/1.1 200 OK
+{
+  "now": 1774978314902,
+  "runtime": {
+    "isPolling": false,
+    "lastRunMessage": "Login required",
+    "unitCount": 0,
+    "liveAlertCount": 0,
+    "accountCount": 0
+  },
+  "accounts": [],
+  "overview": {
+    "totalUnits": 0,
+    "onlineUnits": 0,
+    "liveAlerts": 0,
+    "criticalAlerts": 0
+  },
+  "fleet": {
+    "fetchedAt": null,
+    "lastError": null,
+    "rows": []
+  },
+  "liveAlerts": [],
+  "podSnapshots": [],
+  "units": [],
+  "webAuth": {
+    "sessionUser": null
+  }
+}
+
+Result:
+PASS - Provider/storage details are no longer exposed. Status is public but minimized.
+
+3. Sensitive API Without Login
+Commands:
+curl.exe -i https://app.mabox.tech/api/config
+curl.exe -i https://app.mabox.tech/api/astro/config
+curl.exe -i https://app.mabox.tech/api/monitor
+curl.exe -i https://app.mabox.tech/api/admin/users
+
+Key output for each:
+HTTP/1.1 401 Unauthorized
+{
+  "ok": false,
+  "error": "Login dashboard required.",
+  "webAuth": {
+    "sessionUser": null
+  }
+}
+
+Result:
+PASS - Unauthenticated access to sensitive endpoints is blocked.
+
+4. Login Rate Limit Test
+Command:
+$json = @{ username = 'pentest-nope'; password = 'wrong-password' } | ConvertTo-Json -Compress;
+1..12 | ForEach-Object {
+  try {
+    Invoke-WebRequest -Uri 'https://app.mabox.tech/api/web-auth/login' -Method POST -ContentType 'application/json' -Body $json -UseBasicParsing | Out-Null;
+    Write-Output ("TRY {0}: 200" -f $_)
+  } catch {
+    $status = $_.Exception.Response.StatusCode.value__;
+    $retry = $_.Exception.Response.Headers['Retry-After'];
+    Write-Output ("TRY {0}: {1} {2}" -f $_, $status, $retry)
+  }
+}
+
+Actual output:
+TRY 1: 401
+TRY 2: 401
+TRY 3: 401
+TRY 4: 401
+TRY 5: 401
+TRY 6: 401
+TRY 7: 401
+TRY 8: 401
+TRY 9: 401
+TRY 10: 401
+TRY 11: 429 900
+TRY 12: 429 900
+
+Result:
+PASS - Rate limiting is active. Lockout begins after repeated failed attempts and returns Retry-After.
+
+5. Cross-Site Mutation Guard on General Mutating Endpoint
+Command:
+try {
+  Invoke-WebRequest -Uri 'https://app.mabox.tech/api/poll/run' -Method POST -Headers @{ Origin = 'https://evil.example' } -UseBasicParsing | Out-Null;
+  'STATUS 200'
+} catch {
+  'STATUS ' + $_.Exception.Response.StatusCode.value__
+}
+
+Actual output:
+STATUS 403
+
+Result:
+PASS - Cross-site POST to a mutating endpoint is rejected.
+
+6. Cross-Site Test Against /api/web-auth/login
+Commands:
+try {
+  Invoke-WebRequest -Uri 'https://app.mabox.tech/api/web-auth/login' -Method POST -ContentType 'application/json' -Headers @{ Origin = 'https://evil.example' } -Body $json -UseBasicParsing | Out-Null;
+  'STATUS 200'
+} catch {
+  'STATUS ' + $_.Exception.Response.StatusCode.value__
+}
+
+try {
+  Invoke-WebRequest -Uri 'https://app.mabox.tech/api/web-auth/login' -Method POST -ContentType 'application/json' -Headers @{ Origin = 'https://app.mabox.tech' } -Body $json -UseBasicParsing | Out-Null;
+  'STATUS 200'
+} catch {
+  'STATUS ' + $_.Exception.Response.StatusCode.value__ + ' RETRY ' + ($_.Exception.Response.Headers['Retry-After'] -join ',')
+}
+
+Actual output:
+STATUS 429
+STATUS 429 RETRY 152
+
+Interpretation:
+- These responses indicate the request reached login rate-limit logic instead of being blocked first by the same-origin guard.
+- Because /api/poll/run correctly returned 403 for cross-site, the most likely explanation is route ordering: /api/web-auth/login is handled before the global mutation guard block.
+
+Result:
+FINDING - /api/web-auth/login likely still bypasses the same-origin mutation guard.
+
+Conclusion
+- The major hardening work is active in production.
+- The app is meaningfully safer than before: sensitive API access now requires login, status is minimized, browser security headers are present, and rate limiting works.
+- One remaining loophole was identified during live retest: the same-origin mutation guard does not appear to apply to /api/web-auth/login.
+- Recommended next fix: move the same-origin mutation guard so it also covers /api/web-auth/login and /api/web-auth/logout, or add explicit guard checks inside those handlers.

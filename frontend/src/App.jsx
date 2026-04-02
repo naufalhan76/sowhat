@@ -830,7 +830,7 @@ export default function App() {
     if (!detailRow) return;
     if (!['fleet', 'temp-errors', 'historical'].includes(activePanel)) return;
     const detailSource = activePanel === 'historical' ? 'remote' : 'merged';
-    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, true, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
+    loadUnitDetail(detailRow.accountId || 'primary', detailRow.id, false, detailSource, activePanel === 'historical' ? historicalRangeApplied : range).catch(() => {});
   }, [activePanel, selectedFleetRow?.id, selectedFleetRow?.accountId, selectedHistoricalRow?.id, selectedHistoricalRow?.accountId, range.startDate, range.endDate, historicalRangeApplied.startDate, historicalRangeApplied.endDate]);
 
   useEffect(() => {
