@@ -112,6 +112,8 @@ const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 
 const SOLOFLEET_LOGIN_RATE_LIMIT_MAX = Number(process.env.SOLOFLEET_LOGIN_RATE_LIMIT_MAX || 8);
 const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
 const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 5000);
+const POSTGRES_CONNECT_TIMEOUT_MS = Number(process.env.POSTGRES_CONNECT_TIMEOUT_MS || 5000);
+const POSTGRES_QUERY_TIMEOUT_MS = Number(process.env.POSTGRES_QUERY_TIMEOUT_MS || 8000);
 const remoteResetRuntime = {
   nextRunAt: null,
   lastRunStartedAt: null,
@@ -1286,7 +1288,14 @@ function matchesRequestHost(req, candidateUrl) {
   }
   try {
     const parsed = new URL(candidateUrl);
-    return String(parsed.host || '').trim().toLowerCase() === expectedHost;
+    const candidateHost = String(parsed.host || '').trim().toLowerCase();
+    if (candidateHost === expectedHost) {
+      return true;
+    }
+    if (isLocalHostValue(expectedHost) && isLocalHostValue(candidateHost)) {
+      return true;
+    }
+    return false;
   } catch (error) {
     return false;
   }
@@ -3872,6 +3881,11 @@ function getPostgresPool() {
     postgresPool = new Pool({
       connectionString: runtime.connectionString,
       ssl: /supabase|render|railway|neon/i.test(runtime.connectionString) ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: Math.max(1000, POSTGRES_CONNECT_TIMEOUT_MS),
+      query_timeout: Math.max(1000, POSTGRES_QUERY_TIMEOUT_MS),
+      statement_timeout: Math.max(1000, POSTGRES_QUERY_TIMEOUT_MS),
+      idleTimeoutMillis: 30000,
+      keepAlive: true,
     });
   }
   return postgresPool;
