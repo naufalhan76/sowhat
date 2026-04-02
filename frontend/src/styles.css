@@ -248,6 +248,7 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  position: relative;
   justify-content: space-between;
   gap: clamp(8px, 2vw, 16px);
   padding: 0 clamp(16px, 3vw, 32px);
