@@ -730,8 +730,8 @@ export default function App() {
   const errorRows = useMemo(() => [...(report?.tempErrorIncidents || [])].sort((left, right) => (right.firstStartTimestamp || 0) - (left.firstStartTimestamp || 0)), [report]);
   const podRows = useMemo(() => [...(report?.podSnapshots || [])].sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0)), [report]);
   const errorOverview = useMemo(() => buildErrorOverview(errorRows), [errorRows]);
-  const compileDailyRows = useMemo(() => [...(report?.compileByDay || [])].sort((left, right) => right.day.localeCompare(left.day)), [report]);
-  const errorUnitsSummary = useMemo(() => [...(report?.compileByUnitDay || [])].sort((left, right) => right.day.localeCompare(left.day) || (right.incidents || 0) - (left.incidents || 0)), [report]);
+  const compileDailyRows = useMemo(() => [...(report?.compileByDay || [])].sort((left, right) => new Date(right.day) - new Date(left.day)), [report]);
+  const errorUnitsSummary = useMemo(() => [...(report?.compileByUnitDay || [])].sort((left, right) => (new Date(right.day) - new Date(left.day)) || (right.incidents || 0) - (left.incidents || 0)), [report]);
   const autoFilterCards = status?.autoFilterCards || [];
   const hasSolofleetAccounts = connectedAccounts.length > 0;
   const isAdmin = webSessionUser?.role === 'admin';
