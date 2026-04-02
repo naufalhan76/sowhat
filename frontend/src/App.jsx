@@ -631,6 +631,15 @@ export default function App() {
       preview: `${routePreview}\nStatus: ${statusLabel}${route.rit1Start && route.rit1End ? `\nRit 1: ${route.rit1Start} to ${route.rit1End}` : ''}${route.rit2Enabled && route.rit2Start && route.rit2End ? `\nRit 2: ${route.rit2Start} to ${route.rit2End}` : ''}`,
     };
   }).sort((left, right) => left.label.localeCompare(right.label)), [astroRoutes, availableAccounts, astroUnitLabelByKey, astroLocations]);
+  const astroReportVisibleRouteOptions = useMemo(() => astroReportUnitOptions.filter((option) => option.isActive && (astroReportFilters.accountId === 'all' || option.accountId === astroReportFilters.accountId)), [astroReportUnitOptions, astroReportFilters.accountId]);
+  useEffect(() => {
+    if (!astroReportFilters.routeId) return;
+    const selectedOption = astroReportUnitOptions.find((option) => option.value === astroReportFilters.routeId);
+    const matchesAccount = astroReportFilters.accountId === 'all' || selectedOption?.accountId === astroReportFilters.accountId;
+    if (!selectedOption?.isActive || !matchesAccount) {
+      setAstroReportFilters((current) => (current.routeId ? { ...current, routeId: '' } : current));
+    }
+  }, [astroReportFilters.routeId, astroReportFilters.accountId, astroReportUnitOptions]);
   const astroReportMaxPods = astroReport?.summary?.maxPods || 0;
   const astroReportColumns = useMemo(() => {
     const base = [
@@ -2167,7 +2176,7 @@ export default function App() {
                     <input type="date" value={astroReportFilters.endDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, endDate: event.target.value }))} />
                   </label>
                   <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', routeId: '' }))} placeholder="Search account..." />
-                  <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportUnitOptions.filter((option) => astroReportFilters.accountId === 'all' || option.accountId === astroReportFilters.accountId)]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
+                  <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportVisibleRouteOptions]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
                   <div className="historical-action-field">
                     <span>Action</span>
                     <Button color="primary" onPress={generateAstroReport}>Generate report</Button>
