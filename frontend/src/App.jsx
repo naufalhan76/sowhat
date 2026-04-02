@@ -1961,13 +1961,14 @@ export default function App() {
                   <span>{prioritizedFleet.length} unit tampil di fleet live</span>
                   <span>{fleetAccountFilter === 'all' ? 'Semua account' : accountName(fleetFilterAccounts.find((account) => account.id === fleetAccountFilter))} | {expandedFleetRowKey ? '1 modal grafik sedang terbuka' : 'Belum ada grafik yang dibuka'}</span>
                 </div>
-                {prioritizedFleet.length ? <div className="table-shell">
+                {prioritizedFleet.length ? <div className="table-shell table-compact">
                   <table className="data-table fleet-inline-table">
                     <thead>
                       <tr>
                         <th>Health</th>
                         <th>Account</th>
                         <th>Unit</th>
+                        <th>Status</th>
                         <th>Customer</th>
                         <th>Setpoint</th>
                         <th>Location</th>
@@ -1990,7 +1991,8 @@ export default function App() {
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
                             <td><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
-                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div>{row.geofenceStatusLabel ? <div className="subtle-line astro-inline-status"><Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip></div> : null}{row.astroActive ? <div className="subtle-line astro-inline-status">{row.astroStatusLabel}</div> : null}</div></td>
+                            <td><div>{row.geofenceStatusLabel ? <div className="astro-inline-status"><Chip className="wrap-chip" color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip></div> : (row.astroActive ? <div className="astro-inline-status">{row.astroStatusLabel}</div> : <Chip className="wrap-chip" color="default" variant="flat">IDLE</Chip>)}</div></td>
+                            <td><div><div>{row.customerName || row.group || '-'}</div><div className="subtle-line">{row.group || 'No group'}</div></div></td>
                             <td><div><div>{row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : '-'}</div><div className="subtle-line">{row.setpointLabel || 'No rule'}</div></div></td>
                             <td><div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div><div className="subtle-line">{fmtCoord(row.latitude)}, {fmtCoord(row.longitude)}</div></div></td>
                             <td>{fmtNum(row.speed, 0)}</td>

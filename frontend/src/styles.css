@@ -1120,6 +1120,15 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 12px;
 }
 
+.table-compact .fleet-inline-table th,
+.table-compact .fleet-inline-table td {
+  padding: 6px 10px;
+}
+
+.table-compact .fleet-inline-table td .subtle-line {
+  font-size: 11px;
+}
+
 .fleet-inline-table .sf-btn {
   padding: 6px 10px;
   font-size: 12px;
