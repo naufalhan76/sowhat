@@ -3046,50 +3046,79 @@ textarea:focus {
     border-radius: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     z-index: 100;
-    width: clamp(300px, 90vw, 450px);
+    width: clamp(300px, 90vw, 420px);
+    gap: 14px;
   }
 
-
-  .topbar-controls {
-    display: grid;
-    gap: clamp(10px, 2vw, 12px);
+  /* ── Controls inside popover ── */
+  .command-center.mobile-topbar-expanded .topbar-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     max-width: none;
     margin: 0;
+    width: 100%;
   }
 
-  .date-range-group {
+  .command-center.mobile-topbar-expanded .date-range-group {
+    display: flex;
+    align-items: center;
     width: 100%;
-    justify-content: space-between;
-    gap: clamp(4px, 1vw, 6px);
+    gap: 8px;
   }
 
-  .date-range-group input {
-    width: 100%;
+  .command-center.mobile-topbar-expanded .date-range-group input {
+    flex: 1;
     min-width: 0;
-    font-size: clamp(10px, 0.9vw, 12px);
+    font-size: 12px;
   }
 
-  .topbar-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(clamp(130px, 40vw, 150px), 1fr));
-    gap: clamp(8px, 1.5vw, 10px);
-  }
-
-  .topbar-actions > .sf-btn,
-  .topbar-actions > .account-badge,
-  .topbar-actions > .control-inline-actions,
-  .topbar-actions .sf-btn {
+  .command-center.mobile-topbar-expanded .search-box {
     width: 100%;
-    font-size: clamp(11px, 0.8vw, 12px);
   }
 
-  .control-inline-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: clamp(6px, 1vw, 8px);
+  .command-center.mobile-topbar-expanded .search-box input {
     width: 100%;
+  }
+
+  /* ── Actions inside popover ── */
+  .command-center.mobile-topbar-expanded .topbar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .command-center.mobile-topbar-expanded .account-badge {
+    width: 100%;
+    justify-content: flex-start;
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .command-center.mobile-topbar-expanded .control-inline-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .command-center.mobile-topbar-expanded .control-inline-actions .sf-btn {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .command-center.mobile-topbar-expanded .topbar-actions > .sf-btn {
+    width: 100%;
+    font-size: 12px;
   }
 }
+
 .topbar-icon-button {
   width: 42px;
   height: 42px;
@@ -3402,46 +3431,74 @@ textarea:focus {
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
   z-index: 100;
-  width: clamp(300px, 90vw, 450px);
+  width: clamp(280px, 90vw, 420px);
+  gap: 14px;
 }
 
-.command-center.compact-topbar .topbar-controls {
-  gap: clamp(10px, 2vw, 12px);
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   max-width: none;
   margin: 0;
+  width: 100%;
 }
 
-.command-center.compact-topbar .date-range-group {
+.command-center.compact-topbar.mobile-topbar-expanded .date-range-group {
+  display: flex;
+  align-items: center;
   width: 100%;
-  justify-content: space-between;
-  gap: clamp(4px, 1vw, 6px);
+  gap: 8px;
 }
 
-.command-center.compact-topbar .date-range-group input {
-  width: 100%;
+.command-center.compact-topbar.mobile-topbar-expanded .date-range-group input {
+  flex: 1;
   min-width: 0;
-  font-size: clamp(10px, 0.9vw, 12px);
+  font-size: 12px;
 }
 
-.command-center.compact-topbar .topbar-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(130px, 40vw, 150px), 1fr));
-  gap: clamp(8px, 1.5vw, 10px);
-}
-
-.command-center.compact-topbar .topbar-actions > .sf-btn,
-.command-center.compact-topbar .topbar-actions > .account-badge,
-.command-center.compact-topbar .topbar-actions > .control-inline-actions,
-.command-center.compact-topbar .topbar-actions .sf-btn {
+.command-center.compact-topbar.mobile-topbar-expanded .search-box {
   width: 100%;
-  font-size: clamp(11px, 0.8vw, 12px);
 }
 
-.command-center.compact-topbar .control-inline-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: clamp(6px, 1vw, 8px);
+.command-center.compact-topbar.mobile-topbar-expanded .search-box input {
   width: 100%;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .account-badge {
+  width: 100%;
+  justify-content: flex-start;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .control-inline-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .control-inline-actions .sf-btn {
+  width: 100%;
+  font-size: 12px;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions > .sf-btn {
+  width: 100%;
+  font-size: 12px;
 }
 
 .section-chevron-button {
