@@ -2253,9 +2253,9 @@ export default function App() {
                       <div className="subtle-line">{historicalAppliedRow.customerName || "No customer profile"}</div>
                     </div>
                     <div className="unit-summary-grid historical-metrics-grid">
-                      <SummaryMetric label="Trip km" value={fmtNum(historyTripMetrics.distanceKm, 1)} />
-                      <SummaryMetric label="Moving" value={formatMinutesText(historyTripMetrics.movingMinutes)} />
-                      <SummaryMetric label="Stopped" value={formatMinutesText(historyTripMetrics.stoppedMinutes)} />
+                      <SummaryMetric label="Trip km" value={fmtNum(historicalTripMetrics.distanceKm, 1)} />
+                      <SummaryMetric label="Moving" value={formatMinutesText(historicalTripMetrics.movingMinutes)} />
+                      <SummaryMetric label="Stopped" value={formatMinutesText(historicalTripMetrics.stoppedMinutes)} />
                     </div>
                     <TemperatureChart records={historicalDetail?.records || []} busy={historicalDetailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
                     <div className="spacer-16" />
