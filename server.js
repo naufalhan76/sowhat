@@ -2015,8 +2015,14 @@ async function initializeStorage() {
   state = normalizeState(rawState);
   syncUnitsWithConfig();
   recomputeAllAnalyses();
-  const repairedAstroRoutes = validateAstroRoutes(config.astroRoutes || [], config.astroLocations || []);
+  const astroRouteRepair = sanitizeAstroRoutesForStartup(config.astroRoutes || [], config.astroLocations || []);
+  const repairedAstroRoutes = astroRouteRepair.routes;
   const astroRoutesChanged = JSON.stringify(repairedAstroRoutes) !== JSON.stringify(config.astroRoutes || []);
+  if (astroRouteRepair.dropped.length) {
+    astroRouteRepair.dropped.forEach(function (entry) {
+      console.error(`Dropping invalid Astro route during startup: ${entry.accountId || 'unknown-account'} | ${entry.unitId || entry.routeId || 'unknown-route'} | ${entry.reason}`);
+    });
+  }
   if (astroRoutesChanged) {
     config = normalizeConfig({
       ...config,
@@ -4837,6 +4843,31 @@ function validateAstroRoutes(routes, locations) {
     seen.add(routeKey);
     return normalized;
   });
+}
+
+function sanitizeAstroRoutesForStartup(routes, locations) {
+  const accepted = [];
+  const dropped = [];
+
+  for (const route of routes || []) {
+    try {
+      const validated = validateAstroRoutes([...accepted, route], locations);
+      accepted.length = 0;
+      accepted.push(...validated);
+    } catch (error) {
+      dropped.push({
+        routeId: route?.id || '',
+        unitId: route?.unitId || '',
+        accountId: route?.accountId || '',
+        reason: error.message,
+      });
+    }
+  }
+
+  return {
+    routes: accepted,
+    dropped,
+  };
 }
 
 function csvEscape(value) {
