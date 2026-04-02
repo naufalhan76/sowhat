@@ -2090,10 +2090,7 @@ export default function App() {
             </Card>
           </> : null}
           {activePanel === 'astro-report' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Astro delivery report</h2>
+            <Card className="panel-card astro-report-panel">`r`n              <CardHeader className="panel-card-header">`r`n                <div>`r`n                  <h2>Astro delivery report</h2>
                   <p>Ringkasan rit Astro berdasarkan geofence lokasi dan data historical Solofleet.</p>
                 </div>
                 <div className="inline-buttons">

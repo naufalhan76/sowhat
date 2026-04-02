@@ -714,6 +714,18 @@ function resolveWhVisitTiming(route, location, visit, records, ritInfo) {
     };
   }
 
+  const minWindowTemp = windowRecords.reduce((lowest, record) => {
+    const probeTemp = probeTemperature(record);
+    if (probeTemp === null) {
+      return lowest;
+    }
+    if (lowest === null) {
+      return probeTemp;
+    }
+    return Math.min(lowest, probeTemp);
+  }, null);
+  const arrivalTemp = minWindowTemp ?? visit.arrivalTemp ?? null;
+
   if (isSpecialAstroWhTemperatureFallback(location)) {
     const tempThresholdRecord = windowRecords.find((record) => {
       const probeTemp = probeTemperature(record);
@@ -722,7 +734,7 @@ function resolveWhVisitTiming(route, location, visit, records, ritInfo) {
     if (tempThresholdRecord) {
       return {
         eta: tempThresholdRecord.timestamp,
-        arrivalTemp: probeTemperature(tempThresholdRecord),
+        arrivalTemp,
       };
     }
   }
@@ -730,7 +742,7 @@ function resolveWhVisitTiming(route, location, visit, records, ritInfo) {
   const firstWindowRecord = windowRecords[0];
   return {
     eta: firstWindowRecord.timestamp,
-    arrivalTemp: probeTemperature(firstWindowRecord),
+    arrivalTemp,
   };
 }
 
