@@ -2996,85 +2996,85 @@ textarea:focus {
   }
 }
 
-@media (min-width: 1281px) and (max-width: 1599px) {
+@media (min-width: 961px) and (max-width: 1599px) {
   .topbar {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
     flex-wrap: wrap;
-    gap: clamp(10px, 1.8vw, 14px);
-    padding: 0 clamp(16px, 2.5vw, 24px);
+    align-items: flex-start;
+    gap: clamp(10px, 2vw, 12px);
+    padding: clamp(10px, 1.5vw, 12px) clamp(12px, 2vw, 16px) clamp(8px, 1.5vw, 12px);
   }
 
-  .topbar-controls {
-    flex: 0 1 auto;
-    max-width: none;
-    margin: 0;
-    gap: 10px;
-  }
-
+  .topbar-brand-row,
+  .topbar-collapsible,
+  .topbar-controls,
   .topbar-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-  }
-}
-
-@media (min-width: 961px) and (max-width: 1280px) {
-  .topbar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: clamp(10px, 1.5vw, 16px) clamp(12px, 2vw, 20px);
-    padding: clamp(10px, 1.5vw, 16px) clamp(14px, 2vw, 20px);
+    width: 100%;
   }
 
   .topbar-brand-row {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mobile-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 1vw, 8px);
+  }
+
+  .mobile-topbar-toggle {
+    display: inline-flex;
   }
 
   .topbar-collapsible {
+    display: none;
+    gap: clamp(10px, 2vw, 12px);
+  }
+
+  .command-center.mobile-topbar-expanded .topbar-collapsible {
     display: grid;
-    grid-column: 2;
-    gap: clamp(10px, 1.5vw, 12px);
-    min-width: 0;
   }
 
   .topbar-controls {
     display: grid;
-    grid-template-columns: auto minmax(200px, 1fr);
-    align-items: center;
+    gap: clamp(10px, 2vw, 12px);
     max-width: none;
     margin: 0;
-    min-width: 0;
-    gap: 10px;
   }
 
-  .topbar-controls .search-box {
-    min-width: 200px;
+  .date-range-group {
+    width: 100%;
+    justify-content: space-between;
+    gap: clamp(4px, 1vw, 6px);
+  }
+
+  .date-range-group input {
+    width: 100%;
+    min-width: 0;
+    font-size: clamp(10px, 0.9vw, 12px);
   }
 
   .topbar-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: flex-start;
-    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(clamp(130px, 40vw, 150px), 1fr));
+    gap: clamp(8px, 1.5vw, 10px);
   }
 
-  .topbar-actions > * {
-    min-width: auto;
+  .topbar-actions > .sf-btn,
+  .topbar-actions > .account-badge,
+  .topbar-actions > .control-inline-actions,
+  .topbar-actions .sf-btn {
+    width: 100%;
+    font-size: clamp(11px, 0.8vw, 12px);
   }
 
   .control-inline-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .control-inline-actions .sf-btn {
-    font-size: 12px;
-    padding: 6px 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: clamp(6px, 1vw, 8px);
+    width: 100%;
   }
 }
 .topbar-icon-button {
