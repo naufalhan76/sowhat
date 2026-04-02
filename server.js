@@ -2041,48 +2041,51 @@ async function initializeStorage() {
   
   state.runtime.isPolling = false;
   state.runtime.nextRunAt = null;
-
-  if (getPostgresConfig().enabled) {
-    const postgresUsers = await postgresQuery('select count(*)::int as count from dashboard_web_users');
-    if (!postgresUsers.rows[0] || !postgresUsers.rows[0].count) {
-      migrationTasks.push(migrateWebUsersToPostgres(config.webUsers || []));
-    }
-    if (!postgresHasConfig) {
-      console.log('Migrating config to PostgreSQL...');
-      migrationTasks.push(saveConfig());
-    }
-    if (!postgresHasState) {
-      console.log('Migrating state to PostgreSQL...');
-      migrationTasks.push(saveState());
-    }
-
-    if (migrationTasks.length > 0) {
-      await Promise.allSettled(migrationTasks);
-      console.log('Completed auto-migration of local/Supabase data to PostgreSQL.');
-    } else {
-      await saveState();
-    }
-  } else if (getSupabaseWebAuthConfig().enabled) {
-    if (!supabaseHasConfig) {
-      console.log('Migrating local config to Supabase...');
-      migrationTasks.push(saveConfig());
-    }
-    if (!supabaseHasState) {
-      console.log('Migrating local state to Supabase...');
-      migrationTasks.push(saveState());
-    }
-    
-    if (migrationTasks.length > 0) {
-      await Promise.allSettled(migrationTasks);
-      console.log('Completed auto-migration of local data to Supabase.');
-    } else {
-      await saveState(); 
-    }
-  } else {
-    saveState();
-  }
-  
   isStorageInitialized = true;
+
+  try {
+    if (getPostgresConfig().enabled) {
+      const postgresUsers = await postgresQuery('select count(*)::int as count from dashboard_web_users');
+      if (!postgresUsers.rows[0] || !postgresUsers.rows[0].count) {
+        migrationTasks.push(migrateWebUsersToPostgres(config.webUsers || []));
+      }
+      if (!postgresHasConfig) {
+        console.log('Migrating config to PostgreSQL...');
+        migrationTasks.push(saveConfig());
+      }
+      if (!postgresHasState) {
+        console.log('Migrating state to PostgreSQL...');
+        migrationTasks.push(saveState());
+      }
+
+      if (migrationTasks.length > 0) {
+        await Promise.allSettled(migrationTasks);
+        console.log('Completed auto-migration of local/Supabase data to PostgreSQL.');
+      } else {
+        await saveState();
+      }
+    } else if (getSupabaseWebAuthConfig().enabled) {
+      if (!supabaseHasConfig) {
+        console.log('Migrating local config to Supabase...');
+        migrationTasks.push(saveConfig());
+      }
+      if (!supabaseHasState) {
+        console.log('Migrating local state to Supabase...');
+        migrationTasks.push(saveState());
+      }
+      
+      if (migrationTasks.length > 0) {
+        await Promise.allSettled(migrationTasks);
+        console.log('Completed auto-migration of local data to Supabase.');
+      } else {
+        await saveState(); 
+      }
+    } else {
+      saveState();
+    }
+  } catch (error) {
+    console.error('Background storage migration failed:', error.message);
+  }
 }
 
 const storageInitializationPromise = initializeStorage();
