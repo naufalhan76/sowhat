@@ -2983,7 +2983,7 @@ textarea:focus {
   display: contents;
 }
 
-@media (min-width: 1600px) {
+@media (min-width: 1701px) {
   .topbar {
     display: flex;
     align-items: center;
@@ -2992,11 +2992,11 @@ textarea:focus {
   }
 
   .topbar-controls {
-    max-width: 500px;
+    max-width: 600px;
   }
 }
 
-@media (min-width: 961px) and (max-width: 1599px) {
+@media (min-width: 961px) and (max-width: 1700px) {
   .topbar {
     display: flex;
     flex-wrap: wrap;
@@ -3034,8 +3034,20 @@ textarea:focus {
   }
 
   .command-center.mobile-topbar-expanded .topbar-collapsible {
-    display: grid;
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 16px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    width: clamp(300px, 90vw, 450px);
   }
+
 
   .topbar-controls {
     display: grid;
@@ -3378,7 +3390,18 @@ textarea:focus {
 }
 
 .command-center.compact-topbar.mobile-topbar-expanded .topbar-collapsible {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  width: clamp(300px, 90vw, 450px);
 }
 
 .command-center.compact-topbar .topbar-controls {
