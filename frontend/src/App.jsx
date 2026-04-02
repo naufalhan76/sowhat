@@ -809,6 +809,7 @@ export default function App() {
     if (busyTimeoutRef.current) window.clearTimeout(busyTimeoutRef.current);
   }, []);
 
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadDashboard(false, true).catch(() => {});
@@ -1297,9 +1298,10 @@ export default function App() {
     }
   }, [activePanel, compactTopbar]);
 
+  // Auto-compact topbar on narrow viewports, auto-close mobile nav on wide viewports
   useEffect(() => {
     const mobileNavMedia = window.matchMedia('(max-width: 960px)');
-    const compactTopbarMedia = window.matchMedia('(max-width: 960px), (orientation: portrait)');
+    const compactTopbarMedia = window.matchMedia('(max-width: 1280px)');
     const syncLayout = () => {
       const nextCompactTopbar = compactTopbarMedia.matches;
       const nextMobileNav = mobileNavMedia.matches;

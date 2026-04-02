@@ -1280,7 +1280,6 @@ input:focus, select:focus, textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .status-bar {
   .account-login-grid {
     grid-template-columns: 1fr;
   }
@@ -1290,6 +1289,7 @@ input:focus, select:focus, textarea:focus {
     align-items: stretch;
   }
 
+  .status-bar {
     flex-direction: column;
     gap: 8px;
     padding: 12px 20px;
@@ -1457,187 +1457,17 @@ input:focus, select:focus, textarea:focus {
 
 
 
+/* ── Historical toolbar (consolidated) ── */
 .historical-toolbar {
   display: grid;
-  grid-template-columns: minmax(240px, 1.25fr) minmax(320px, 1.05fr) repeat(2, minmax(170px, 0.55fr)) auto;
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
   align-items: end;
   padding: 18px;
   margin-bottom: 18px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px;
   background: rgba(14, 21, 36, 0.82);
-}
-
-.historical-field {
-  margin-bottom: 0;
-}
-
-.historical-field span {
-  display: block;
-  margin-bottom: 8px;
-}
-
-.historical-field input,
-.historical-field select {
-  height: 40px;
-}
-
-.historical-search-field,
-.historical-search-field .historical-search-box {
-  min-width: 0;
-}
-
-.historical-search-box input {
-  width: 100%;
-}
-
-.historical-action-field {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.historical-action-field .sf-btn {
-  min-width: 150px;
-  height: 40px;
-}
-
-.historical-summary {
-  margin-bottom: 16px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-@media (max-width: 1200px) {
-  .historical-toolbar {
-    grid-template-columns: 1fr;
-    padding: 14px;
-  }
-
-  .historical-action-field .sf-btn {
-    width: 100%;
-  }
-}
-
-.historical-toolbar {
-  grid-template-columns: minmax(240px, 1.3fr) minmax(280px, 1.1fr) repeat(2, minmax(150px, 0.58fr)) minmax(150px, 0.42fr);
-  align-items: stretch;
-}
-
-.historical-toolbar > * {
-  min-width: 0;
-}
-
-.historical-field,
-.historical-action-field {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-}
-
-.historical-field span,
-.historical-action-field span {
-  min-height: 16px;
-}
-
-.historical-action-field .sf-btn {
-  width: 100%;
-}
-
-.chart-svg {
-  cursor: crosshair;
-  user-select: none;
-}
-
-@media (max-width: 1200px) {
-  .historical-toolbar {
-    grid-template-columns: 1fr;
-  }
-}
-
-.historical-toolbar {
-  grid-template-columns: minmax(260px, 1.35fr) minmax(280px, 1.1fr) repeat(2, minmax(160px, 0.62fr)) minmax(150px, 0.46fr);
-  align-items: end;
-}
-
-.historical-field,
-.historical-action-field {
-  display: grid;
-  grid-template-rows: auto 40px;
-  align-content: end;
-}
-
-.historical-field span,
-.historical-action-field span {
-  margin: 0 0 8px;
-  line-height: 16px;
-}
-
-.historical-search-box {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-}
-
-.historical-search-box input,
-.historical-field input,
-.historical-field select,
-.historical-action-field .sf-btn {
-  height: 40px;
-}
-
-.historical-action-field .sf-btn {
-  width: 100%;
-}
-
-.historical-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(140px, 0.55fr) minmax(140px, 0.55fr) 150px;
-  gap: 16px;
-  align-items: end;
-}
-
-.historical-toolbar > * {
-  min-width: 0;
-}
-
-.historical-field,
-.historical-action-field {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.historical-search-box {
-  flex: none;
-  width: 100%;
-}
-
-.historical-search-box input,
-.historical-field input,
-.historical-field select,
-.historical-action-field .sf-btn {
-  width: 100%;
-  max-width: 100%;
-}
-
-@media (max-width: 1280px) {
-  .historical-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) repeat(2, minmax(140px, 0.62fr)) 150px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .historical-toolbar {
-    grid-template-columns: 1fr;
-  }
-}
-
-.historical-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) 152px 152px 120px;
-  gap: 12px;
-  align-items: start;
   width: 100%;
 }
 
@@ -1651,6 +1481,7 @@ input:focus, select:focus, textarea:focus {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  width: 100%;
 }
 
 .historical-field > span,
@@ -1661,21 +1492,24 @@ input:focus, select:focus, textarea:focus {
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
+  min-height: 16px;
 }
 
-.historical-search-box,
-.historical-search-box input,
-.historical-field input,
-.historical-field select,
-.historical-action-field .sf-btn {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
+.historical-summary {
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.historical-search-field,
+.historical-search-field .historical-search-box {
+  min-width: 0;
 }
 
 .historical-search-box {
   position: relative;
   min-width: 0;
+  width: 100%;
 }
 
 .historical-search-box .search-icon {
@@ -1691,10 +1525,13 @@ input:focus, select:focus, textarea:focus {
   padding-left: 32px;
 }
 
+.historical-search-box input,
 .historical-field input,
 .historical-field select,
-.historical-search-box input,
 .historical-action-field .sf-btn {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   height: 36px;
 }
 
@@ -1708,64 +1545,9 @@ input:focus, select:focus, textarea:focus {
   justify-content: center;
 }
 
-@media (max-width: 1120px) {
-  .historical-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 140px 140px 120px;
-  }
-}
-
-@media (max-width: 920px) {
-  .historical-toolbar {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .historical-date-field,
-  .historical-action-field {
-    grid-column: span 1;
-  }
-}
-
-@media (max-width: 720px) {
-  .historical-toolbar {
-    grid-template-columns: 1fr;
-  }
-}
-
-.historical-toolbar {
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.55fr) 152px 152px 136px;
-}
-
-@media (max-width: 1120px) {
-  .historical-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) 140px 140px 132px;
-  }
-}
-
-.historical-toolbar {
-  grid-template-columns: minmax(0, 1.42fr) minmax(0, 1.42fr) 152px 152px 136px;
-}
-
-@media (max-width: 1120px) {
-  .historical-toolbar {
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 0.98fr) 140px 140px 132px;
-  }
-}
-
-.historical-toolbar {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.historical-field,
-.historical-action-field {
-  width: 100%;
-}
-
-.historical-search-box,
-.historical-search-box input,
-.historical-field input,
-.historical-field select,
-.historical-action-field .sf-btn {
-  width: 100%;
+.chart-svg {
+  cursor: crosshair;
+  user-select: none;
 }
 
 @media (max-width: 1120px) {
@@ -1781,6 +1563,7 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 720px) {
   .historical-toolbar {
     grid-template-columns: 1fr;
+    padding: 14px;
   }
 
   .historical-action-field {
@@ -3631,11 +3414,7 @@ textarea:focus {
     display: inline-flex;
   }
 }
-
-
-
-
-
+/* ── Astro Report Panel ── */
 .astro-report-panel {
   overflow: visible;
 }
@@ -3645,8 +3424,9 @@ textarea:focus {
 }
 
 .astro-report-panel .historical-toolbar {
-  grid-template-columns: minmax(170px, 0.8fr) minmax(170px, 0.8fr) minmax(220px, 0.95fr) minmax(340px, 1.7fr) minmax(150px, 0.55fr);
+  grid-template-columns: 150px 150px minmax(180px, 1.2fr) minmax(220px, 1.8fr) 160px;
   align-items: end;
+  gap: 12px;
 }
 
 .astro-report-panel .historical-toolbar > * {
@@ -3654,11 +3434,11 @@ textarea:focus {
 }
 
 .astro-report-panel .historical-action-field {
-  min-width: 150px;
+  min-width: 140px;
 }
 
 .astro-report-panel .historical-action-field .sf-btn {
-  min-width: 150px;
+  min-width: 140px;
 }
 
 .astro-report-panel .searchable-field {
@@ -3673,7 +3453,7 @@ textarea:focus {
   z-index: 60;
 }
 
-@media (max-width: 1380px) {
+@media (max-width: 1200px) {
   .astro-report-panel .historical-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3683,8 +3463,12 @@ textarea:focus {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 800px) {
   .astro-report-panel .historical-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .astro-report-panel .historical-action-field {
+    grid-column: auto;
   }
 }
