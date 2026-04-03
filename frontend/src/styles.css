@@ -2983,7 +2983,7 @@ textarea:focus {
   display: contents;
 }
 
-@media (min-width: 1600px) {
+@media (min-width: 1441px) {
   .topbar {
     display: flex;
     align-items: center;
@@ -2996,7 +2996,7 @@ textarea:focus {
   }
 }
 
-@media (min-width: 1281px) and (max-width: 1599px) {
+@media (min-width: 1281px) and (max-width: 1440px) {
   .topbar {
     display: flex;
     align-items: center;
