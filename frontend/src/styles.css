@@ -1693,7 +1693,7 @@ textarea:focus {
 }
 
 .astro-config-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .field {
@@ -1920,6 +1920,27 @@ textarea:focus {
   color: var(--text-secondary);
 }
 
+.astro-route-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-alpha);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inner);
+}
+
+.astro-route-form-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border-alpha);
+  margin-bottom: var(--space-xs);
+}
+
 .astro-pod-list {
   display: grid;
   gap: var(--space-sm);
@@ -2101,6 +2122,12 @@ textarea:focus {
 }
 
 @media (max-width: 1120px) {
+  .astro-config-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
   .astro-config-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3590,52 +3617,80 @@ textarea:focus {
   min-width: 240px;
 }
 
+/* KPI cards: 4 across at 1920px */
 .overview-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
 .overview-kpi-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px 20px;
-  border-radius: 18px;
+  gap: 6px;
+  padding: 20px 22px;
+  border-radius: 16px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.overview-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
 }
 
 .overview-kpi-card > span {
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .overview-kpi-card > strong {
-  font-size: clamp(28px, 2.4vw, 40px);
+  font-size: clamp(26px, 2.2vw, 38px);
   line-height: 1;
+  font-family: var(--font-mono, monospace);
 }
 
 .overview-kpi-card > small {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
+
+.overview-kpi-card.info {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(96,165,250,0.10);
+}
+.overview-kpi-card.info > strong { color: #60a5fa; }
 
 .overview-kpi-card.danger {
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(255,99,132,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(255,99,132,0.10);
 }
+.overview-kpi-card.danger > strong { color: #ff6b7f; }
 
 .overview-kpi-card.success {
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(52,211,153,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(52,211,153,0.10);
 }
+.overview-kpi-card.success > strong { color: #34d399; }
 
 .overview-kpi-card.warning {
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(251,146,60,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(251,146,60,0.10);
+}
+.overview-kpi-card.warning > strong { color: #fb923c; }
+
+/* Hero row: chart takes ~60%, donut takes ~40% */
+.overview-hero-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+  min-height: 0;
 }
 
-.overview-dashboard-grid {
+/* Supplementary row: 3 equal columns */
+.overview-supplementary-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   min-height: 0;
 }
@@ -3644,8 +3699,8 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px;
-  border-radius: 20px;
+  padding: 20px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: rgba(10, 17, 29, 0.72);
   min-height: 0;
@@ -3661,26 +3716,28 @@ textarea:focus {
 
 .overview-chart-head h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .overview-chart-head p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .overview-donut-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 220px) 1fr;
+  grid-template-columns: minmax(160px, 200px) 1fr;
   align-items: center;
   gap: 20px;
 }
 
 .overview-donut-chart {
   position: relative;
-  width: 190px;
-  height: 190px;
+  width: 170px;
+  height: 170px;
   margin: 0 auto;
 }
 
@@ -3727,14 +3784,14 @@ textarea:focus {
 }
 
 .overview-donut-center strong {
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1;
 }
 
 .overview-donut-center span {
   margin-top: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -3742,13 +3799,13 @@ textarea:focus {
 .overview-legend {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .overview-legend-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .overview-legend-row strong,
@@ -3758,11 +3815,12 @@ textarea:focus {
 
 .overview-legend-row small {
   color: var(--text-muted);
+  font-size: 12px;
 }
 
 .overview-legend-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   flex-shrink: 0;
 }
@@ -3774,12 +3832,12 @@ textarea:focus {
 
 .overview-trend-chart {
   position: relative;
-  min-height: 190px;
+  min-height: 180px;
 }
 
 .overview-trend-chart svg {
   width: 100%;
-  height: 190px;
+  height: 180px;
 }
 
 .overview-axis {
@@ -3817,9 +3875,9 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 220px;
+  min-height: 180px;
   border: 1px dashed rgba(255,255,255,0.08);
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--text-muted);
   text-align: center;
   padding: 16px;
@@ -3832,7 +3890,7 @@ textarea:focus {
 }
 
 .overview-mini-summary-compact {
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
 }
 
 .overview-chart-stack {
@@ -3844,16 +3902,16 @@ textarea:focus {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .overview-bar-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(0, 1.5fr) minmax(100px, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: background 140ms ease;
 }
 
@@ -3874,17 +3932,18 @@ textarea:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
 
 .overview-bar-copy small {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .overview-bar-track {
   position: relative;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   background: rgba(255,255,255,0.08);
   overflow: hidden;
@@ -3904,10 +3963,11 @@ textarea:focus {
 .overview-bar-fill.warning { background: #fb923c; }
 
 .overview-bar-value {
-  min-width: 62px;
+  min-width: 56px;
   text-align: right;
   font-weight: 700;
   font-size: 13px;
+  font-family: var(--font-mono, monospace);
 }
 
 .overview-chart-tooltip {
@@ -3916,7 +3976,7 @@ textarea:focus {
   min-width: 150px;
   max-width: 240px;
   padding: 10px 12px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(7, 11, 19, 0.96);
   box-shadow: 0 18px 40px rgba(0,0,0,0.28);
@@ -3949,7 +4009,7 @@ textarea:focus {
 .overview-mini-table {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .overview-mini-table-row {
@@ -3957,10 +4017,11 @@ textarea:focus {
   grid-template-columns: minmax(0, 1.6fr) auto auto auto;
   gap: 10px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(255,255,255,0.02);
+  font-size: 13px;
 }
 
 .overview-mini-table-row strong {
@@ -3984,9 +4045,10 @@ textarea:focus {
   gap: 4px;
 }
 
+/* Astro pod row KPI — responsive 4-col → 2-col → 1-col */
 .astro-pod-row-kpi {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) minmax(140px, 1fr) minmax(140px, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -3999,9 +4061,18 @@ textarea:focus {
   min-width: 0;
 }
 
+/* Responsive: overview at 1440px */
 @media (max-width: 1440px) {
-  .overview-dashboard-grid {
+  .overview-hero-row {
     grid-template-columns: 1fr;
+  }
+
+  .overview-supplementary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-supplementary-row > :last-child {
+    grid-column: 1 / -1;
   }
 
   .overview-mini-summary,
@@ -4010,23 +4081,50 @@ textarea:focus {
   }
 }
 
+/* Responsive: overview at 960px */
 @media (max-width: 960px) {
-  .overview-kpi-grid,
+  .overview-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-hero-row,
+  .overview-supplementary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-supplementary-row > :last-child {
+    grid-column: auto;
+  }
+
   .overview-mini-summary,
-  .overview-dashboard-grid,
-  .overview-donut-layout,
-  .astro-pod-row-kpi,
   .overview-mini-table-row,
+  .overview-donut-layout,
   .overview-bar-row {
     grid-template-columns: 1fr;
   }
 
   .overview-donut-chart {
-    width: 170px;
-    height: 170px;
+    width: 160px;
+    height: 160px;
   }
 
   .overview-bar-value {
     text-align: left;
   }
+
+  .astro-pod-row-kpi {
+    grid-template-columns: 1fr;
+  }
 }
+
+/* Responsive: astro pod row at 1200px */
+@media (max-width: 1200px) {
+  .astro-pod-row-kpi {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .astro-pod-row-kpi > .astro-pod-field-main {
+    grid-column: 1 / -1;
+  }
+}
+

@@ -2465,7 +2465,13 @@ export default function App() {
       </div>
     </CardHeader>
     <CardContent>
+      {/* Row 1: KPI cards */}
       <div className="overview-kpi-grid">
+        <div className="overview-kpi-card info">
+          <span>Total units</span>
+          <strong>{overviewAccountStats.totalConfiguredUnits || 0}</strong>
+          <small>Unit configured di account ini</small>
+        </div>
         <div className="overview-kpi-card danger">
           <span>Temp error</span>
           <strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong>
@@ -2482,27 +2488,19 @@ export default function App() {
           <small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang diam</small>
         </div>
       </div>
-      <div className="overview-dashboard-grid">
-        <div className="overview-chart-card">
+
+      {/* Row 2: Hero – Temp chart (wide) + Fleet donut (narrow) */}
+      <div className="overview-hero-row">
+        <div className="overview-chart-card overview-hero-chart">
           <div className="overview-chart-head">
             <div>
               <h3>Temp report</h3>
-              <p>{range.startDate} to {range.endDate} | Tren temp error dan unit paling sering incident untuk account ini.</p>
+              <p>{range.startDate} to {range.endDate} | Tren temp error dan unit paling sering incident.</p>
             </div>
             <Chip color={busy ? 'warning' : 'default'}>{busy ? 'Loading...' : `${overviewTempTrend.length} day(s)`}</Chip>
           </div>
           <div className="overview-chart-stack">
             <OverviewTempTrendChart points={overviewTempTrend} busy={busy} />
-            <OverviewBarList
-              items={overviewTempHotspots}
-              busy={busy}
-              emptyMessage="Belum ada hotspot temp error di range ini."
-              valueKey="incidents"
-              tone="danger"
-              valueFormatter={(value) => `${value}x`}
-              metaFormatter={(item) => `${item.unitId} | ${formatMinutesText(item.totalMinutes)}`}
-              tooltipLines={(item) => [`Incidents: ${item.incidents || 0}`, `Unit ID: ${item.unitId || '-'}`, `Total duration: ${formatMinutesText(item.totalMinutes || 0)}`]}
-            />
           </div>
           <div className="overview-mini-summary overview-mini-summary-compact">
             <div className="mini-metric"><span>Incidents</span><strong>{overviewTempSummary.totalIncidents || 0}</strong></div>
@@ -2512,13 +2510,13 @@ export default function App() {
           </div>
         </div>
 
-        <div className="overview-chart-card">
+        <div className="overview-chart-card overview-hero-donut">
           <div className="overview-chart-head">
             <div>
-              <h3>Live fleet composition</h3>
-              <p>Komposisi unit configured untuk account terpilih berdasarkan snapshot hari ini.</p>
+              <h3>Fleet composition</h3>
+              <p>Snapshot live hari ini.</p>
             </div>
-            <Chip>{overviewAccountStats.totalConfiguredUnits || 0} configured</Chip>
+            <Chip>{overviewAccountStats.totalConfiguredUnits || 0} unit</Chip>
           </div>
           <div className="overview-donut-layout">
             <OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} />
@@ -2534,21 +2532,35 @@ export default function App() {
               ))}
             </div>
           </div>
-          <div className="overview-mini-summary overview-mini-summary-compact">
-            {overviewDonutSegments.map((segment) => (
-              <div key={`summary-${segment.key}`} className="mini-metric">
-                <span>{segment.label}</span>
-                <strong>{segment.value}</strong>
-              </div>
-            ))}
+        </div>
+      </div>
+
+      {/* Row 3: Supplementary – Temp hotspots + Astro KPI general + Astro WH */}
+      <div className="overview-supplementary-row">
+        <div className="overview-chart-card">
+          <div className="overview-chart-head">
+            <div>
+              <h3>Temp error hotspots</h3>
+              <p>Unit paling sering incident di range ini.</p>
+            </div>
           </div>
+          <OverviewBarList
+            items={overviewTempHotspots}
+            busy={busy}
+            emptyMessage="Belum ada hotspot temp error di range ini."
+            valueKey="incidents"
+            tone="danger"
+            valueFormatter={(value) => `${value}x`}
+            metaFormatter={(item) => `${item.unitId} | ${formatMinutesText(item.totalMinutes)}`}
+            tooltipLines={(item) => [`Incidents: ${item.incidents || 0}`, `Unit ID: ${item.unitId || '-'}`, `Total duration: ${formatMinutesText(item.totalMinutes || 0)}`]}
+          />
         </div>
 
         <div className="overview-chart-card">
           <div className="overview-chart-head">
             <div>
               <h3>Astro KPI general</h3>
-              <p>{range.startDate} to {range.endDate} | Semua route dengan KPI akan dihitung, route tanpa target tetap tampil sebagai N/A.</p>
+              <p>{range.startDate} to {range.endDate}</p>
             </div>
             <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroTrend.length} day(s)`}</Chip>
           </div>
@@ -2567,8 +2579,8 @@ export default function App() {
         <div className="overview-chart-card">
           <div className="overview-chart-head">
             <div>
-              <h3>Astro KPI per warehouse</h3>
-              <p>Top warehouse berdasarkan rit eligible. Cocok untuk cepat lihat WH mana yang paling sering miss.</p>
+              <h3>KPI per warehouse</h3>
+              <p>Top WH berdasarkan rit eligible.</p>
             </div>
             <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroByWarehouse.length} WH`}</Chip>
           </div>
@@ -3163,22 +3175,35 @@ export default function App() {
               </CardHeader>
               {astroRouteSectionOpen ? <CardContent>
                 <div className="settings-stack">
-                  <div className="form-grid astro-config-grid">
-                    <SearchableSelect label="Account" value={astroRouteForm.accountId} options={astroRouteAccountOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, accountId: nextValue || current.accountId, unitId: '' }))} placeholder="Search account..." />
-                    <SearchableSelect label="Nopol" value={astroRouteForm.unitId} options={[{ value: '', label: 'Select unit' }, ...astroRouteFilteredUnitOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, unitId: nextValue }))} placeholder="Search unit..." />
-                    <label className="field"><span>Customer</span><input type="text" value={astroRouteForm.customerName} onChange={(event) => setAstroRouteForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Astro" /></label>
-                    <SearchableSelect label="WH" value={astroRouteForm.whLocationId} options={[{ value: '', label: 'Select WH' }, ...astroWhOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, whLocationId: nextValue }))} placeholder="Search WH..." />
-                    <SearchableSelect label="POOL" value={astroRouteForm.poolLocationId} options={astroPoolOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, poolLocationId: nextValue }))} placeholder="Search pool..." />
-                    <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.isActive} onChange={(event) => setAstroRouteForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
-                    <label className="field"><span>Rit 1 start</span><input type="time" value={astroRouteForm.rit1Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1Start: event.target.value }))} /></label>
-                    <label className="field"><span>Rit 1 end</span><input type="time" value={astroRouteForm.rit1End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1End: event.target.value }))} /></label>
-                    <label className="field"><span>Rit 1 WH SLA</span><input type="time" value={astroRouteForm.rit1WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1WhArrivalTimeSla: event.target.value }))} /></label>
-                    <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.rit2Enabled} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Enabled: event.target.checked }))} /><span>Enable rit 2</span></label>
-                    <label className="field"><span>Rit 2 start</span><input type="time" value={astroRouteForm.rit2Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Start: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                    <label className="field"><span>Rit 2 end</span><input type="time" value={astroRouteForm.rit2End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2End: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                    <label className="field"><span>Rit 2 WH SLA</span><input type="time" value={astroRouteForm.rit2WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2WhArrivalTimeSla: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                    <label className="field"><span>WH temp min SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Required" required /></label>
-                    <label className="field"><span>WH temp max SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Required" required /></label>
+                  <div className="astro-route-form-section">
+                    <div className="astro-route-form-section-label">Route identity</div>
+                    <div className="form-grid astro-config-grid">
+                      <SearchableSelect label="Account" value={astroRouteForm.accountId} options={astroRouteAccountOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, accountId: nextValue || current.accountId, unitId: '' }))} placeholder="Search account..." />
+                      <SearchableSelect label="Nopol" value={astroRouteForm.unitId} options={[{ value: '', label: 'Select unit' }, ...astroRouteFilteredUnitOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, unitId: nextValue }))} placeholder="Search unit..." />
+                      <label className="field"><span>Customer</span><input type="text" value={astroRouteForm.customerName} onChange={(event) => setAstroRouteForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Astro" /></label>
+                      <SearchableSelect label="WH" value={astroRouteForm.whLocationId} options={[{ value: '', label: 'Select WH' }, ...astroWhOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, whLocationId: nextValue }))} placeholder="Search WH..." />
+                      <SearchableSelect label="POOL" value={astroRouteForm.poolLocationId} options={astroPoolOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, poolLocationId: nextValue }))} placeholder="Search pool..." />
+                      <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.isActive} onChange={(event) => setAstroRouteForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
+                    </div>
+                  </div>
+                  <div className="astro-route-form-section">
+                    <div className="astro-route-form-section-label">Rit 1 schedule &amp; SLA</div>
+                    <div className="form-grid astro-config-grid">
+                      <label className="field"><span>Rit 1 start</span><input type="time" value={astroRouteForm.rit1Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1Start: event.target.value }))} /></label>
+                      <label className="field"><span>Rit 1 end</span><input type="time" value={astroRouteForm.rit1End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1End: event.target.value }))} /></label>
+                      <label className="field"><span>Rit 1 WH SLA</span><input type="time" value={astroRouteForm.rit1WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1WhArrivalTimeSla: event.target.value }))} /></label>
+                    </div>
+                  </div>
+                  <div className="astro-route-form-section">
+                    <div className="astro-route-form-section-label">Rit 2 schedule &amp; temp SLA</div>
+                    <div className="form-grid astro-config-grid">
+                      <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.rit2Enabled} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Enabled: event.target.checked }))} /><span>Enable rit 2</span></label>
+                      <label className="field"><span>Rit 2 start</span><input type="time" value={astroRouteForm.rit2Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Start: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
+                      <label className="field"><span>Rit 2 end</span><input type="time" value={astroRouteForm.rit2End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2End: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
+                      <label className="field"><span>Rit 2 WH SLA</span><input type="time" value={astroRouteForm.rit2WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2WhArrivalTimeSla: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
+                      <label className="field"><span>WH temp min SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Required" required /></label>
+                      <label className="field"><span>WH temp max SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Required" required /></label>
+                    </div>
                   </div>
                   <div className="astro-pod-list">
                     <div className="astro-pod-list-head">
