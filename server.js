@@ -114,6 +114,12 @@ const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
 const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 5000);
 const POSTGRES_CONNECT_TIMEOUT_MS = Number(process.env.POSTGRES_CONNECT_TIMEOUT_MS || 5000);
 const POSTGRES_QUERY_TIMEOUT_MS = Number(process.env.POSTGRES_QUERY_TIMEOUT_MS || 8000);
+const UNIT_CATEGORY_LABELS = {
+  oncall: 'OnCall',
+  'dedicated-astro': 'Dedicated Astro',
+  'dedicated-havi': 'Dedicated HAVI',
+  uncategorized: 'Uncategorized',
+};
 const remoteResetRuntime = {
   nextRunAt: null,
   lastRunStartedAt: null,
@@ -200,6 +206,44 @@ function toNumber(value) {
 
 function normalizeUnitKey(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeUnitCategory(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) {
+    return 'uncategorized';
+  }
+
+  if (raw === 'oncall' || raw === 'on-call' || raw === 'on call') {
+    return 'oncall';
+  }
+  if (
+    raw === 'dedicated-astro'
+    || raw === 'dedicated astro'
+    || raw === 'astro'
+    || raw === 'dedicatedastro'
+  ) {
+    return 'dedicated-astro';
+  }
+  if (
+    raw === 'dedicated-havi'
+    || raw === 'dedicated havi'
+    || raw === 'havi'
+    || raw === 'dedicatedhavi'
+  ) {
+    return 'dedicated-havi';
+  }
+  if (
+    raw === 'uncategorized'
+    || raw === 'unassigned'
+    || raw === 'unknown'
+    || raw === 'belum-diset'
+    || raw === 'belum diset'
+  ) {
+    return 'uncategorized';
+  }
+
+  return 'uncategorized';
 }
 
 function toTimestampMaybe(value) {
@@ -305,7 +349,13 @@ function normalizeUnit(value) {
   }
 
   const label = String(value.label ?? value.name ?? value.alias ?? id).trim() || id;
-  return { id, label };
+  const category = normalizeUnitCategory(value.category);
+  return {
+    id,
+    label,
+    category,
+    categoryLabel: UNIT_CATEGORY_LABELS[category] || UNIT_CATEGORY_LABELS.uncategorized,
+  };
 }
 
 function splitCsvish(value) {
@@ -2907,6 +2957,8 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
       id: unit.id,
       unitKey: normalizeUnitKey(unit.id),
       label: unit.label,
+      unitCategory: normalizeUnitCategory(unit.category),
+      unitCategoryLabel: unit.categoryLabel || UNIT_CATEGORY_LABELS[normalizeUnitCategory(unit.category)] || UNIT_CATEGORY_LABELS.uncategorized,
       vehicle: unitState.vehicle || vehicleSnapshot?.unitId || unit.label || unit.id,
       alias: vehicleSnapshot?.alias || unit.label,
       group: vehicleSnapshot?.group || '',
@@ -5834,6 +5886,16 @@ async function discoverUnits(accountId) {
   if (!units.length) {
     throw new Error('Belum berhasil baca daftar unit dari response discovery.');
   }
+
+  const existingUnitMap = new Map((accountConfig.units || []).map(function (unit) {
+    return [normalizeUnitKey(unit.id), normalizeUnitCategory(unit.category)];
+  }));
+  units = units.map(function (unit) {
+    return normalizeUnit({
+      ...unit,
+      category: existingUnitMap.get(normalizeUnitKey(unit.id)) || unit.category || 'uncategorized',
+    });
+  }).filter(Boolean);
 
   if (resolvedAccountId === 'primary') {
     config.vehicleRoleId = roleId;

@@ -80,6 +80,19 @@ const EMPTY_WEB_USER_FORM = { id: '', username: '', displayName: '', password: '
 const EMPTY_ADMIN_ROLLUP_FORM = { id: '', day: today(0), accountId: 'primary', accountLabel: '', unitId: '', unitLabel: '', vehicle: '', type: 'temp1', label: '', incidents: '0', temp1Incidents: '0', temp2Incidents: '0', bothIncidents: '0', firstStartTimestamp: '', lastEndTimestamp: '', durationMinutes: '0', totalMinutes: '0', longestMinutes: '0', temp1Min: '', temp1Max: '', temp2Min: '', temp2Max: '', minSpeed: '', maxSpeed: '', latitude: '', longitude: '', locationSummary: '', zoneName: '' };
 const EMPTY_ADMIN_POD_FORM = { id: '', day: today(0), timestamp: '', time: '', unitId: '', unitLabel: '', customerName: '', podId: '', podName: '', latitude: '', longitude: '', speed: '', distanceMeters: '', locationSummary: '' };
 const EMPTY_REMOTE_RESET_FORM = { enabled: false, selectedAccountIds: [] };
+const UNIT_CATEGORY_OPTIONS = [
+  { value: 'uncategorized', label: 'Uncategorized' },
+  { value: 'oncall', label: 'OnCall' },
+  { value: 'dedicated-astro', label: 'Dedicated Astro' },
+  { value: 'dedicated-havi', label: 'Dedicated HAVI' },
+];
+const UNIT_CATEGORY_LABELS = Object.fromEntries(UNIT_CATEGORY_OPTIONS.map((option) => [option.value, option.label]));
+const UNIT_CATEGORY_TONES = {
+  uncategorized: 'default',
+  oncall: 'info',
+  'dedicated-astro': 'primary',
+  'dedicated-havi': 'success',
+};
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 const GEOFENCE_LOCATION_LABELS = {
   WH: 'Warehouse',
@@ -283,6 +296,16 @@ const fmtClock = (value) => {
   return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtStayDuration = (startValue, endValue) => formatStayText(startValue, endValue);
+const normalizeUnitCategory = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'uncategorized';
+  if (raw === 'oncall' || raw === 'on-call' || raw === 'on call') return 'oncall';
+  if (raw === 'dedicated-astro' || raw === 'dedicated astro' || raw === 'astro' || raw === 'dedicatedastro') return 'dedicated-astro';
+  if (raw === 'dedicated-havi' || raw === 'dedicated havi' || raw === 'havi' || raw === 'dedicatedhavi') return 'dedicated-havi';
+  return 'uncategorized';
+};
+const unitCategoryLabel = (value) => UNIT_CATEGORY_LABELS[normalizeUnitCategory(value)] || UNIT_CATEGORY_LABELS.uncategorized;
+const unitCategoryTone = (value) => UNIT_CATEGORY_TONES[normalizeUnitCategory(value)] || 'default';
 const toDateTimeLocalInput = (value) => {
   const parsed = parseDateValue(value);
   if (!parsed) return '';
@@ -294,12 +317,13 @@ const toDateTimeLocalInput = (value) => {
   return `${year}-${month}-${day}T${hour}:${minute}`;
 };
 const fmtAgo = (minutes) => minutes === null || minutes === undefined ? '-' : `${fmtNum(minutes, 1)} min ago`;
-const unitsToText = (units) => (units || []).map((unit) => `${unit.id}|${unit.label}`).join('\n');
+const unitsToText = (units) => (units || []).map((unit) => `${unit.id}|${unit.label}|${normalizeUnitCategory(unit.category)}`).join('\n');
 const parseUnits = (text) => String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
   const parts = line.split('|');
   const id = String(parts[0] || '').trim();
   const label = String(parts[1] || parts[0] || '').trim();
-  return id ? { id, label: label || id } : null;
+  const category = normalizeUnitCategory(parts[2] || '');
+  return id ? { id, label: label || id, category, categoryLabel: unitCategoryLabel(category) } : null;
 }).filter(Boolean);
 const customerProfilesToText = (profiles) => (profiles || []).map((profile) => `${profile.name || profile.id}|${profile.tempMin ?? ''}|${profile.tempMax ?? ''}|${(profile.unitIds || []).join(',')}`).join('\n');
 const parseCustomerProfiles = (text) => String(text || '').split(/\r?\n/).map((line, index) => {
@@ -483,6 +507,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('all');
   const [fleetAccountFilter, setFleetAccountFilter] = useState('all');
+  const [fleetCategoryFilter, setFleetCategoryFilter] = useState('all');
   const [mapSearch, setMapSearch] = useState('');
   const [mapAccountFilter, setMapAccountFilter] = useState('all');
   const [mapRegionPages, setMapRegionPages] = useState({});
@@ -524,6 +549,10 @@ export default function App() {
   const [astroLocationSearch, setAstroLocationSearch] = useState('');
   const [astroRouteSearch, setAstroRouteSearch] = useState('');
   const [astroRouteCsvText, setAstroRouteCsvText] = useState('');
+  const [unitCategorySearch, setUnitCategorySearch] = useState('');
+  const [selectedUnitCategoryIds, setSelectedUnitCategoryIds] = useState([]);
+  const [unitCategoryBulkValue, setUnitCategoryBulkValue] = useState('uncategorized');
+  const [unitCategoryCsvText, setUnitCategoryCsvText] = useState('');
   const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', routeId: '' });
   const [astroReport, setAstroReport] = useState(null);
   const [astroDiagnosticsOpen, setAstroDiagnosticsOpen] = useState(false);
@@ -535,6 +564,15 @@ export default function App() {
   const connectedAccounts = useMemo(() => availableAccounts.filter((account) => account.hasSessionCookie), [availableAccounts]);
   const fleetFilterAccounts = useMemo(() => availableAccounts.filter((account) => fleetRows.some((row) => (row.accountId || 'primary') === account.id)), [availableAccounts, fleetRows]);
   const currentAccount = useMemo(() => availableAccounts.find((account) => account.id === activeAccountId) || availableAccounts[0] || null, [availableAccounts, activeAccountId]);
+  const configuredUnits = useMemo(() => parseUnits(form.unitsText), [form.unitsText]);
+  const filteredConfiguredUnits = useMemo(() => {
+    const q = unitCategorySearch.trim().toLowerCase();
+    if (!q) return configuredUnits;
+    return configuredUnits.filter((unit) => [unit.id, unit.label, unitCategoryLabel(unit.category)].some((value) => String(value || '').toLowerCase().includes(q)));
+  }, [configuredUnits, unitCategorySearch]);
+  useEffect(() => {
+    setSelectedUnitCategoryIds((current) => current.filter((id) => configuredUnits.some((unit) => unit.id === id)));
+  }, [configuredUnits]);
   const astroLocations = status?.config?.astroLocations || [];
   const astroRoutes = status?.config?.astroRoutes || [];
   const astroWhLocations = useMemo(() => astroLocations.filter((location) => location.type === 'WH'), [astroLocations]);
@@ -697,14 +735,15 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     let filtered = fleetRows;
     if (fleetAccountFilter !== 'all') filtered = filtered.filter((row) => (row.accountId || 'primary') === fleetAccountFilter);
+    if (fleetCategoryFilter !== 'all') filtered = filtered.filter((row) => normalizeUnitCategory(row.unitCategory) === fleetCategoryFilter);
     if (quickFilter === 'temp-error') filtered = filtered.filter((row) => rowHasSensorError(row));
     if (quickFilter === 'setpoint') filtered = filtered.filter((row) => rowHasSetpointIssue(row));
     if (quickFilter === 'gps-late') filtered = filtered.filter((row) => rowHasGpsLate(row));
     if (q) {
-      filtered = filtered.filter((row) => [row.accountLabel, row.id, row.label, row.alias, row.group, row.locationSummary, row.zoneName, row.customerName, row.setpointLabel, row.errSensor, row.errGps].some((value) => String(value || '').toLowerCase().includes(q)));
+      filtered = filtered.filter((row) => [row.accountLabel, row.id, row.label, row.alias, row.group, row.locationSummary, row.zoneName, row.customerName, row.setpointLabel, row.errSensor, row.errGps, row.unitCategoryLabel].some((value) => String(value || '').toLowerCase().includes(q)));
     }
     return sortFleetRows(filtered);
-  }, [deferredSearch, fleetRows, fleetAccountFilter, quickFilter]);
+  }, [deferredSearch, fleetRows, fleetAccountFilter, fleetCategoryFilter, quickFilter]);
   const mapFleetRows = useMemo(() => {
     const q = deferredMapSearch.trim().toLowerCase();
     let filtered = fleetRows;
@@ -1381,6 +1420,148 @@ export default function App() {
     }
   };
 
+  const updateConfiguredUnits = (updater) => {
+    setForm((current) => {
+      const currentUnits = parseUnits(current.unitsText);
+      const nextUnits = typeof updater === 'function' ? updater(currentUnits) : updater;
+      return {
+        ...current,
+        unitsText: unitsToText(nextUnits),
+      };
+    });
+  };
+
+  const updateConfiguredUnitCategory = (unitId, category) => {
+    updateConfiguredUnits((units) => units.map((unit) => unit.id === unitId
+      ? { ...unit, category: normalizeUnitCategory(category) }
+      : unit));
+  };
+
+  const toggleConfiguredUnitSelection = (unitId) => {
+    setSelectedUnitCategoryIds((current) => current.includes(unitId)
+      ? current.filter((id) => id !== unitId)
+      : [...current, unitId]);
+  };
+
+  const selectVisibleConfiguredUnits = () => {
+    setSelectedUnitCategoryIds(filteredConfiguredUnits.map((unit) => unit.id));
+  };
+
+  const clearConfiguredUnitSelection = () => {
+    setSelectedUnitCategoryIds([]);
+  };
+
+  const applyCategoryToSelectedUnits = () => {
+    if (!selectedUnitCategoryIds.length) {
+      setBanner({ tone: 'info', message: 'Pilih unit dulu untuk bulk category update.' });
+      return;
+    }
+    const selectedIdSet = new Set(selectedUnitCategoryIds);
+    updateConfiguredUnits((units) => units.map((unit) => selectedIdSet.has(unit.id)
+      ? { ...unit, category: normalizeUnitCategory(unitCategoryBulkValue) }
+      : unit));
+    setBanner({ tone: 'success', message: `Updated category untuk ${selectedUnitCategoryIds.length} unit.` });
+  };
+
+  const loadUnitCategoryCsvFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const textValue = await file.text();
+    setUnitCategoryCsvText(textValue);
+  };
+
+  const importUnitCategoryCsv = () => {
+    if (!unitCategoryCsvText.trim()) {
+      setBanner({ tone: 'info', message: 'Paste CSV category dulu sebelum import.' });
+      return;
+    }
+
+    const lines = String(unitCategoryCsvText || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) {
+      setBanner({ tone: 'info', message: 'CSV category kosong.' });
+      return;
+    }
+
+    const accountIds = new Set(availableAccounts.map((account) => account.id));
+    const rows = [];
+    lines.forEach((line, index) => {
+      const parts = line.split(',').map((part) => part.trim());
+      if (!parts.length) return;
+      if (index === 0 && parts.some((part) => /unit|category|account/i.test(part))) return;
+
+      let accountId = activeAccountId;
+      let unitId = '';
+      let label = '';
+      let category = 'uncategorized';
+
+      if (parts.length >= 4) {
+        accountId = parts[0] || activeAccountId;
+        unitId = parts[1] || '';
+        label = parts[2] || '';
+        category = parts[3] || 'uncategorized';
+      } else if (parts.length === 3) {
+        if (accountIds.has(parts[0])) {
+          accountId = parts[0] || activeAccountId;
+          unitId = parts[1] || '';
+          category = parts[2] || 'uncategorized';
+        } else {
+          unitId = parts[0] || '';
+          label = parts[1] || '';
+          category = parts[2] || 'uncategorized';
+        }
+      } else if (parts.length === 2) {
+        unitId = parts[0] || '';
+        category = parts[1] || 'uncategorized';
+      }
+
+      if (!unitId || accountId !== activeAccountId) {
+        return;
+      }
+
+      rows.push({
+        unitId,
+        label,
+        category: normalizeUnitCategory(category),
+      });
+    });
+
+    if (!rows.length) {
+      setBanner({ tone: 'error', message: 'Tidak ada row CSV yang cocok untuk account aktif.' });
+      return;
+    }
+
+    const csvMap = new Map(rows.map((row) => [row.unitId, row]));
+    let updatedCount = 0;
+    let addedCount = 0;
+    updateConfiguredUnits((units) => {
+      const nextUnits = units.map((unit) => {
+        const csvRow = csvMap.get(unit.id);
+        if (!csvRow) return unit;
+        updatedCount += 1;
+        csvMap.delete(unit.id);
+        return {
+          ...unit,
+          label: csvRow.label || unit.label,
+          category: csvRow.category,
+        };
+      });
+
+      for (const csvRow of csvMap.values()) {
+        nextUnits.push({
+          id: csvRow.unitId,
+          label: csvRow.label || csvRow.unitId,
+          category: csvRow.category,
+        });
+        addedCount += 1;
+      }
+
+      return nextUnits.sort((left, right) => String(left.label || left.id).localeCompare(String(right.label || right.id)) || String(left.id).localeCompare(String(right.id)));
+    });
+
+    setUnitCategoryCsvText('');
+    setBanner({ tone: 'success', message: `Imported category CSV. Updated ${updatedCount} unit, added ${addedCount} unit.` });
+  };
+
   const runPollNow = async () => {
     startBusy();
     try {
@@ -1451,7 +1632,7 @@ export default function App() {
     if (!selectedHistoricalRow) return;
     loadHistoricalDetail(selectedHistoricalRow.accountId || 'primary', selectedHistoricalRow.id, historicalRangeDraft, false).catch(() => {});
   };
-  const exportFleet = async () => runQuickBlockingAction('Menyiapkan Fleet CSV...', () => csv('solofleet-fleet-live.csv', prioritizedFleet.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, unit_id: row.id, label: row.label, alias: row.alias, group_name: row.group, speed: row.speed, live_temp1: row.liveTemp1, live_temp2: row.liveTemp2, temp_gap: row.liveTempDelta, sensor_error: row.errSensor, gps_error: row.errGps, location: row.locationSummary, zone_name: row.zoneName, latitude: row.latitude, longitude: row.longitude, last_updated_at: row.lastUpdatedAt }))));
+  const exportFleet = async () => runQuickBlockingAction('Menyiapkan Fleet CSV...', () => csv('solofleet-fleet-live.csv', prioritizedFleet.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, unit_id: row.id, label: row.label, alias: row.alias, unit_category: row.unitCategory, unit_category_label: row.unitCategoryLabel, group_name: row.group, speed: row.speed, live_temp1: row.liveTemp1, live_temp2: row.liveTemp2, temp_gap: row.liveTempDelta, sensor_error: row.errSensor, gps_error: row.errGps, location: row.locationSummary, zone_name: row.zoneName, latitude: row.latitude, longitude: row.longitude, last_updated_at: row.lastUpdatedAt }))));
   const exportAlerts = async () => runQuickBlockingAction('Menyiapkan Alerts CSV...', () => csv('solofleet-temp-alerts.csv', errorRows.map((row) => ({ account_id: row.accountId, account_label: row.accountLabel, error_date: row.day, start_time: row.startTime, end_time: row.endTime, duration_minutes: row.durationMinutes, incidents: row.incidents, unit_id: row.unitId, unit_label: row.unitLabel, type: row.label, temp1_min: row.temp1Min, temp1_max: row.temp1Max, temp2_min: row.temp2Min, temp2_max: row.temp2Max, speed_min: row.minSpeed, speed_max: row.maxSpeed, latitude: row.latitude, longitude: row.longitude, location: row.locationSummary }))));
   const exportStop = async () => runQuickBlockingAction('Menyiapkan Stop CSV...', () => csv('solofleet-stop-idle.csv', (stopReport?.rows || []).map((row) => ({ account_id: stopForm.accountId, account_label: accountName(availableAccounts.find((account) => account.id === stopForm.accountId)), unit_id: row.unitId, alias: row.alias, start_time: row.startTimestamp ? new Date(row.startTimestamp).toISOString() : '', end_time: row.endTimestamp ? new Date(row.endTimestamp).toISOString() : '', duration_minutes: row.durationMinutes, movement_distance_km: row.movementDistance, avg_temp: row.avgTemp, location: row.locationSummary, latitude: row.latitude, longitude: row.longitude, zone_name: row.zoneName, google_maps_url: row.googleMapsUrl }))));
   const historyTargetRow = historicalAppliedRow || selectedHistoricalRow || selectedFleetRow;
@@ -1988,7 +2169,7 @@ export default function App() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="fleet-filter-bar">
+                <div className="fleet-filter-bar" style={{ justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                   <label className="field fleet-filter-field">
                     <span>Account filter</span>
                     <select value={fleetAccountFilter} onChange={(event) => setFleetAccountFilter(event.target.value)}>
@@ -1996,10 +2177,17 @@ export default function App() {
                       {fleetFilterAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}
                     </select>
                   </label>
+                  <label className="field fleet-filter-field">
+                    <span>Category filter</span>
+                    <select value={fleetCategoryFilter} onChange={(event) => setFleetCategoryFilter(event.target.value)}>
+                      <option value="all">All categories</option>
+                      {UNIT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
                 </div>
                 <div className="fleet-table-summary">
                   <span>{prioritizedFleet.length} unit tampil di fleet live</span>
-                  <span>{fleetAccountFilter === 'all' ? 'Semua account' : accountName(fleetFilterAccounts.find((account) => account.id === fleetAccountFilter))} | {expandedFleetRowKey ? '1 modal grafik sedang terbuka' : 'Belum ada grafik yang dibuka'}</span>
+                  <span>{fleetAccountFilter === 'all' ? 'Semua account' : accountName(fleetFilterAccounts.find((account) => account.id === fleetAccountFilter))} | {fleetCategoryFilter === 'all' ? 'Semua kategori' : unitCategoryLabel(fleetCategoryFilter)} | {expandedFleetRowKey ? '1 modal grafik sedang terbuka' : 'Belum ada grafik yang dibuka'}</span>
                 </div>
                 {prioritizedFleet.length ? <div className="table-shell table-compact">
                   <table className="data-table fleet-inline-table">
@@ -2028,7 +2216,7 @@ export default function App() {
                           <tr className={`${rowPriority(row) >= 5 ? 'data-row data-row-danger' : rowPriority(row) >= 3 ? 'data-row data-row-warning' : 'data-row'}${expanded ? ' data-row-active' : ''}`}>
                             <td><Chip color={state.tone} variant="flat">{state.label}</Chip></td>
                             <td>{row.accountLabel || row.accountId || '-'}</td>
-                            <td style={{ minWidth: 180, maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div></div></td>
+                            <td style={{ minWidth: 180, maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}><div><strong>{row.id}</strong><div className="subtle-line">{row.label}</div><div className="subtle-line">{row.alias}</div><div style={{ marginTop: '6px' }}><Chip color={unitCategoryTone(row.unitCategory)}>{row.unitCategoryLabel || unitCategoryLabel(row.unitCategory)}</Chip></div></div></td>
                             <td style={{ minWidth: 240, maxWidth: 240, whiteSpace: 'normal' }}>
                               <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                                 {(() => {
@@ -2288,6 +2476,68 @@ export default function App() {
           </> : null}
           {activePanel === 'config' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Unit category mapping</h2>
+                  <p>Set kategori unit untuk account aktif. Unit baru hasil discover akan default ke Uncategorized sampai kamu mapping manual.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" onPress={selectVisibleConfiguredUnits}>Select visible</Button>
+                  <Button variant="bordered" onPress={clearConfiguredUnitSelection}>Clear selected</Button>
+                  <Button color="primary" onPress={() => saveConfig(false)}>Save categories</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="settings-stack">
+                  <div className="subtle-line">Account aktif: <strong>{currentAccount?.label || currentAccount?.authEmail || currentAccount?.id || 'primary'}</strong></div>
+                  <label className="field">
+                    <span>Search configured units</span>
+                    <div className="search-box historical-search-box">
+                      <Search size={16} className="search-icon" />
+                      <input type="search" value={unitCategorySearch} onChange={(event) => setUnitCategorySearch(event.target.value)} placeholder="Cari unit id, label, atau category..." />
+                    </div>
+                  </label>
+                  <div className="inline-buttons" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
+                    <label className="field fleet-filter-field" style={{ minWidth: 220 }}>
+                      <span>Bulk set category</span>
+                      <select value={unitCategoryBulkValue} onChange={(event) => setUnitCategoryBulkValue(event.target.value)}>
+                        {UNIT_CATEGORY_OPTIONS.map((option) => <option key={`bulk-${option.value}`} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <Button variant="bordered" onPress={applyCategoryToSelectedUnits}>Apply to selected ({selectedUnitCategoryIds.length})</Button>
+                  </div>
+                  <DataTable
+                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                    columns={['Select', 'Unit ID', 'Current', 'Set category']}
+                    emptyMessage="Belum ada unit dikonfigurasi di account aktif. Klik Discover units dulu."
+                    rows={filteredConfiguredUnits.map((unit) => [
+                      <input type="checkbox" checked={selectedUnitCategoryIds.includes(unit.id)} onChange={() => toggleConfiguredUnitSelection(unit.id)} />,
+                      <div><strong>{unit.id}</strong><div className="subtle-line">{unit.label || unit.id}</div></div>,
+                      <Chip color={unitCategoryTone(unit.category)}>{unitCategoryLabel(unit.category)}</Chip>,
+                      <select value={normalizeUnitCategory(unit.category)} onChange={(event) => updateConfiguredUnitCategory(unit.id, event.target.value)}>
+                        {UNIT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>,
+                    ])}
+                  />
+                  <div className="astro-sample-block">
+                    <div className="astro-sample-head">
+                      <strong>CSV bulk update</strong>
+                      <div className="inline-buttons astro-sample-actions">
+                        <Button variant="bordered" onPress={() => setUnitCategoryCsvText(['unitId,category', 'COL56,dedicated-astro', 'COL77,oncall'].join('\n'))}>Use sample</Button>
+                      </div>
+                    </div>
+                    <pre className="astro-sample-pre">{'unitId,category\nCOL56,dedicated-astro\nCOL77,oncall\n\nOptional formats:\naccountId,unitId,category\nunitId,label,category\naccountId,unitId,label,category'}</pre>
+                  </div>
+                  <label className="field"><span>Bulk category CSV</span><textarea rows="6" value={unitCategoryCsvText} onChange={(event) => setUnitCategoryCsvText(event.target.value)} placeholder="unitId,category" /></label>
+                  <div className="inline-buttons">
+                    <input type="file" accept=".csv,text/csv" onChange={loadUnitCategoryCsvFile} />
+                    <Button variant="bordered" onPress={importUnitCategoryCsv}>Import CSV merge</Button>
+                  </div>
+                  <div className="subtle-line">Format internal unit config mengikuti: unitId | label | category. Kategori tersimpan per account dan per unit.</div>
+                </div>
+              </CardContent>
+            </Card>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>            <Card className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
