@@ -1693,7 +1693,13 @@ textarea:focus {
 }
 
 .astro-config-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.astro-config-grid .field,
+.astro-pod-row .field,
+.astro-pod-field .field {
+  margin-bottom: 0;
 }
 
 .field {
@@ -4064,7 +4070,7 @@ textarea:focus {
 /* Astro pod row KPI — responsive 4-col → 2-col → 1-col */
 .astro-pod-row-kpi {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
 }
