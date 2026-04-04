@@ -105,9 +105,10 @@ const GEOFENCE_LOCATION_LABELS = {
 const EMPTY_ASTRO_LOCATION_FORM = { id: '', name: '', latitude: '', longitude: '', radiusMeters: '150', type: 'POD', scopeMode: 'global', scopeAccountIds: '', scopeCustomerNames: '', isActive: true, notes: '' };
 const ASTRO_GROUP_PREVIEW_LIMIT = 5;
 const ASTRO_ROUTE_MAX_PODS = 5;
-const EMPTY_ASTRO_ROUTE_FORM = { id: '', accountId: 'primary', unitId: '', customerName: 'Astro', whLocationId: '', poolLocationId: '', podSequence: [''], rit1Start: '05:00', rit1End: '14:59', rit2Enabled: false, rit2Start: '19:00', rit2End: '06:00', isActive: true, notes: '' };
+const createBlankAstroPodSlaArray = (count = 1) => Array.from({ length: Math.max(1, Math.min(ASTRO_ROUTE_MAX_PODS, Number(count || 1))) }, () => '');
+const EMPTY_ASTRO_ROUTE_FORM = { id: '', accountId: 'primary', unitId: '', customerName: 'Astro', whLocationId: '', poolLocationId: '', podSequence: [''], rit1Start: '05:00', rit1End: '14:59', rit1WhArrivalTimeSla: '', rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2Enabled: false, rit2Start: '19:00', rit2End: '06:00', rit2WhArrivalTimeSla: '', rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), whArrivalTempMinSla: '', whArrivalTempMaxSla: '', isActive: true, notes: '' };
 const ASTRO_LOCATION_SAMPLE_CSV = ['Nama Tempat,Latitude,Longitude,Radius,Type', 'Astro WH CBN,-6.296412,107.146281,180,WH', 'Astro POD Bekasi Timur,-6.238765,106.999321,120,POD', 'Astro Pool Cakung,-6.182450,106.935870,160,POOL', 'Rest KM 39,-6.557777,106.781111,180,REST'].join('\n');
-const ASTRO_ROUTE_SAMPLE_CSV = ['Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit2 Enabled,Rit2 Start,Rit2 End,Active,Notes', 'primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,false,19:00,06:00,true,Rit pagi only'].join('\n');
+const ASTRO_ROUTE_SAMPLE_CSV = ['Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit1 WH Arrival Time SLA,Rit1 POD1 SLA,Rit1 POD2 SLA,Rit1 POD3 SLA,Rit1 POD4 SLA,Rit1 POD5 SLA,Rit2 Enabled,Rit2 Start,Rit2 End,Rit2 WH Arrival Time SLA,Rit2 POD1 SLA,Rit2 POD2 SLA,Rit2 POD3 SLA,Rit2 POD4 SLA,Rit2 POD5 SLA,WH Arrival Temp Min SLA,WH Arrival Temp Max SLA,Active,Notes', 'primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,06:30,07:00,,,,,false,19:00,06:00,,,,,,2,8,true,Rit pagi only'].join('\n');
 
 let leafletModulePromise = null;
 
@@ -290,6 +291,7 @@ const fmtDateOnly = (value) => {
   return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit' }).format(parsed) : '-';
 };
 const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
+const fmtPct = (value, digits = 1) => `${fmtNum(value ?? 0, digits)}%`;
 const fmtCoord = (value) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(6);
 const fmtClock = (value) => {
   const parsed = parseDateValue(value);
@@ -306,6 +308,14 @@ const normalizeUnitCategory = (value) => {
 };
 const unitCategoryLabel = (value) => UNIT_CATEGORY_LABELS[normalizeUnitCategory(value)] || UNIT_CATEGORY_LABELS.uncategorized;
 const unitCategoryTone = (value) => UNIT_CATEGORY_TONES[normalizeUnitCategory(value)] || 'default';
+const normalizeAstroPodSlaDraft = (values, count) => {
+  const next = Array.isArray(values) ? values.map((value) => String(value || '').trim()) : [];
+  const targetCount = Math.max(1, Math.min(ASTRO_ROUTE_MAX_PODS, Number(count || 1)));
+  while (next.length < targetCount) next.push('');
+  return next.slice(0, targetCount);
+};
+const astroKpiTone = (status) => status === 'pass' ? 'success' : status === 'fail' ? 'danger' : 'default';
+const astroKpiLabel = (status) => status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'N/A';
 const normalizeUnitLookupKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const toDateTimeLocalInput = (value) => {
   const parsed = parseDateValue(value);
@@ -557,8 +567,12 @@ export default function App() {
   const [unitCategoryBulkValue, setUnitCategoryBulkValue] = useState('uncategorized');
   const [unitCategoryCsvText, setUnitCategoryCsvText] = useState('');
   const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', routeId: '' });
+  const [astroReportMode, setAstroReportMode] = useState('plain');
   const [astroReport, setAstroReport] = useState(null);
   const [astroDiagnosticsOpen, setAstroDiagnosticsOpen] = useState(false);
+  const [overviewAccountId, setOverviewAccountId] = useState('primary');
+  const [overviewAstroSummary, setOverviewAstroSummary] = useState(null);
+  const [overviewAstroBusy, setOverviewAstroBusy] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
@@ -567,6 +581,30 @@ export default function App() {
   const connectedAccounts = useMemo(() => availableAccounts.filter((account) => account.hasSessionCookie), [availableAccounts]);
   const fleetFilterAccounts = useMemo(() => availableAccounts.filter((account) => fleetRows.some((row) => (row.accountId || 'primary') === account.id)), [availableAccounts, fleetRows]);
   const currentAccount = useMemo(() => availableAccounts.find((account) => account.id === activeAccountId) || availableAccounts[0] || null, [availableAccounts, activeAccountId]);
+  const overviewAccountOptions = useMemo(() => availableAccounts.map((account) => ({ value: account.id, label: account.label || account.authEmail || account.id })), [availableAccounts]);
+  const overviewAccountStats = useMemo(() => {
+    const overviewAccounts = status?.overview?.accounts || [];
+    return overviewAccounts.find((account) => account.id === overviewAccountId)
+      || overviewAccounts[0]
+      || {
+        id: overviewAccountId || 'primary',
+        label: accountName(availableAccounts.find((account) => account.id === overviewAccountId) || currentAccount || { id: overviewAccountId || 'primary' }),
+        totalConfiguredUnits: 0,
+        tempErrorUnits: 0,
+        movingUnits: 0,
+        idleUnits: 0,
+        noLiveUnits: 0,
+        tempErrorRate: 0,
+        movingRate: 0,
+        idleRate: 0,
+      };
+  }, [status?.overview?.accounts, overviewAccountId, availableAccounts, currentAccount]);
+  useEffect(() => {
+    if (!overviewAccountOptions.length) return;
+    setOverviewAccountId((current) => overviewAccountOptions.some((option) => option.value === current)
+      ? current
+      : activeAccountId || overviewAccountOptions[0].value);
+  }, [overviewAccountOptions, activeAccountId]);
   const configuredUnits = useMemo(() => parseUnits(form.unitsText), [form.unitsText]);
   const filteredConfiguredUnits = useMemo(() => {
     const q = unitCategorySearch.trim().toLowerCase();
@@ -681,7 +719,56 @@ export default function App() {
       setAstroReportFilters((current) => (current.routeId ? { ...current, routeId: '' } : current));
     }
   }, [astroReportFilters.routeId, astroReportFilters.accountId, astroReportUnitOptions]);
-  const astroReportMaxPods = astroReport?.summary?.maxPods || 0;
+    const astroReportMaxPods = astroReport?.summary?.maxPods || 0;
+  const overviewAccountFleetRows = useMemo(() => fleetRows.filter((row) => (row.accountId || 'primary') === overviewAccountId), [fleetRows, overviewAccountId]);
+  const overviewDonutSegments = useMemo(() => {
+    const totalConfigured = Number(overviewAccountStats.totalConfiguredUnits || 0);
+    const tempErrorUnits = overviewAccountFleetRows.filter((row) => row.hasLiveSensorFault).length;
+    const movingUnits = overviewAccountFleetRows.filter((row) => row.hasLiveSnapshot && row.isMoving && !row.hasLiveSensorFault).length;
+    const idleUnits = overviewAccountFleetRows.filter((row) => row.hasLiveSnapshot && !row.isMoving && !row.hasLiveSensorFault).length;
+    const noLiveUnits = Math.max(0, totalConfigured - tempErrorUnits - movingUnits - idleUnits);
+    return [
+      { key: 'temp-error', label: 'Temp error', value: tempErrorUnits, tone: 'danger' },
+      { key: 'moving', label: 'Moving', value: movingUnits, tone: 'success' },
+      { key: 'idle', label: 'Idle', value: idleUnits, tone: 'warning' },
+      { key: 'no-live', label: 'No live data', value: noLiveUnits, tone: 'default' },
+    ];
+  }, [overviewAccountStats.totalConfiguredUnits, overviewAccountFleetRows]);
+  const overviewAstroKpi = overviewAstroSummary?.summary?.kpi || null;
+  const overviewAstroTrend = overviewAstroKpi?.trend || overviewAstroSummary?.trend || [];
+
+  useEffect(() => {
+    if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) {
+      return undefined;
+    }
+    let cancelled = false;
+    setOverviewAstroBusy(true);
+    api(`/api/astro/report?${new URLSearchParams({
+      startDate: range.startDate,
+      endDate: range.endDate,
+      accountId: overviewAccountId,
+      summaryOnly: '1',
+    }).toString()}`)
+      .then((payload) => {
+        if (!cancelled) {
+          setOverviewAstroSummary(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOverviewAstroSummary(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOverviewAstroBusy(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePanel, overviewAccountId, range.startDate, range.endDate]);
+
   const astroReportColumns = useMemo(() => {
     const base = [
       { key: 'serviceDate', label: 'Service date' },
@@ -690,6 +777,12 @@ export default function App() {
       { key: 'wh', label: 'WH' },
       { key: 'whArrivalTime', label: 'WH arrival time' },
       { key: 'whArrivalTemp', label: 'WH arrival temp' },
+      ...(astroReportMode === 'kpi'
+        ? [
+            { key: 'whArrivalTimeKpi', label: 'WH time KPI' },
+            { key: 'whArrivalTempKpi', label: 'WH temp KPI' },
+          ]
+        : []),
       { key: 'whDepartureTemp', label: 'WH dep temp' },
       { key: 'whStay', label: 'WH stay' },
     ];
@@ -697,14 +790,19 @@ export default function App() {
       const order = index + 1;
       return [
         { key: `pod${order}ArrivalTime`, label: `POD ${order} arrival time` },
+        ...(astroReportMode === 'kpi' ? [{ key: `pod${order}Kpi`, label: `POD ${order} KPI` }] : []),
         { key: `pod${order}ArrivalTemp`, label: `POD ${order} arrival temp` },
         { key: `pod${order}DepartureTemp`, label: `POD ${order} dep temp` },
         { key: `pod${order}Stay`, label: `POD ${order} stay` },
       ];
     }).flat();
-    return [...base, ...podColumns];
-  }, [astroReportMaxPods]);
+    return astroReportMode === 'kpi'
+      ? [...base, ...podColumns, { key: 'overallKpi', label: 'Overall KPI' }]
+      : [...base, ...podColumns];
+  }, [astroReportMaxPods, astroReportMode]);
   const astroReportTableRows = useMemo(() => (astroReport?.rows || []).map((row) => {
+    const renderTimeKpiCell = (entry) => <div className="astro-kpi-cell"><Chip color={astroKpiTone(entry?.status)}>{entry?.label || astroKpiLabel(entry?.status)}</Chip>{entry?.sla ? <div className="subtle-line">SLA {entry.sla}</div> : <div className="subtle-line">No SLA</div>}</div>;
+    const renderTempKpiCell = (entry) => <div className="astro-kpi-cell"><Chip color={astroKpiTone(entry?.status)}>{entry?.label || astroKpiLabel(entry?.status)}</Chip>{entry && (entry.min !== null || entry.max !== null) ? <div className="subtle-line">Range {entry.min ?? '-'} to {entry.max ?? '-'}</div> : <div className="subtle-line">No SLA</div>}</div>;
     const cells = [
       row.serviceDate,
       row.rit,
@@ -712,20 +810,28 @@ export default function App() {
       row.whName,
       fmtDateCompact(row.whEta),
       fmtNum(row.whArrivalTemp, 1),
-      fmtNum(row.whDepartureTemp, 1),
-      fmtStayDuration(row.whEta, row.whEtd),
     ];
+    if (astroReportMode === 'kpi') {
+      cells.push(renderTimeKpiCell(row.kpi?.whArrivalTime), renderTempKpiCell(row.kpi?.whArrivalTemp));
+    }
+    cells.push(fmtNum(row.whDepartureTemp, 1), fmtStayDuration(row.whEta, row.whEtd));
     for (let index = 0; index < astroReportMaxPods; index += 1) {
       const pod = row.pods?.[index];
+      cells.push(pod ? fmtDateCompact(pod.eta) : '-');
+      if (astroReportMode === 'kpi') {
+        cells.push(renderTimeKpiCell(row.kpi?.podArrivalTimes?.[index]));
+      }
       cells.push(
-        pod ? fmtDateCompact(pod.eta) : '-',
         pod ? fmtNum(pod.arrivalTemp, 1) : '-',
         pod ? fmtNum(pod.departureTemp, 1) : '-',
         pod ? fmtStayDuration(pod.eta, pod.etd) : '-',
       );
     }
+    if (astroReportMode === 'kpi') {
+      cells.push(<Chip color={astroKpiTone(row.kpi?.overallStatus)}>{row.kpi?.overallLabel || astroKpiLabel(row.kpi?.overallStatus)}</Chip>);
+    }
     return cells;
-  }), [astroReport, astroReportMaxPods]);
+  }), [astroReport, astroReportMaxPods, astroReportMode]);
   const astroDiagnostics = astroReport?.diagnostics || [];
   const astroDiagnosticRows = useMemo(() => astroDiagnostics.map((row) => [
     row.serviceDate || '-',
@@ -796,7 +902,7 @@ export default function App() {
   const hasSolofleetAccounts = connectedAccounts.length > 0;
   const isAdmin = webSessionUser?.role === 'admin';
   const remoteResetStatus = status?.remoteReset || null;
-  const showOverviewChrome = activePanel === 'overview';
+  const showOverviewChrome = false;
   const navItems = useMemo(() => ([
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'fleet', label: 'Fleet Live', icon: Navigation },
@@ -1733,24 +1839,49 @@ export default function App() {
     notes: draft.notes.trim(),
   });
 
-  const astroRoutePayload = (draft = astroRouteForm) => ({
-    id: draft.id || undefined,
-    accountId: draft.accountId || 'primary',
-    unitId: draft.unitId.trim().toUpperCase(),
-    customerName: draft.customerName.trim() || 'Astro',
-    whLocationId: draft.whLocationId,
-    poolLocationId: draft.poolLocationId || '',
-    podSequence: (draft.podSequence || []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, ASTRO_ROUTE_MAX_PODS),
-    rit1: { start: draft.rit1Start, end: draft.rit1End, enabled: true },
-    rit2: draft.rit2Enabled ? { start: draft.rit2Start, end: draft.rit2End, enabled: true } : null,
-    isActive: Boolean(draft.isActive),
-    notes: draft.notes.trim(),
-  });
+  const astroRoutePayload = (draft = astroRouteForm) => {
+    const podCount = Math.max(1, Math.min(ASTRO_ROUTE_MAX_PODS, (draft.podSequence || []).length || 1));
+    return {
+      id: draft.id || undefined,
+      accountId: draft.accountId || 'primary',
+      unitId: draft.unitId.trim().toUpperCase(),
+      customerName: draft.customerName.trim() || 'Astro',
+      whLocationId: draft.whLocationId,
+      poolLocationId: draft.poolLocationId || '',
+      podSequence: (draft.podSequence || []).map((item) => String(item || '').trim()).filter(Boolean).slice(0, ASTRO_ROUTE_MAX_PODS),
+      rit1: {
+        start: draft.rit1Start,
+        end: draft.rit1End,
+        enabled: true,
+        whArrivalTimeSla: String(draft.rit1WhArrivalTimeSla || '').trim(),
+        podArrivalTimeSlas: normalizeAstroPodSlaDraft(draft.rit1PodArrivalTimeSlas, podCount),
+      },
+      rit2: draft.rit2Enabled ? {
+        start: draft.rit2Start,
+        end: draft.rit2End,
+        enabled: true,
+        whArrivalTimeSla: String(draft.rit2WhArrivalTimeSla || '').trim(),
+        podArrivalTimeSlas: normalizeAstroPodSlaDraft(draft.rit2PodArrivalTimeSlas, podCount),
+      } : null,
+      whArrivalTempMinSla: String(draft.whArrivalTempMinSla || '').trim(),
+      whArrivalTempMaxSla: String(draft.whArrivalTempMaxSla || '').trim(),
+      isActive: Boolean(draft.isActive),
+      notes: draft.notes.trim(),
+    };
+  };
 
   const updateAstroRoutePod = (index, value) => {
     setAstroRouteForm((current) => ({
       ...current,
       podSequence: (current.podSequence || ['']).map((item, itemIndex) => itemIndex === index ? value : item),
+    }));
+  };
+
+  const updateAstroRoutePodSla = (ritKey, index, value) => {
+    const field = ritKey === 'rit2' ? 'rit2PodArrivalTimeSlas' : 'rit1PodArrivalTimeSlas';
+    setAstroRouteForm((current) => ({
+      ...current,
+      [field]: normalizeAstroPodSlaDraft((current[field] || []).map((item, itemIndex) => itemIndex === index ? value : item), (current.podSequence || []).length),
     }));
   };
 
@@ -1761,7 +1892,12 @@ export default function App() {
         return current;
       }
       nextPods.push('');
-      return { ...current, podSequence: nextPods };
+      return {
+        ...current,
+        podSequence: nextPods,
+        rit1PodArrivalTimeSlas: normalizeAstroPodSlaDraft([...(current.rit1PodArrivalTimeSlas || []), ''], nextPods.length),
+        rit2PodArrivalTimeSlas: normalizeAstroPodSlaDraft([...(current.rit2PodArrivalTimeSlas || []), ''], nextPods.length),
+      };
     });
   };
 
@@ -1769,13 +1905,22 @@ export default function App() {
     setAstroRouteForm((current) => {
       const currentPods = current.podSequence || [''];
       if (currentPods.length <= 1) {
-        return { ...current, podSequence: [''] };
+        return {
+          ...current,
+          podSequence: [''],
+          rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1),
+          rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1),
+        };
       }
       const nextPods = currentPods.filter((_, itemIndex) => itemIndex !== index);
-      return { ...current, podSequence: nextPods.length ? nextPods : [''] };
+      return {
+        ...current,
+        podSequence: nextPods.length ? nextPods : [''],
+        rit1PodArrivalTimeSlas: normalizeAstroPodSlaDraft((current.rit1PodArrivalTimeSlas || []).filter((_, itemIndex) => itemIndex !== index), nextPods.length),
+        rit2PodArrivalTimeSlas: normalizeAstroPodSlaDraft((current.rit2PodArrivalTimeSlas || []).filter((_, itemIndex) => itemIndex !== index), nextPods.length),
+      };
     });
   };
-
   const focusAstroEditor = (ref, message) => {
     setActivePanel('config');
     setBanner({ tone: 'info', message });
@@ -1842,7 +1987,7 @@ export default function App() {
       const nextRoutes = astroRoutes.filter((route) => !selectedIdSet.has(route.whLocationId) && !selectedIdSet.has(route.poolLocationId) && !(route.podSequence || []).some((locationId) => selectedIdSet.has(locationId)));
       await api('/api/astro/config/locations', { method: 'POST', body: JSON.stringify({ locations: nextLocations, routes: nextRoutes }) });
       if (astroLocationForm.id && selectedIdSet.has(astroLocationForm.id)) setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM);
-      if (astroRouteForm.id && !nextRoutes.some((route) => route.id === astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      if (astroRouteForm.id && !nextRoutes.some((route) => route.id === astroRouteForm.id)) setAstroRouteForm({ ...EMPTY_ASTRO_ROUTE_FORM, rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1) });
       setSelectedAstroLocationIds([]);
       setBanner({ tone: 'success', message: uniqueIds.length === 1 ? 'Geofence deleted.' : `${uniqueIds.length} geofence deleted.` });
       await loadDashboard(true, true);
@@ -1870,9 +2015,15 @@ export default function App() {
       podSequence: route.podSequence?.length ? route.podSequence.slice(0, ASTRO_ROUTE_MAX_PODS) : [''],
       rit1Start: route.rit1?.start || '05:00',
       rit1End: route.rit1?.end || '14:59',
+      rit1WhArrivalTimeSla: route.rit1?.whArrivalTimeSla || '',
+      rit1PodArrivalTimeSlas: normalizeAstroPodSlaDraft(route.rit1?.podArrivalTimeSlas, route.podSequence?.length || 1),
       rit2Enabled: Boolean(route.rit2),
       rit2Start: route.rit2?.start || '19:00',
       rit2End: route.rit2?.end || '06:00',
+      rit2WhArrivalTimeSla: route.rit2?.whArrivalTimeSla || '',
+      rit2PodArrivalTimeSlas: normalizeAstroPodSlaDraft(route.rit2?.podArrivalTimeSlas, route.podSequence?.length || 1),
+      whArrivalTempMinSla: route.whArrivalTempMinSla ?? '',
+      whArrivalTempMaxSla: route.whArrivalTempMaxSla ?? '',
       isActive: route.isActive !== false,
       notes: route.notes || '',
     });
@@ -1887,7 +2038,7 @@ export default function App() {
         ? astroRoutes.map((route) => route.id === astroRouteForm.id ? entry : route)
         : [...astroRoutes, entry];
       await api('/api/astro/config/routes', { method: 'POST', body: JSON.stringify({ routes: nextRoutes }) });
-      setAstroRouteForm((current) => ({ ...EMPTY_ASTRO_ROUTE_FORM, accountId: current.accountId || 'primary', podSequence: [''] }));
+      setAstroRouteForm((current) => ({ ...EMPTY_ASTRO_ROUTE_FORM, accountId: current.accountId || 'primary', podSequence: [''], rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1) }));
       setBanner({ tone: 'success', message: 'Astro route saved.' });
       await loadDashboard(true, true);
     } catch (error) {
@@ -1920,7 +2071,7 @@ export default function App() {
       const selectedIdSet = new Set(uniqueIds);
       const nextRoutes = astroRoutes.filter((route) => !selectedIdSet.has(route.id));
       await api('/api/astro/config/routes', { method: 'POST', body: JSON.stringify({ routes: nextRoutes }) });
-      if (astroRouteForm.id && selectedIdSet.has(astroRouteForm.id)) setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM);
+      if (astroRouteForm.id && selectedIdSet.has(astroRouteForm.id)) setAstroRouteForm({ ...EMPTY_ASTRO_ROUTE_FORM, rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1) });
       setSelectedAstroRouteIds([]);
       setBanner({ tone: 'success', message: uniqueIds.length === 1 ? 'Astro route deleted.' : `${uniqueIds.length} Astro route deleted.` });
       await loadDashboard(true, true);
@@ -2215,13 +2366,7 @@ export default function App() {
           
           
 
-          {activePanel === 'overview' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Live temperature alerts</h2><p>Alert yang masih relevan dari histori poll lokal.</p></div></CardHeader><CardContent><DataTable columns={['Severity', 'Account', 'Unit', 'Start', 'End', 'Minutes', 'Speed', 'Temp range']} emptyMessage="Belum ada live temp alert." rows={(status?.liveAlerts || []).map((row) => [<Chip color={row.type === 'temp1+temp2' ? 'danger' : 'warning'} variant="flat">{row.label}</Chip>, row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.vehicle}</strong><div className="subtle-line">{row.vehicle}</div></div>, fmtDate(row.startTimestamp), fmtDate(row.endTimestamp), fmtNum(row.durationMinutes, 1), `${fmtNum(row.minSpeed, 0)} - ${fmtNum(row.maxSpeed, 0)}`, `T1 ${fmtNum(row.temp1Min)} to ${fmtNum(row.temp1Max)} | T2 ${fmtNum(row.temp2Min)} to ${fmtNum(row.temp2Max)}`])} /></CardContent></Card>
-            <div className="split-panels">
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Compile per day</h2><p>1 baris per hari biar cepat lihat total unit yang kena error. Detail per unit tetap ada di export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile row di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Daily totals</h2><p>Quick scan buat lihat hari yang paling bermasalah.</p></div></CardHeader><CardContent><DataTable columns={['Day', 'Units', 'Incidents', 'Critical', 'Total min']} emptyMessage="Belum ada daily totals di range ini." rows={(report?.dailyTotals || []).map((row) => [row.day, row.units, row.incidents, row.criticalIncidents, fmtNum(row.totalMinutes, 1)])} /></CardContent></Card>
-            </div>
-          </> : null}
+                    {activePanel === 'overview' ? <Card className="panel-card overview-dashboard-card"><CardHeader className="panel-card-header"><div><h2>Overview dashboard</h2><p>Ringkasan operasional per account. Moving dan idle dihitung dari snapshot live hari ini, sementara trend Astro mengikuti date range aktif di topbar.</p></div><div className="overview-toolbar"><label className="field overview-account-field"><span>Show account</span><select value={overviewAccountId} onChange={(event) => setOverviewAccountId(event.target.value)}>{overviewAccountOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div></CardHeader><CardContent><div className="overview-kpi-grid"><div className="overview-kpi-card danger"><span>Temp error</span><strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong><small>{overviewAccountStats.tempErrorUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit error</small></div><div className="overview-kpi-card success"><span>Moving</span><strong>{fmtPct(overviewAccountStats.movingRate)}</strong><small>{overviewAccountStats.movingUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang jalan</small></div><div className="overview-kpi-card warning"><span>Idle</span><strong>{fmtPct(overviewAccountStats.idleRate)}</strong><small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang diam</small></div></div><div className="overview-dashboard-grid"><div className="overview-chart-card"><div className="overview-chart-head"><div><h3>Live fleet composition</h3><p>Komposisi unit configured untuk account terpilih.</p></div><Chip>{overviewAccountStats.totalConfiguredUnits || 0} configured</Chip></div><div className="overview-donut-layout"><OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} /><div className="overview-legend">{overviewDonutSegments.map((segment) => <div key={segment.key} className="overview-legend-row"><span className={`overview-legend-dot ${segment.tone}`} /><div><strong>{segment.label}</strong><small>{segment.value} unit</small></div></div>)}</div></div></div><div className="overview-chart-card"><div className="overview-chart-head"><div><h3>Astro KPI trend</h3><p>{range.startDate} to {range.endDate} | Mode KPI opsional, route tanpa target tetap muncul sebagai N/A.</p></div><Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroTrend.length} day(s)`}</Chip></div><OverviewAstroTrendChart points={overviewAstroTrend} busy={overviewAstroBusy} /><div className="overview-mini-summary">{overviewAstroKpi ? <><div className="mini-metric"><span>Eligible rit</span><strong>{overviewAstroKpi.eligibleRows || 0}</strong></div><div className="mini-metric"><span>Pass rate</span><strong>{fmtPct(overviewAstroKpi.overallRate || 0)}</strong></div><div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(overviewAstroKpi.whArrivalTimeRate || 0)}</strong></div><div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(overviewAstroKpi.whArrivalTempRate || 0)}</strong></div><div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(overviewAstroKpi.podArrivalRate || 0)}</strong></div></> : <div className="empty-state compact-empty">Belum ada ringkasan Astro untuk account dan range ini.</div>}</div></div></div></CardContent></Card> : null}
           {activePanel === 'fleet' ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
@@ -2440,12 +2585,20 @@ export default function App() {
                   </label>
                   <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', routeId: '' }))} placeholder="Search account..." />
                   <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportVisibleRouteOptions]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
+                  <label className="historical-field">
+                    <span>View mode</span>
+                    <select value={astroReportMode} onChange={(event) => setAstroReportMode(event.target.value)}>
+                      <option value="plain">Without KPI</option>
+                      <option value="kpi">With KPI</option>
+                    </select>
+                  </label>
                   <div className="historical-action-field">
                     <span>Action</span>
                     <Button color="primary" onPress={generateAstroReport}>Generate report</Button>
                   </div>
                 </div>
                 <div className="historical-summary astro-summary">Configured routes: {astroRoutes.length} | Locations: {astroLocations.length} | Report rows: {astroReport?.summary?.rows ?? 0} | Partial diagnostics: {astroReport?.summary?.partialRows ?? 0} | Warnings: {astroReport?.summary?.warnings ?? 0}</div>
+                {astroReportMode === 'kpi' ? <div className="overview-mini-summary astro-kpi-summary"><div className="mini-metric"><span>Eligible rit</span><strong>{astroReport?.summary?.kpi?.eligibleRows ?? 0}</strong></div><div className="mini-metric"><span>Overall pass</span><strong>{fmtPct(astroReport?.summary?.kpi?.overallRate ?? 0)}</strong></div><div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(astroReport?.summary?.kpi?.whArrivalTimeRate ?? 0)}</strong></div><div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(astroReport?.summary?.kpi?.whArrivalTempRate ?? 0)}</strong></div><div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(astroReport?.summary?.kpi?.podArrivalRate ?? 0)}</strong></div></div> : null}
                 {astroDiagnostics.length ? <div className="subtle-line astro-diagnostic-hint">Tanggal yang belum lengkap tetap bisa ditinjau melalui tombol Lihat tanggal error.</div> : null}
               </CardContent>
             </Card>
@@ -2766,7 +2919,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Astro route config</h2>
-                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, dan window rit.</p>
+                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, window rit, dan KPI yang boleh dikosongkan.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" className="section-chevron-button" onPress={() => setAstroRouteSectionOpen((current) => !current)} aria-label={astroRouteSectionOpen ? 'Collapse Astro route config' : 'Expand Astro route config'}>{astroRouteSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
@@ -2784,23 +2937,27 @@ export default function App() {
                     <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.isActive} onChange={(event) => setAstroRouteForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
                     <label className="field"><span>Rit 1 start</span><input type="time" value={astroRouteForm.rit1Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1Start: event.target.value }))} /></label>
                     <label className="field"><span>Rit 1 end</span><input type="time" value={astroRouteForm.rit1End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1End: event.target.value }))} /></label>
+                    <label className="field"><span>Rit 1 WH SLA</span><input type="time" value={astroRouteForm.rit1WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1WhArrivalTimeSla: event.target.value }))} /></label>
                     <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.rit2Enabled} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Enabled: event.target.checked }))} /><span>Enable rit 2</span></label>
                     <label className="field"><span>Rit 2 start</span><input type="time" value={astroRouteForm.rit2Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Start: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
                     <label className="field"><span>Rit 2 end</span><input type="time" value={astroRouteForm.rit2End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2End: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
+                    <label className="field"><span>Rit 2 WH SLA</span><input type="time" value={astroRouteForm.rit2WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2WhArrivalTimeSla: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
+                    <label className="field"><span>WH temp min SLA</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Optional" /></label>
+                    <label className="field"><span>WH temp max SLA</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Optional" /></label>
                   </div>
                   <div className="astro-pod-list">
                     <div className="astro-pod-list-head">
-                      <strong>POD sequence</strong>
+                      <strong>POD sequence & KPI</strong>
                       <div className="inline-buttons astro-sample-actions">
                         <span className="subtle-line">Max {ASTRO_ROUTE_MAX_PODS} POD per rit</span>
                         <Button variant="bordered" onPress={addAstroRoutePod} disabled={(astroRouteForm.podSequence || []).length >= ASTRO_ROUTE_MAX_PODS}>Add POD</Button>
                       </div>
                     </div>
-                    {(astroRouteForm.podSequence || ['']).map((podId, index) => <div key={index} className="astro-pod-row"><div className="astro-pod-field"><SearchableSelect label={`POD ${index + 1}`} value={podId} options={astroPodOptions} onChange={(nextValue) => updateAstroRoutePod(index, nextValue)} placeholder={`Search POD ${index + 1}...`} /></div><Button variant="light" onPress={() => removeAstroRoutePod(index)} disabled={(astroRouteForm.podSequence || []).length <= 1}>Remove</Button></div>)}
+                    {(astroRouteForm.podSequence || ['']).map((podId, index) => <div key={index} className="astro-pod-row astro-pod-row-kpi"><div className="astro-pod-field astro-pod-field-main"><SearchableSelect label={`POD ${index + 1}`} value={podId} options={astroPodOptions} onChange={(nextValue) => updateAstroRoutePod(index, nextValue)} placeholder={`Search POD ${index + 1}...`} /></div><label className="field astro-pod-kpi-field"><span>Rit 1 POD SLA</span><input type="time" value={astroRouteForm.rit1PodArrivalTimeSlas?.[index] || ''} onChange={(event) => updateAstroRoutePodSla('rit1', index, event.target.value)} /></label><label className="field astro-pod-kpi-field"><span>Rit 2 POD SLA</span><input type="time" value={astroRouteForm.rit2PodArrivalTimeSlas?.[index] || ''} onChange={(event) => updateAstroRoutePodSla('rit2', index, event.target.value)} disabled={!astroRouteForm.rit2Enabled} /></label><Button variant="light" onPress={() => removeAstroRoutePod(index)} disabled={(astroRouteForm.podSequence || []).length <= 1}>Remove</Button></div>)}
                   </div>
                   <label className="field"><span>Notes</span><input type="text" value={astroRouteForm.notes} onChange={(event) => setAstroRouteForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional note" /></label>
                   <div className="inline-buttons">
-                    <Button variant="bordered" onPress={() => setAstroRouteForm(EMPTY_ASTRO_ROUTE_FORM)}>Reset route form</Button>
+                    <Button variant="bordered" onPress={() => setAstroRouteForm((current) => ({ ...EMPTY_ASTRO_ROUTE_FORM, accountId: current.accountId || 'primary', podSequence: [''], rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1) }))}>Reset route form</Button>
                   </div>
                   <div className="astro-sample-block">
                     <div className="astro-sample-head">
@@ -2812,13 +2969,13 @@ export default function App() {
                     </div>
                     <pre className="astro-sample-pre">{ASTRO_ROUTE_SAMPLE_CSV}</pre>
                   </div>
-                  <label className="field"><span>Bulk route CSV import</span><textarea rows="6" value={astroRouteCsvText} onChange={(event) => setAstroRouteCsvText(event.target.value)} placeholder="Account ID, Nopol, Customer, WH, POOL, POD1, POD2, POD3, POD4, POD5, Rit1 Start, Rit1 End, Rit2 Enabled, Rit2 Start, Rit2 End, Active, Notes" /></label>
+                  <label className="field"><span>Bulk route CSV import</span><textarea rows="6" value={astroRouteCsvText} onChange={(event) => setAstroRouteCsvText(event.target.value)} placeholder="Account ID, Nopol, Customer, WH, POOL, POD1..POD5, Rit1 Start, Rit1 End, Rit1 WH SLA, Rit1 POD SLA..., Rit2 Enabled, Rit2 Start, Rit2 End, Rit2 WH SLA, Rit2 POD SLA..., WH Temp Min SLA, WH Temp Max SLA, Active, Notes" /></label>
                   <div className="inline-buttons">
                     <input type="file" accept=".csv,text/csv" onChange={loadAstroRouteCsvFile} />
                     <Button variant="bordered" onPress={() => importAstroRoutes(false)}>Import route merge</Button>
                     <Button variant="light" onPress={() => importAstroRoutes(true)}>Replace all routes</Button>
                   </div>
-                  <div className="subtle-line">Bulk route CSV fleksibel: setelah kolom POOL, tambahkan kolom POD1 sampai maksimal POD5. Sistem akan baca titik POD sesuai jumlah kolom yang kamu isi.</div>
+                  <div className="subtle-line">Bulk route CSV fleksibel: kolom KPI boleh kosong. Sistem tetap merge route lama, baca POD1 sampai POD5, lalu cocokkan SLA WH dan SLA POD per rit bila tersedia.</div>
                   <label className="field">
                     <span>Search saved routes</span>
                     <div className="search-box historical-search-box">
@@ -2864,8 +3021,11 @@ export default function App() {
                               <span><strong>WH</strong>{astroLocations.find((location) => location.id === route.whLocationId)?.name || '-'}</span>
                               <span><strong>POOL</strong>{astroLocations.find((location) => location.id === route.poolLocationId)?.name || '-'}</span>
                               <span><strong>POD</strong>{(route.podSequence || []).map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId).join(' -> ') || '-'}</span>
-                              <span><strong>Rit 1</strong>{route.rit1 ? String(route.rit1.start) + ' to ' + String(route.rit1.end) : '-'}</span>
-                              <span><strong>Rit 2</strong>{route.rit2 ? String(route.rit2.start) + ' to ' + String(route.rit2.end) : 'Rit 1 only'}</span>
+                              <span><strong>Rit 1</strong>{route.rit1 ? `${route.rit1.start} to ${route.rit1.end}` : '-'}</span>
+                              <span><strong>Rit 1 KPI</strong>{route.rit1?.whArrivalTimeSla || 'No WH SLA'} | POD {(route.rit1?.podArrivalTimeSlas || []).filter(Boolean).length || 0}</span>
+                              <span><strong>Rit 2</strong>{route.rit2 ? `${route.rit2.start} to ${route.rit2.end}` : 'Rit 1 only'}</span>
+                              <span><strong>Rit 2 KPI</strong>{route.rit2?.whArrivalTimeSla || 'No WH SLA'} | POD {(route.rit2?.podArrivalTimeSlas || []).filter(Boolean).length || 0}</span>
+                              <span><strong>WH temp KPI</strong>{(route.whArrivalTempMinSla !== null && route.whArrivalTempMinSla !== undefined && route.whArrivalTempMinSla !== '') || (route.whArrivalTempMaxSla !== null && route.whArrivalTempMaxSla !== undefined && route.whArrivalTempMaxSla !== '') ? `${route.whArrivalTempMinSla ?? '-'} to ${route.whArrivalTempMaxSla ?? '-'}` : 'No range'}</span>
                             </div>
                             <div className="inline-buttons astro-entity-actions">
                               <Button variant="bordered" onPress={() => editAstroRouteEntry(route)}>Edit</Button>
@@ -2879,7 +3039,7 @@ export default function App() {
                 </div>
               </CardContent> : null}
             </Card>
-          </> : null}
+            </> : null}
 
           {activePanel === 'admin' ? <>
             <Card className="panel-card">
@@ -3477,6 +3637,35 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
   </div>;
 }
 
+function OverviewDonutChart({ segments, total }) {
+  const safeSegments = (segments || []).filter((segment) => Number(segment?.value || 0) > 0);
+  const chartTotal = Math.max(0, Number(total || 0));
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return <div className="overview-donut-chart"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r={radius} className="overview-donut-track" />{safeSegments.map((segment) => {
+    const value = Number(segment.value || 0);
+    const length = chartTotal > 0 ? (value / chartTotal) * circumference : 0;
+    const circle = <circle key={segment.key} cx="60" cy="60" r={radius} className={`overview-donut-ring ${segment.tone || 'default'}`} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} />;
+    offset += length;
+    return circle;
+  })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
+}
+
+function OverviewAstroTrendChart({ points, busy }) {
+  if (busy) return <div className="overview-chart-empty">Loading Astro KPI trend...</div>;
+  if (!(points || []).length) return <div className="overview-chart-empty">Belum ada data Astro KPI di range ini.</div>;
+  const width = 520;
+  const height = 220;
+  const padding = 22;
+  const passRates = points.map((point) => Number(point.passRate || 0));
+  const maxValue = Math.max(100, ...passRates);
+  const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+  const toX = (index) => padding + (index * xStep);
+  const toY = (value) => height - padding - ((Number(value || 0) / maxValue) * (height - padding * 2));
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point.passRate || 0)}`).join(' ');
+  return <div className="overview-trend-chart"><svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className="overview-trend-line" />{points.map((point, index) => <g key={`${point.day}-${index}`}><circle cx={toX(index)} cy={toY(point.passRate || 0)} r="4" className="overview-trend-dot" /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || '').slice(5)}</text></g>)}</svg></div>;
+}
 function TemperatureChart({ records, busy, title, description, compact = false }) {
   const chartId = useId().replace(/:/g, '');
   const fullSeries = useMemo(() => (records || [])
@@ -3753,6 +3942,26 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

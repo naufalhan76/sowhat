@@ -2988,6 +2988,7 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
       liveSensorFaultLabel: sensorFaultLabel(liveSensorFaultType),
       door: vehicleSnapshot?.door || '',
       lastUpdatedAt: vehicleSnapshot?.lastUpdated || null,
+      hasLiveSnapshot: Boolean(vehicleSnapshot && lastUpdatedMs !== null),
       minutesSinceUpdate,
       isMoving: (vehicleSnapshot?.speed ?? 0) > 0,
       lastFetchStartedAt: unitState.lastFetchStartedAt,
@@ -3062,7 +3063,14 @@ function annotateHistoryRecordsWithGeofence(records, geofenceEvents) {
   });
 }
 
-function buildOverview(fleetRows, liveAlerts) {
+function buildPercentValue(count, total) {
+  if (!Number.isFinite(Number(count)) || !Number.isFinite(Number(total)) || Number(total) <= 0) {
+    return 0;
+  }
+  return Number(((Number(count) / Number(total)) * 100).toFixed(1));
+}
+
+function buildOverview(fleetRows, liveAlerts, accountSummaries) {
   const staleUnits = fleetRows.filter(function (row) {
     return row.minutesSinceUpdate !== null && row.minutesSinceUpdate > 15;
   }).length;
@@ -3073,7 +3081,10 @@ function buildOverview(fleetRows, liveAlerts) {
     return Boolean(row.errGps);
   }).length;
   const movingUnits = fleetRows.filter(function (row) {
-    return row.isMoving;
+    return row.hasLiveSnapshot && row.isMoving;
+  }).length;
+  const idleUnits = fleetRows.filter(function (row) {
+    return row.hasLiveSnapshot && !row.isMoving;
   }).length;
   const setpointMismatchUnits = fleetRows.filter(function (row) {
     return row.outsideSetpoint;
@@ -3082,6 +3093,35 @@ function buildOverview(fleetRows, liveAlerts) {
     return row.minutesSinceUpdate !== null && row.minutesSinceUpdate > 30;
   }).length;
 
+  const accountStats = (accountSummaries || []).map(function (account) {
+    const accountRows = fleetRows.filter(function (row) {
+      return String(row.accountId || 'primary') === String(account.id || 'primary');
+    });
+    const totalConfiguredUnits = Math.max(Number(account.unitCount || 0), accountRows.length);
+    const tempErrorUnits = accountRows.filter(function (row) {
+      return row.hasLiveSensorFault;
+    }).length;
+    const movingAccountUnits = accountRows.filter(function (row) {
+      return row.hasLiveSnapshot && row.isMoving;
+    }).length;
+    const idleAccountUnits = accountRows.filter(function (row) {
+      return row.hasLiveSnapshot && !row.isMoving;
+    }).length;
+    const noLiveUnits = Math.max(0, totalConfiguredUnits - movingAccountUnits - idleAccountUnits);
+    return {
+      id: account.id,
+      label: account.label || account.id,
+      totalConfiguredUnits,
+      tempErrorUnits,
+      movingUnits: movingAccountUnits,
+      idleUnits: idleAccountUnits,
+      noLiveUnits,
+      tempErrorRate: buildPercentValue(tempErrorUnits, totalConfiguredUnits),
+      movingRate: buildPercentValue(movingAccountUnits, totalConfiguredUnits),
+      idleRate: buildPercentValue(idleAccountUnits, totalConfiguredUnits),
+    };
+  });
+
   return {
     monitoredUnits: fleetRows.length,
     liveAlerts: liveAlerts.length,
@@ -3089,6 +3129,7 @@ function buildOverview(fleetRows, liveAlerts) {
       return incident.type === 'temp1+temp2';
     }).length,
     movingUnits,
+    idleUnits,
     staleUnits,
     sensorFlagUnits,
     gpsFlagUnits,
@@ -3097,6 +3138,7 @@ function buildOverview(fleetRows, liveAlerts) {
     locationReadyUnits: fleetRows.filter(function (row) {
       return row.latitude !== null && row.longitude !== null;
     }).length,
+    accounts: accountStats,
   };
 }
 
@@ -3344,7 +3386,7 @@ function buildStatusPayload(sessionUser) {
       accountCount: getAllAccountConfigs().length,
     },
     accounts: accountSummaries,
-    overview: buildOverview(astroAnnotatedRows, liveAlerts),
+    overview: buildOverview(astroAnnotatedRows, liveAlerts, accountSummaries),
     autoFilterCards: [
       {
         id: 'temp-error',
@@ -5096,6 +5138,250 @@ function buildAstroDisplayRows(route, accountConfig, unitLabel, routeRows, start
   return displayRows;
 }
 
+function astroKpiStatusLabel(status) {
+  if (status === 'pass') return 'Pass';
+  if (status === 'fail') return 'Fail';
+  return 'N/A';
+}
+
+function astroTimeTextToMinutes(value) {
+  const match = String(value || '').trim().match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+  return hour * 60 + minute;
+}
+
+function buildAstroSlaTimestamp(serviceDate, timeText, ritWindow) {
+  const dayMatch = String(serviceDate || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMinutes = astroTimeTextToMinutes(timeText);
+  if (!dayMatch || timeMinutes === null) {
+    return null;
+  }
+  const [, year, month, day] = dayMatch;
+  const startMinutes = astroTimeTextToMinutes(ritWindow?.start);
+  const endMinutes = astroTimeTextToMinutes(ritWindow?.end);
+  const wrapsMidnight = startMinutes !== null && endMinutes !== null && endMinutes < startMinutes;
+  const addDay = wrapsMidnight && timeMinutes <= endMinutes ? 1 : 0;
+  const totalMinutes = timeMinutes + (addDay * 24 * 60);
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), hour, minute, 0, 0) - (SOLOFLEET_UTC_OFFSET_MINUTES * 60 * 1000);
+}
+
+function evaluateAstroTimeKpi(actualTimestamp, serviceDate, slaText, ritWindow, rowStatus, name) {
+  const normalizedSla = String(slaText || '').trim();
+  if (!normalizedSla) {
+    return {
+      name: name || '',
+      configured: false,
+      eligible: false,
+      status: 'na',
+      label: astroKpiStatusLabel('na'),
+      sla: '',
+      actual: Number.isFinite(Number(actualTimestamp)) ? formatLocalTime(actualTimestamp) : '',
+    };
+  }
+  const eligible = rowStatus !== 'no_snapshot';
+  if (!eligible) {
+    return {
+      name: name || '',
+      configured: true,
+      eligible: false,
+      status: 'na',
+      label: astroKpiStatusLabel('na'),
+      sla: normalizedSla,
+      actual: '',
+    };
+  }
+  const actualMs = Number(actualTimestamp);
+  const deadlineMs = buildAstroSlaTimestamp(serviceDate, normalizedSla, ritWindow);
+  const passed = Number.isFinite(actualMs) && Number.isFinite(deadlineMs) && actualMs <= deadlineMs;
+  return {
+    name: name || '',
+    configured: true,
+    eligible: true,
+    status: passed ? 'pass' : 'fail',
+    label: astroKpiStatusLabel(passed ? 'pass' : 'fail'),
+    sla: normalizedSla,
+    actual: Number.isFinite(actualMs) ? formatLocalTime(actualMs) : '',
+    actualTimestamp: Number.isFinite(actualMs) ? actualMs : null,
+    deadlineTimestamp: Number.isFinite(deadlineMs) ? deadlineMs : null,
+  };
+}
+
+function evaluateAstroTempRangeKpi(actualTemp, minValue, maxValue, rowStatus) {
+  const min = Number(minValue);
+  const max = Number(maxValue);
+  const hasMin = Number.isFinite(min);
+  const hasMax = Number.isFinite(max);
+  if (!hasMin && !hasMax) {
+    return {
+      configured: false,
+      eligible: false,
+      status: 'na',
+      label: astroKpiStatusLabel('na'),
+      min: null,
+      max: null,
+      actual: Number.isFinite(Number(actualTemp)) ? Number(actualTemp) : null,
+    };
+  }
+  const eligible = rowStatus !== 'no_snapshot';
+  const actual = Number(actualTemp);
+  if (!eligible) {
+    return {
+      configured: true,
+      eligible: false,
+      status: 'na',
+      label: astroKpiStatusLabel('na'),
+      min: hasMin ? min : null,
+      max: hasMax ? max : null,
+      actual: Number.isFinite(actual) ? actual : null,
+    };
+  }
+  const passed = Number.isFinite(actual)
+    && (!hasMin || actual >= min)
+    && (!hasMax || actual <= max);
+  return {
+    configured: true,
+    eligible: true,
+    status: passed ? 'pass' : 'fail',
+    label: astroKpiStatusLabel(passed ? 'pass' : 'fail'),
+    min: hasMin ? min : null,
+    max: hasMax ? max : null,
+    actual: Number.isFinite(actual) ? actual : null,
+  };
+}
+
+function evaluateAstroKpiRow(route, row) {
+  const ritConfig = row?.ritKey ? route?.[row.ritKey] : null;
+  const whArrivalTime = evaluateAstroTimeKpi(row?.whEta, row?.serviceDate, ritConfig?.whArrivalTimeSla, ritConfig, row?.status, row?.whName || 'WH');
+  const whArrivalTemp = evaluateAstroTempRangeKpi(row?.whArrivalTemp, route?.whArrivalTempMinSla, route?.whArrivalTempMaxSla, row?.status);
+  const podArrivalTimes = (route?.podSequence || []).map(function (locationId, index) {
+    const pod = row?.pods?.[index] || null;
+    const podName = pod?.name || ((config.astroLocations || []).find(function (location) { return location.id === locationId; })?.name || `POD ${index + 1}`);
+    return evaluateAstroTimeKpi(pod?.eta, row?.serviceDate, ritConfig?.podArrivalTimeSlas?.[index], ritConfig, row?.status, podName);
+  });
+
+  const hasAnyConfigured = whArrivalTime.configured || whArrivalTemp.configured || podArrivalTimes.some(function (entry) {
+    return entry.configured;
+  });
+  const overallEligible = hasAnyConfigured && row?.status !== 'no_snapshot';
+  const eligibleChecks = [whArrivalTime, whArrivalTemp, ...podArrivalTimes].filter(function (entry) {
+    return entry.eligible;
+  });
+  const allPass = row?.status === 'complete' && eligibleChecks.every(function (entry) {
+    return entry.status === 'pass';
+  });
+  const overallStatus = !overallEligible
+    ? 'na'
+    : allPass
+      ? 'pass'
+      : 'fail';
+
+  return {
+    hasAnyConfigured,
+    overallEligible,
+    overallStatus,
+    overallLabel: astroKpiStatusLabel(overallStatus),
+    whArrivalTime,
+    whArrivalTemp,
+    podArrivalTimes,
+  };
+}
+
+function buildAstroKpiSummary(rows) {
+  const summary = {
+    eligibleRows: 0,
+    passRows: 0,
+    failRows: 0,
+    naRows: 0,
+    whArrivalTimeEligible: 0,
+    whArrivalTimePass: 0,
+    whArrivalTempEligible: 0,
+    whArrivalTempPass: 0,
+    podArrivalEligible: 0,
+    podArrivalPass: 0,
+    trend: [],
+  };
+  const trendMap = new Map();
+
+  (rows || []).forEach(function (row) {
+    const kpi = row?.kpi || null;
+    if (!kpi) {
+      return;
+    }
+    if (kpi.overallEligible) {
+      summary.eligibleRows += 1;
+      if (kpi.overallStatus === 'pass') {
+        summary.passRows += 1;
+      } else {
+        summary.failRows += 1;
+      }
+    } else {
+      summary.naRows += 1;
+    }
+
+    if (kpi.whArrivalTime?.eligible) {
+      summary.whArrivalTimeEligible += 1;
+      if (kpi.whArrivalTime.status === 'pass') summary.whArrivalTimePass += 1;
+    }
+    if (kpi.whArrivalTemp?.eligible) {
+      summary.whArrivalTempEligible += 1;
+      if (kpi.whArrivalTemp.status === 'pass') summary.whArrivalTempPass += 1;
+    }
+    (kpi.podArrivalTimes || []).forEach(function (entry) {
+      if (entry?.eligible) {
+        summary.podArrivalEligible += 1;
+        if (entry.status === 'pass') summary.podArrivalPass += 1;
+      }
+    });
+
+    const dayKey = String(row.serviceDate || '');
+    if (!trendMap.has(dayKey)) {
+      trendMap.set(dayKey, {
+        day: dayKey,
+        rows: 0,
+        eligibleRows: 0,
+        passRows: 0,
+        failRows: 0,
+        naRows: 0,
+      });
+    }
+    const bucket = trendMap.get(dayKey);
+    bucket.rows += 1;
+    if (kpi.overallEligible) {
+      bucket.eligibleRows += 1;
+      if (kpi.overallStatus === 'pass') {
+        bucket.passRows += 1;
+      } else {
+        bucket.failRows += 1;
+      }
+    } else {
+      bucket.naRows += 1;
+    }
+  });
+
+  summary.whArrivalTimeRate = buildPercentValue(summary.whArrivalTimePass, summary.whArrivalTimeEligible);
+  summary.whArrivalTempRate = buildPercentValue(summary.whArrivalTempPass, summary.whArrivalTempEligible);
+  summary.podArrivalRate = buildPercentValue(summary.podArrivalPass, summary.podArrivalEligible);
+  summary.overallRate = buildPercentValue(summary.passRows, summary.eligibleRows);
+  summary.trend = [...trendMap.values()]
+    .sort(function (left, right) {
+      return String(left.day).localeCompare(String(right.day));
+    })
+    .map(function (entry) {
+      return {
+        ...entry,
+        passRate: buildPercentValue(entry.passRows, entry.eligibleRows),
+      };
+    });
+  return summary;
+}
+
 async function buildAstroReportPayload(searchParams) {
   const range = parseDateRange(searchParams);
   if (range.rangeStartMs === null || range.rangeEndMs === null) {
@@ -5107,6 +5393,7 @@ async function buildAstroReportPayload(searchParams) {
   const accountId = String(searchParams.get('accountId') || 'all').trim() || 'all';
   const routeId = String(searchParams.get('routeId') || '').trim();
   const unitId = String(searchParams.get('unitId') || '').trim().toUpperCase();
+  const summaryOnly = String(searchParams.get('summaryOnly') || '').trim() === '1';
   const activeRoutes = (config.astroRoutes || []).filter(function (route) {
     if (routeId && String(route.id || '').trim() !== routeId) {
       return false;
@@ -5155,7 +5442,13 @@ async function buildAstroReportPayload(searchParams) {
             unitLabel,
           };
         });
-      const routeRows = buildAstroDisplayRows(route, accountConfig, unitLabel, routeDiagnostics, startDate, endDate);
+      const routeRows = buildAstroDisplayRows(route, accountConfig, unitLabel, routeDiagnostics, startDate, endDate)
+        .map(function (row) {
+          return {
+            ...row,
+            kpi: evaluateAstroKpiRow(route, row),
+          };
+        });
       const completeServiceDates = new Set(routeDiagnostics.filter(function (row) {
         return row.status === 'complete';
       }).map(function (row) {
@@ -5257,9 +5550,13 @@ async function buildAstroReportPayload(searchParams) {
   });
 
   const columnMeta = astroCore.buildAstroColumns(rows);
+  const kpiSummary = buildAstroKpiSummary(rows);
   const flatRows = rows.map(function (row) {
     return astroCore.flattenAstroRow(row, { maxPods: columnMeta.maxPods });
   });
+  const responseRows = summaryOnly ? [] : rows;
+  const responseFlatRows = summaryOnly ? [] : flatRows;
+  const responseDiagnostics = summaryOnly ? [] : diagnostics;
 
   return {
     ok: true,
@@ -5271,12 +5568,14 @@ async function buildAstroReportPayload(searchParams) {
       unitId,
       startDate,
       endDate,
+      summaryOnly,
     },
     columns: columnMeta.columns,
-    rows,
-    flatRows,
+    rows: responseRows,
+    flatRows: responseFlatRows,
     warnings,
-    diagnostics,
+    diagnostics: responseDiagnostics,
+    trend: kpiSummary.trend,
     summary: {
       configuredRoutes: activeRoutes.length,
       rows: rows.length,
@@ -5285,6 +5584,7 @@ async function buildAstroReportPayload(searchParams) {
       units: new Set(rows.map(function (row) { return row.accountId + '::' + row.unitId; })).size,
       warnings: warnings.length,
       partialRows: diagnostics.length,
+      kpi: kpiSummary,
     },
   };
 }
@@ -7038,6 +7338,8 @@ if (require.main === module) {
     }
   });
 }
+
+
 
 
 

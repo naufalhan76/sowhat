@@ -93,6 +93,21 @@ function timeTextToMinutes(value) {
   return hour * 60 + minute;
 }
 
+function normalizeOptionalTimeText(value) {
+  const text = String(value || '').trim();
+  return isValidTimeText(text) ? text : '';
+}
+
+function normalizePodTimeSlaArray(value, podCount) {
+  const count = Math.max(0, Number(podCount || 0));
+  const source = Array.isArray(value) ? value : splitCsvish(value);
+  const normalized = source.slice(0, count).map((item) => normalizeOptionalTimeText(item));
+  while (normalized.length < count) {
+    normalized.push('');
+  }
+  return normalized;
+}
+
 function normalizeAstroLocation(value) {
   if (!value || typeof value !== 'object') {
     return null;
@@ -142,8 +157,8 @@ function normalizeAstroRoute(value) {
     return null;
   }
 
-  const rit1 = normalizeTimeWindow(value.rit1, '05:00', '14:59');
-  const rit2 = normalizeTimeWindow(value.rit2, '', '');
+  const rit1Window = normalizeTimeWindow(value.rit1, '05:00', '14:59');
+  const rit2Window = normalizeTimeWindow(value.rit2, '', '');
   const accountId = String(value.accountId || 'primary').trim() || 'primary';
   const whLocationId = String(value.whLocationId || '').trim();
   const poolLocationId = String(value.poolLocationId || '').trim();
@@ -156,6 +171,13 @@ function normalizeAstroRoute(value) {
     podSequence.join('-') || 'no-pod',
   ].join('--');
 
+  const whArrivalTempMinSla = toNumber(value.whArrivalTempMinSla ?? value.whTempMinSla ?? value.whArrivalTempMin ?? '');
+  const whArrivalTempMaxSla = toNumber(value.whArrivalTempMaxSla ?? value.whTempMaxSla ?? value.whArrivalTempMax ?? '');
+  const rit1WhArrivalTimeSla = normalizeOptionalTimeText(value.rit1?.whArrivalTimeSla ?? value.rit1WhArrivalTimeSla ?? value.rit1WhSla ?? '');
+  const rit2WhArrivalTimeSla = normalizeOptionalTimeText(value.rit2?.whArrivalTimeSla ?? value.rit2WhArrivalTimeSla ?? value.rit2WhSla ?? '');
+  const rit1PodArrivalTimeSlas = normalizePodTimeSlaArray(value.rit1?.podArrivalTimeSlas ?? value.rit1PodArrivalTimeSlas ?? '', podSequence.length);
+  const rit2PodArrivalTimeSlas = normalizePodTimeSlaArray(value.rit2?.podArrivalTimeSlas ?? value.rit2PodArrivalTimeSlas ?? '', podSequence.length);
+
   return {
     id: String(value.id || `${normalizeUnitKey(accountId)}-${slugify(unitId, 'astro-route')}-${slugify(routeSignature, 'path')}`).trim(),
     accountId,
@@ -164,8 +186,18 @@ function normalizeAstroRoute(value) {
     whLocationId,
     poolLocationId,
     podSequence,
-    rit1,
-    rit2,
+    rit1: rit1Window ? {
+      ...rit1Window,
+      whArrivalTimeSla: rit1WhArrivalTimeSla,
+      podArrivalTimeSlas: rit1PodArrivalTimeSlas,
+    } : null,
+    rit2: rit2Window ? {
+      ...rit2Window,
+      whArrivalTimeSla: rit2WhArrivalTimeSla,
+      podArrivalTimeSlas: rit2PodArrivalTimeSlas,
+    } : null,
+    whArrivalTempMinSla,
+    whArrivalTempMaxSla,
     isActive: value.isActive === undefined ? true : Boolean(value.isActive),
     notes: String(value.notes || '').trim(),
   };
@@ -237,6 +269,34 @@ function resolveLocationReference(reference, locations, expectedType) {
   return '';
 }
 
+function parseCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
 function parseAstroRouteCsv(csvText, locations) {
   const lines = String(csvText || '')
     .split(/\r?\n/)
@@ -245,28 +305,123 @@ function parseAstroRouteCsv(csvText, locations) {
   const rows = [];
   const errors = [];
 
+  const headerAliases = {
+    accountid: 'accountId',
+    account: 'accountId',
+    nopol: 'unitId',
+    unitid: 'unitId',
+    unit: 'unitId',
+    customer: 'customerName',
+    wh: 'whLocationId',
+    warehouse: 'whLocationId',
+    pool: 'poolLocationId',
+    rit1start: 'rit1Start',
+    rit1end: 'rit1End',
+    rit2enabled: 'rit2Enabled',
+    rit2start: 'rit2Start',
+    rit2end: 'rit2End',
+    active: 'isActive',
+    notes: 'notes',
+    wharrivaltempminsla: 'whArrivalTempMinSla',
+    wharrivaltempmin: 'whArrivalTempMinSla',
+    wharrivaltempmaxsla: 'whArrivalTempMaxSla',
+    wharrivaltempmax: 'whArrivalTempMaxSla',
+    rit1wharrivaltimesla: 'rit1WhArrivalTimeSla',
+    rit2wharrivaltimesla: 'rit2WhArrivalTimeSla',
+  };
+  for (let index = 1; index <= 5; index += 1) {
+    headerAliases[`pod${index}`] = `pod${index}`;
+    headerAliases[`rit1pod${index}sla`] = `rit1Pod${index}ArrivalTimeSla`;
+    headerAliases[`rit1pod${index}arrivaltimesla`] = `rit1Pod${index}ArrivalTimeSla`;
+    headerAliases[`rit2pod${index}sla`] = `rit2Pod${index}ArrivalTimeSla`;
+    headerAliases[`rit2pod${index}arrivaltimesla`] = `rit2Pod${index}ArrivalTimeSla`;
+  }
+
+  let headerMap = null;
+  if (lines.length) {
+    const firstParts = parseCsvLine(lines[0]);
+    const mapped = {};
+    firstParts.forEach((part, index) => {
+      const normalized = String(part || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const key = headerAliases[normalized];
+      if (key && mapped[key] === undefined) {
+        mapped[key] = index;
+      }
+    });
+    if (mapped.accountId !== undefined || mapped.unitId !== undefined || mapped.whLocationId !== undefined) {
+      headerMap = mapped;
+    }
+  }
+
   lines.forEach((line, index) => {
-    const parts = line.split(',').map((item) => item.trim());
-    if (index === 0 && /account\s*id/i.test(parts[0] || '')) {
+    const parts = parseCsvLine(line);
+    if (headerMap && index === 0) {
+      return;
+    }
+    if (!headerMap && index === 0 && /account\s*id/i.test(parts[0] || '')) {
       return;
     }
 
-    const podValues = parts.slice(5, Math.max(5, parts.length - 7));
-    const route = normalizeAstroRoute({
-      accountId: parts[0] || 'primary',
-      unitId: parts[1],
-      customerName: parts[2] || 'Astro',
-      whLocationId: resolveLocationReference(parts[3], locations, 'WH'),
-      poolLocationId: resolveLocationReference(parts[4], locations, 'POOL'),
-      podSequence: podValues.map((value) => resolveLocationReference(value, locations, 'POD')).filter(Boolean),
-      rit1: { start: parts[parts.length - 7] || '05:00', end: parts[parts.length - 6] || '14:59', enabled: true },
-      rit2: parseBooleanish(parts[parts.length - 5], false) ? { start: parts[parts.length - 4] || '19:00', end: parts[parts.length - 3] || '06:00', enabled: true } : null,
-      isActive: parseBooleanish(parts[parts.length - 2], true),
-      notes: parts[parts.length - 1] || '',
-    });
+    let routeInput;
+    if (headerMap) {
+      const podSequence = [];
+      const rit1PodArrivalTimeSlas = [];
+      const rit2PodArrivalTimeSlas = [];
+      for (let podIndex = 1; podIndex <= 5; podIndex += 1) {
+        const podReference = parts[headerMap[`pod${podIndex}`]] || '';
+        const resolvedPod = resolveLocationReference(podReference, locations, 'POD');
+        if (resolvedPod) {
+          podSequence.push(resolvedPod);
+        }
+        rit1PodArrivalTimeSlas.push(parts[headerMap[`rit1Pod${podIndex}ArrivalTimeSla`]] || '');
+        rit2PodArrivalTimeSlas.push(parts[headerMap[`rit2Pod${podIndex}ArrivalTimeSla`]] || '');
+      }
+      const rit2Enabled = parseBooleanish(parts[headerMap.rit2Enabled], false);
+      routeInput = {
+        accountId: parts[headerMap.accountId] || 'primary',
+        unitId: parts[headerMap.unitId],
+        customerName: parts[headerMap.customerName] || 'Astro',
+        whLocationId: resolveLocationReference(parts[headerMap.whLocationId], locations, 'WH'),
+        poolLocationId: resolveLocationReference(parts[headerMap.poolLocationId], locations, 'POOL'),
+        podSequence,
+        rit1: {
+          start: parts[headerMap.rit1Start] || '05:00',
+          end: parts[headerMap.rit1End] || '14:59',
+          enabled: true,
+          whArrivalTimeSla: parts[headerMap.rit1WhArrivalTimeSla] || '',
+          podArrivalTimeSlas: rit1PodArrivalTimeSlas,
+        },
+        rit2: rit2Enabled ? {
+          start: parts[headerMap.rit2Start] || '19:00',
+          end: parts[headerMap.rit2End] || '06:00',
+          enabled: true,
+          whArrivalTimeSla: parts[headerMap.rit2WhArrivalTimeSla] || '',
+          podArrivalTimeSlas: rit2PodArrivalTimeSlas,
+        } : null,
+        whArrivalTempMinSla: parts[headerMap.whArrivalTempMinSla] || '',
+        whArrivalTempMaxSla: parts[headerMap.whArrivalTempMaxSla] || '',
+        isActive: parseBooleanish(parts[headerMap.isActive], true),
+        notes: parts[headerMap.notes] || '',
+      };
+    } else {
+      const podValues = parts.slice(5, Math.max(5, parts.length - 7));
+      routeInput = {
+        accountId: parts[0] || 'primary',
+        unitId: parts[1],
+        customerName: parts[2] || 'Astro',
+        whLocationId: resolveLocationReference(parts[3], locations, 'WH'),
+        poolLocationId: resolveLocationReference(parts[4], locations, 'POOL'),
+        podSequence: podValues.map((value) => resolveLocationReference(value, locations, 'POD')).filter(Boolean),
+        rit1: { start: parts[parts.length - 7] || '05:00', end: parts[parts.length - 6] || '14:59', enabled: true },
+        rit2: parseBooleanish(parts[parts.length - 5], false) ? { start: parts[parts.length - 4] || '19:00', end: parts[parts.length - 3] || '06:00', enabled: true } : null,
+        isActive: parseBooleanish(parts[parts.length - 2], true),
+        notes: parts[parts.length - 1] || '',
+      };
+    }
 
+    const route = normalizeAstroRoute(routeInput);
     if (!route || !route.unitId || !route.whLocationId) {
-      errors.push('Row ' + (index + 1) + ' invalid. Format wajib: Account ID, Nopol, Customer, WH, POOL, POD1..PODN, Rit1 Start, Rit1 End, Rit2 Enabled, Rit2 Start, Rit2 End, Active, Notes.');
+      errors.push('Row ' + (index + 1) + ' invalid. Format wajib: Account ID, Nopol, Customer, WH, POOL, POD1..PODN, Rit1 Start, Rit1 End, Rit2 Enabled, Rit2 Start, Rit2 End, Active, Notes. KPI SLA columns optional.');
       return;
     }
     rows.push(route);
@@ -1000,24 +1155,32 @@ function flattenAstroRow(row, options) {
     wh_etd: formatExcelDate(row.whEtd),
     wh_departure_temp: row.whDepartureTemp ?? '',
     wh_stay: formatStayDuration(row.whEta, row.whEtd),
+    wh_arrival_time_sla: row.kpi?.whArrivalTime?.sla || '',
+    wh_arrival_time_kpi: row.kpi?.whArrivalTime?.status || '',
+    wh_arrival_temp_min_sla: row.kpi?.whArrivalTemp?.min ?? '',
+    wh_arrival_temp_max_sla: row.kpi?.whArrivalTemp?.max ?? '',
+    wh_arrival_temp_kpi: row.kpi?.whArrivalTemp?.status || '',
   };
-
   for (let index = 0; index < maxPods; index += 1) {
     const pod = row.pods[index] || null;
+    const podKpi = row.kpi?.podArrivalTimes?.[index] || null;
     const order = index + 1;
-    next[`pod_${order}_name`] = pod?.name || '';
-    next[`pod_${order}_eta`] = formatExcelDate(pod?.eta);
-    next[`pod_${order}_arrival_temp`] = pod?.arrivalTemp ?? '';
-    next[`pod_${order}_etd`] = formatExcelDate(pod?.etd);
-    next[`pod_${order}_departure_temp`] = pod?.departureTemp ?? '';
-    next[`pod_${order}_stay`] = formatStayDuration(pod?.eta, pod?.etd);
+    next[pod__name] = pod?.name || '';
+    next[pod__eta] = formatExcelDate(pod?.eta);
+    next[pod__arrival_temp] = pod?.arrivalTemp ?? '';
+    next[pod__etd] = formatExcelDate(pod?.etd);
+    next[pod__departure_temp] = pod?.departureTemp ?? '';
+    next[pod__stay] = formatStayDuration(pod?.eta, pod?.etd);
+    next[pod__arrival_time_sla] = podKpi?.sla || '';
+    next[pod__arrival_time_kpi] = podKpi?.status || '';
   }
-
   next.pool_name = row.poolName || '';
   next.pool_eta = formatExcelDate(row.poolEta);
   next.pool_departure_temp = row.poolDepartureTemp ?? '';
   next.pool_stay = formatStayDuration(row.poolEta, row.poolEtd);
   next.status = row.status || 'complete';
+  next.overall_kpi = row.kpi?.overallStatus || '';
+  next.overall_kpi_label = row.kpi?.overallLabel || '';
   return next;
 }
 
@@ -1039,3 +1202,8 @@ module.exports = {
   flattenAstroRow,
   buildLocationMap,
 };
+
+
+
+
+
