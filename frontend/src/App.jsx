@@ -908,7 +908,7 @@ export default function App() {
   const overviewTempTrend = useMemo(() => {
     const grouped = new Map();
     errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .filter((row) => overviewAccountId === 'all' || String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
       .forEach((row) => {
         const day = String(row.day || '').trim();
         if (!day) return;
@@ -928,23 +928,25 @@ export default function App() {
       totalMinutes: Number(bucket?.totalMinutes || 0),
     });
 
-    const orderedDays = [...new Set((compileDailyRows || []).map((row) => String(row.day || '').trim()).filter(Boolean))].reverse();
-    if (orderedDays.length) {
-      return orderedDays.map((day) => toPoint(grouped.get(day), day));
+    const start = new Date(range.startDate);
+    const end = new Date(range.endDate);
+    const days = [];
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      let current = new Date(start);
+      while (current <= end) {
+        days.push(current.toISOString().split('T')[0]);
+        current.setDate(current.getDate() + 1);
+      }
+    } else {
+      days.push(...[...new Set((compileDailyRows || []).map((row) => String(row.day || '').trim()).filter(Boolean))].reverse());
     }
 
-    return [...grouped.values()]
-      .sort((left, right) => {
-        const leftTime = parseChartDayValue(left.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        const rightTime = parseChartDayValue(right.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        return leftTime - rightTime || String(left.day || '').localeCompare(String(right.day || ''));
-      })
-      .map((bucket) => toPoint(bucket, bucket.day));
-  }, [compileDailyRows, errorUnitsSummary, overviewAccountId]);
+    return days.map(day => toPoint(grouped.get(day), day));
+  }, [compileDailyRows, errorUnitsSummary, overviewAccountId, range.startDate, range.endDate]);
   const overviewTempHotspots = useMemo(() => {
     const grouped = new Map();
     errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .filter((row) => overviewAccountId === 'all' || String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
       .forEach((row) => {
         const key = `${row.accountId || 'primary'}::${row.unitId || row.vehicle || row.unitLabel || 'unit'}`;
         if (!grouped.has(key)) {
@@ -970,7 +972,7 @@ export default function App() {
     let totalMinutes = 0;
     let longestMinutes = 0;
     errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .filter((row) => overviewAccountId === 'all' || String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
       .forEach((row) => {
         affectedUnits.add(row.unitId || row.vehicle || row.unitLabel || `unit-${affectedUnits.size + 1}`);
         totalIncidents += Number(row.incidents || 0);
@@ -2558,27 +2560,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Supplementary - Temp hotspots + Astro KPI general + Astro WH */}
+      {/* Row 3: Supplementary - Astro KPI general + Astro WH */}
       <div className="overview-supplementary-row">
-        <div className="overview-chart-card">
-          <div className="overview-chart-head">
-            <div>
-              <h3>Temp error hotspots</h3>
-              <p>Unit paling sering incident di range ini.</p>
-            </div>
-          </div>
-          <OverviewBarList
-            items={overviewTempHotspots}
-            busy={busy}
-            emptyMessage="Belum ada hotspot temp error di range ini."
-            valueKey="incidents"
-            tone="danger"
-            valueFormatter={(value) => `${value}x`}
-            metaFormatter={(item) => `${item.unitId} | ${formatMinutesText(item.totalMinutes)}`}
-            tooltipLines={(item) => [`Incidents: ${item.incidents || 0}`, `Unit ID: ${item.unitId || '-'}`, `Total duration: ${formatMinutesText(item.totalMinutes || 0)}`]}
-          />
-        </div>
-
         <div className="overview-chart-card">
           <div className="overview-chart-head">
             <div>
@@ -2599,38 +2582,35 @@ export default function App() {
           </div>
         </div>
 
-        <div className="overview-chart-card">
+        <div className="overview-chart-card overview-hero-chart">
           <div className="overview-chart-head">
             <div>
               <h3>KPI per warehouse</h3>
-              <p>Top WH berdasarkan rit eligible.</p>
+              <p>Top 4 WH berdasarkan rit eligible.</p>
             </div>
             <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroByWarehouse.length} WH`}</Chip>
           </div>
-          <OverviewBarList
-            items={overviewAstroByWarehouse.map((warehouse) => ({
-              ...warehouse,
-              key: warehouse.whName || warehouse.warehouse,
-              label: warehouse.whName || warehouse.warehouse,
-              tone: (warehouse.overallRate || 0) >= 90 ? 'success' : (warehouse.overallRate || 0) >= 75 ? 'warning' : 'danger',
-            }))}
-            busy={overviewAstroBusy}
-            emptyMessage="Belum ada KPI warehouse di range ini."
-            valueKey="overallRate"
-            tone="default"
-            valueFormatter={(value) => fmtPct(value || 0)}
-            tooltipLines={(item) => [`Pass rate: ${fmtPct(item.overallRate || 0)}`, `Eligible rit: ${item.eligibleRows || 0}`, `Fail: ${item.failRows || 0}`, `WH temp pass: ${fmtPct(item.whArrivalTempRate || 0)}`, `POD on-time: ${fmtPct(item.podArrivalRate || 0)}`]}
-            metaFormatter={(item) => `${item.eligibleRows || 0} rit | ${item.failRows || 0} fail | WH temp ${fmtPct(item.whArrivalTempRate || 0)}`}
-          />
-          <div className="overview-mini-table">
-            {overviewAstroByWarehouse.length ? overviewAstroByWarehouse.slice(0, 4).map((warehouse) => (
-              <div key={`warehouse-${warehouse.whName}`} className="overview-mini-table-row">
-                <strong title={warehouse.whName}>{warehouse.whName}</strong>
-                <span>{warehouse.eligibleRows || 0} rit</span>
-                <span>{fmtPct(warehouse.overallRate || 0)} pass</span>
-                <span>{warehouse.failRows || 0} fail</span>
-              </div>
-            )) : <div className="empty-state compact-empty">Belum ada ringkasan WH yang bisa ditampilkan.</div>}
+          <div className="overview-wh-charts" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '24px', flex: 1, padding: '0 24px 24px 24px' }}>
+            {(() => {
+              const targetWarehouses = ['BGO', 'CBN', 'PGS', 'SRG'];
+              let selectedWh = overviewAstroByWarehouse.filter(wh => targetWarehouses.some(t => (wh.whName || wh.warehouse || '').toUpperCase().includes(t)));
+              if (selectedWh.length < 4) {
+                selectedWh = [...selectedWh, ...overviewAstroByWarehouse.filter(wh => !selectedWh.includes(wh))].slice(0, 4);
+              }
+              const kpiLines = [
+                { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
+                { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
+                { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
+              ];
+              if (!selectedWh.length) return <div className="empty-state compact-empty" style={{ gridColumn: 'span 2' }}>Belum ada ringkasan WH yang bisa ditampilkan.</div>;
+              
+              return selectedWh.map((warehouse) => (
+                <div key={"warehouse-" + (warehouse.whName || warehouse.warehouse)} className="overview-mini-trend-card">
+                  <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'var(--c-text-main)' }}>{warehouse.whName || warehouse.warehouse}</h4>
+                  <OverviewMultiLineChart points={warehouse.trend} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={1} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>
@@ -3986,6 +3966,31 @@ function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value
   const tooltipRows = hoveredPoint ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredPoint) : [`Value: ${Number(hoveredPoint?.[valueKey] || 0)}`]) : [];
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
   return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>;
+}
+
+function OverviewMultiLineChart({ points, busy, emptyMessage, lines, maxFloor = 100, tooltipTitle }) {
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
+  if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
+  const width = 520;
+  const height = 200;
+  const padding = 28;
+  const paddingBottom = 36;
+  const allValues = points.flatMap(p => lines.map(l => Number(p?.[l.key] || 0)));
+  const maxValue = Math.max(maxFloor, ...allValues, 1);
+  const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+  const toX = (index) => padding + (index * xStep);
+  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - padding - paddingBottom));
+  const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] || null;
+  const hoveredDotYList = hoveredPoint ? lines.map(l => toY(hoveredPoint?.[l.key] || 0)) : [];
+  const minHoveredY = hoveredDotYList.length ? Math.min(...hoveredDotYList) : 0;
+  const tooltipLeft = hoveredPoint ? `${Math.max(14, Math.min(86, (toX(hoveredIndex) / width) * 100))}%` : '50%';
+  const tooltipTop = hoveredPoint ? `${Math.max(0, Math.min(50, ((minHoveredY - 60) / height) * 100))}%` : '10%';
+  const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
+  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{lines.map((l, i) => <span key={l.key || i} style={{color: l.colorHex}}>{l.label}: {fmtPct(hoveredPoint[l.key] || 0)}</span>)}</div> : null}<svg viewBox={"0 0 " + width + " " + height} aria-hidden="true"><line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} className="overview-axis" />{lines.map(l => {
+    const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[l.key] || 0)}`).join(' ');
+    return <path key={l.key} d={linePath} fill="none" stroke={l.colorHex || 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
+  })}{points.map((point, index) => <g key={"point-"+index} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[lines[0]?.key] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" />{lines.map((l, lIdx) => <circle key={"dot-"+lIdx} cx={toX(index)} cy={toY(point?.[l.key] || 0)} r={hoveredIndex === index ? 5 : 3} fill={l.colorHex || 'currentColor'} stroke="none" />)}<text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>;
 }
 
 function OverviewAstroTrendChart({ points, busy }) {

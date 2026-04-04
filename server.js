@@ -5337,6 +5337,7 @@ function buildAstroKpiSummary(rows) {
         whArrivalTempPass: 0,
         podArrivalEligible: 0,
         podArrivalPass: 0,
+        trendMap: new Map(),
       });
     }
     return warehouseMap.get(name);
@@ -5399,6 +5400,20 @@ function buildAstroKpiSummary(rows) {
 
     const warehouseName = String(row.whName || row.whLocationName || row.whLocationId || row.wh || 'Unknown WH').trim() || 'Unknown WH';
     const warehouseBucket = ensureWarehouseBucket(warehouseName);
+    
+    if (!warehouseBucket.trendMap.has(dayKey)) {
+      warehouseBucket.trendMap.set(dayKey, {
+        day: dayKey,
+        whArrivalTimeEligible: 0,
+        whArrivalTimePass: 0,
+        whArrivalTempEligible: 0,
+        whArrivalTempPass: 0,
+        podArrivalEligible: 0,
+        podArrivalPass: 0,
+      });
+    }
+    const whDayBucket = warehouseBucket.trendMap.get(dayKey);
+
     warehouseBucket.rows += 1;
     if (kpi.overallEligible) {
       warehouseBucket.eligibleRows += 1;
@@ -5412,16 +5427,28 @@ function buildAstroKpiSummary(rows) {
     }
     if (kpi.whArrivalTime?.eligible) {
       warehouseBucket.whArrivalTimeEligible += 1;
-      if (kpi.whArrivalTime.status === 'pass') warehouseBucket.whArrivalTimePass += 1;
+      whDayBucket.whArrivalTimeEligible += 1;
+      if (kpi.whArrivalTime.status === 'pass') {
+        warehouseBucket.whArrivalTimePass += 1;
+        whDayBucket.whArrivalTimePass += 1;
+      }
     }
     if (kpi.whArrivalTemp?.eligible) {
       warehouseBucket.whArrivalTempEligible += 1;
-      if (kpi.whArrivalTemp.status === 'pass') warehouseBucket.whArrivalTempPass += 1;
+      whDayBucket.whArrivalTempEligible += 1;
+      if (kpi.whArrivalTemp.status === 'pass') {
+        warehouseBucket.whArrivalTempPass += 1;
+        whDayBucket.whArrivalTempPass += 1;
+      }
     }
     (kpi.podArrivalTimes || []).forEach(function (entry) {
       if (entry?.eligible) {
         warehouseBucket.podArrivalEligible += 1;
-        if (entry.status === 'pass') warehouseBucket.podArrivalPass += 1;
+        whDayBucket.podArrivalEligible += 1;
+        if (entry.status === 'pass') {
+          warehouseBucket.podArrivalPass += 1;
+          whDayBucket.podArrivalPass += 1;
+        }
       }
     });
   });
@@ -5442,8 +5469,22 @@ function buildAstroKpiSummary(rows) {
     });
   summary.byWarehouse = [...warehouseMap.values()]
     .map(function (entry) {
+      const { trendMap, ...rest } = entry;
+      const trend = [...trendMap.values()]
+        .sort(function (left, right) {
+          return String(left.day).localeCompare(String(right.day));
+        })
+        .map(function (t) {
+          return {
+            day: t.day,
+            whArrivalTimeRate: buildPercentValue(t.whArrivalTimePass, t.whArrivalTimeEligible),
+            whArrivalTempRate: buildPercentValue(t.whArrivalTempPass, t.whArrivalTempEligible),
+            podArrivalRate: buildPercentValue(t.podArrivalPass, t.podArrivalEligible),
+          };
+        });
       return {
-        ...entry,
+        ...rest,
+        trend,
         overallRate: buildPercentValue(entry.passRows, entry.eligibleRows),
         whArrivalTimeRate: buildPercentValue(entry.whArrivalTimePass, entry.whArrivalTimeEligible),
         whArrivalTempRate: buildPercentValue(entry.whArrivalTempPass, entry.whArrivalTempEligible),
