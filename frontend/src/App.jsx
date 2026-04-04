@@ -306,6 +306,7 @@ const normalizeUnitCategory = (value) => {
 };
 const unitCategoryLabel = (value) => UNIT_CATEGORY_LABELS[normalizeUnitCategory(value)] || UNIT_CATEGORY_LABELS.uncategorized;
 const unitCategoryTone = (value) => UNIT_CATEGORY_TONES[normalizeUnitCategory(value)] || 'default';
+const normalizeUnitLookupKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const toDateTimeLocalInput = (value) => {
   const parsed = parseDateValue(value);
   if (!parsed) return '';
@@ -1470,6 +1471,17 @@ export default function App() {
     setUnitCategoryCsvText(textValue);
   };
 
+  const downloadUnitCategoryCsvTemplate = () => {
+    const rows = configuredUnits.length
+      ? configuredUnits.map((unit) => ({
+        label: unit.label || unit.id,
+        unitId: unit.id,
+        category: normalizeUnitCategory(unit.category),
+      }))
+      : [{ label: 'B 1234 XYZ', unitId: 'COL56', category: 'dedicated-astro' }];
+    csv(`unit-category-template-${activeAccountId || 'primary'}.csv`, rows);
+  };
+
   const importUnitCategoryCsv = () => {
     if (!unitCategoryCsvText.trim()) {
       setBanner({ tone: 'info', message: 'Paste CSV category dulu sebelum import.' });
@@ -1482,19 +1494,41 @@ export default function App() {
       return;
     }
 
+    const configuredById = new Map(configuredUnits.map((unit) => [String(unit.id || ''), unit]));
+    const configuredByLabel = new Map(configuredUnits.map((unit) => [normalizeUnitLookupKey(unit.label || unit.id), unit]));
     const accountIds = new Set(availableAccounts.map((account) => account.id));
+    const parseCsvParts = (line) => line.split(',').map((part) => part.trim());
+    const firstParts = parseCsvParts(lines[0]);
+    const headerAliases = { account: 'accountId', accountid: 'accountId', unit: 'unitId', unitid: 'unitId', label: 'label', nopol: 'label', category: 'category' };
+    const headerMap = {};
+    firstParts.forEach((part, index) => {
+      const key = headerAliases[String(part || '').trim().toLowerCase()];
+      if (key && headerMap[key] === undefined) {
+        headerMap[key] = index;
+      }
+    });
+    const hasHeader = Object.keys(headerMap).length > 0 && headerMap.category !== undefined;
     const rows = [];
+    let skippedMissingMatch = 0;
+    let skippedOtherAccount = 0;
+
     lines.forEach((line, index) => {
-      const parts = line.split(',').map((part) => part.trim());
+      if (hasHeader && index === 0) return;
+      const parts = parseCsvParts(line);
       if (!parts.length) return;
-      if (index === 0 && parts.some((part) => /unit|category|account/i.test(part))) return;
+      if (!hasHeader && index === 0 && parts.some((part) => /unit|category|account|label|nopol/i.test(part))) return;
 
       let accountId = activeAccountId;
       let unitId = '';
       let label = '';
       let category = 'uncategorized';
 
-      if (parts.length >= 4) {
+      if (hasHeader) {
+        accountId = parts[headerMap.accountId] || activeAccountId;
+        unitId = parts[headerMap.unitId] || '';
+        label = parts[headerMap.label] || '';
+        category = parts[headerMap.category] || 'uncategorized';
+      } else if (parts.length >= 4) {
         accountId = parts[0] || activeAccountId;
         unitId = parts[1] || '';
         label = parts[2] || '';
@@ -1510,11 +1544,32 @@ export default function App() {
           category = parts[2] || 'uncategorized';
         }
       } else if (parts.length === 2) {
-        unitId = parts[0] || '';
+        const identifier = parts[0] || '';
         category = parts[1] || 'uncategorized';
+        const matchedUnit = configuredById.get(identifier) || configuredByLabel.get(normalizeUnitLookupKey(identifier));
+        if (matchedUnit) {
+          unitId = matchedUnit.id;
+          label = matchedUnit.label || matchedUnit.id;
+        } else {
+          label = identifier;
+        }
       }
 
-      if (!unitId || accountId !== activeAccountId) {
+      if (accountId !== activeAccountId) {
+        skippedOtherAccount += 1;
+        return;
+      }
+
+      if (!unitId && label) {
+        const matchedUnit = configuredByLabel.get(normalizeUnitLookupKey(label));
+        if (matchedUnit) {
+          unitId = matchedUnit.id;
+          label = matchedUnit.label || matchedUnit.id;
+        }
+      }
+
+      if (!unitId) {
+        skippedMissingMatch += 1;
         return;
       }
 
@@ -1559,9 +1614,11 @@ export default function App() {
     });
 
     setUnitCategoryCsvText('');
-    setBanner({ tone: 'success', message: `Imported category CSV. Updated ${updatedCount} unit, added ${addedCount} unit.` });
+    const notices = [];
+    if (skippedMissingMatch) notices.push(`${skippedMissingMatch} row tanpa match unit`);
+    if (skippedOtherAccount) notices.push(`${skippedOtherAccount} row account lain di-skip`);
+    setBanner({ tone: 'success', message: `Imported category CSV. Updated ${updatedCount} unit, added ${addedCount} unit.${notices.length ? ` ${notices.join(' | ')}.` : ''}` });
   };
-
   const runPollNow = async () => {
     startBusy();
     try {
@@ -2540,17 +2597,18 @@ export default function App() {
                     <div className="astro-sample-head">
                       <strong>CSV bulk update</strong>
                       <div className="inline-buttons astro-sample-actions">
-                        <Button variant="bordered" onPress={() => setUnitCategoryCsvText(['unitId,category', 'COL56,dedicated-astro', 'COL77,oncall'].join('\n'))}>Use sample</Button>
+                        <Button variant="bordered" onPress={() => setUnitCategoryCsvText(['label,category', 'B 9478 SXW,dedicated-astro', 'B 9769 SXW,oncall'].join('\n'))}>Use sample</Button>
+                        <Button variant="bordered" onPress={downloadUnitCategoryCsvTemplate}>Download template</Button>
                       </div>
                     </div>
-                    <pre className="astro-sample-pre">{'unitId,category\nCOL56,dedicated-astro\nCOL77,oncall\n\nOptional formats:\naccountId,unitId,category\nunitId,label,category\naccountId,unitId,label,category'}</pre>
+                    <pre className="astro-sample-pre">{'Recommended header:\nlabel,category\nB 9478 SXW,dedicated-astro\nB 9769 SXW,oncall\n\nTemplate download columns:\nlabel,unitId,category\n\nAlso supported:\nunitId,category\naccountId,label,category\naccountId,unitId,category\naccountId,unitId,label,category'}</pre>
                   </div>
-                  <label className="field"><span>Bulk category CSV</span><textarea rows="6" value={unitCategoryCsvText} onChange={(event) => setUnitCategoryCsvText(event.target.value)} placeholder="unitId,category" /></label>
+                  <label className="field"><span>Bulk category CSV</span><textarea rows="6" value={unitCategoryCsvText} onChange={(event) => setUnitCategoryCsvText(event.target.value)} placeholder="label,category" /></label>
                   <div className="inline-buttons">
                     <input type="file" accept=".csv,text/csv" onChange={loadUnitCategoryCsvFile} />
                     <Button variant="bordered" onPress={importUnitCategoryCsv}>Import CSV merge</Button>
                   </div>
-                  <div className="subtle-line">Format internal unit config mengikuti: unitId | label | category. Kategori tersimpan per account dan per unit.</div>
+                  <div className="subtle-line">CSV category sekarang bisa pakai label / nopol atau unitId. Template download mengikuti unit di account aktif. Kategori tersimpan per account dan per unit.</div>
                 </div>
               </CardContent>
             </Card>
@@ -3675,6 +3733,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 
