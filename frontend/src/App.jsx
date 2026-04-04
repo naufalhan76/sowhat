@@ -920,12 +920,27 @@ export default function App() {
         bucket.affectedUnits += 1;
         bucket.totalMinutes += Number(row.totalMinutes || 0);
       });
+
+    const start = parseChartDayValue(range.startDate);
+    const end = parseChartDayValue(range.endDate);
+    if (start && end && start.getTime() <= end.getTime()) {
+      const points = [];
+      const cursor = new Date(start);
+      while (cursor.getTime() <= end.getTime()) {
+        const dayKey = formatChartDayKey(cursor);
+        const bucket = grouped.get(dayKey) || { day: dayKey, incidents: 0, affectedUnits: 0, totalMinutes: 0 };
+        points.push({ ...bucket });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return points;
+    }
+
     return [...grouped.values()].sort((left, right) => {
       const leftTime = parseChartDayValue(left.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const rightTime = parseChartDayValue(right.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       return leftTime - rightTime || String(left.day || '').localeCompare(String(right.day || ''));
     });
-  }, [errorUnitsSummary, overviewAccountId]);
+  }, [errorUnitsSummary, overviewAccountId, range.endDate, range.startDate]);
   const overviewTempHotspots = useMemo(() => {
     const grouped = new Map();
     errorUnitsSummary
@@ -3932,6 +3947,14 @@ function parseChartDayValue(dayValue) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function formatChartDayKey(dayValue) {
+  const parsed = dayValue instanceof Date ? new Date(dayValue) : parseChartDayValue(dayValue);
+  if (!parsed || Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsed.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 function formatChartDayLabel(dayValue) {
   const parsed = parseChartDayValue(dayValue);
   if (parsed) {
