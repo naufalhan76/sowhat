@@ -1870,6 +1870,23 @@ export default function App() {
     };
   };
 
+  const validateAstroRouteWhTempRange = (draft = astroRouteForm) => {
+    const minText = String(draft.whArrivalTempMinSla || '').trim();
+    const maxText = String(draft.whArrivalTempMaxSla || '').trim();
+    if (!minText || !maxText) {
+      throw new Error('WH temp min dan max SLA wajib diisi.');
+    }
+    const minValue = Number(minText);
+    const maxValue = Number(maxText);
+    if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+      throw new Error('WH temp min dan max SLA harus berupa angka valid.');
+    }
+    if (minValue > maxValue) {
+      throw new Error('WH temp min SLA tidak boleh lebih besar dari max SLA.');
+    }
+    return { minValue, maxValue };
+  };
+
   const updateAstroRoutePod = (index, value) => {
     setAstroRouteForm((current) => ({
       ...current,
@@ -2033,6 +2050,7 @@ export default function App() {
   const saveAstroRouteEntry = async () => {
     startBusy();
     try {
+      validateAstroRouteWhTempRange();
       const entry = astroRoutePayload();
       const nextRoutes = astroRouteForm.id
         ? astroRoutes.map((route) => route.id === astroRouteForm.id ? entry : route)
@@ -2919,7 +2937,7 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Astro route config</h2>
-                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, window rit, dan KPI yang boleh dikosongkan.</p>
+                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, window rit, dan KPI. WH temp min/max SLA wajib diisi.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" className="section-chevron-button" onPress={() => setAstroRouteSectionOpen((current) => !current)} aria-label={astroRouteSectionOpen ? 'Collapse Astro route config' : 'Expand Astro route config'}>{astroRouteSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
@@ -2942,8 +2960,8 @@ export default function App() {
                     <label className="field"><span>Rit 2 start</span><input type="time" value={astroRouteForm.rit2Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Start: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
                     <label className="field"><span>Rit 2 end</span><input type="time" value={astroRouteForm.rit2End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2End: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
                     <label className="field"><span>Rit 2 WH SLA</span><input type="time" value={astroRouteForm.rit2WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2WhArrivalTimeSla: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                    <label className="field"><span>WH temp min SLA</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Optional" /></label>
-                    <label className="field"><span>WH temp max SLA</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Optional" /></label>
+                    <label className="field"><span>WH temp min SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Required" required /></label>
+                    <label className="field"><span>WH temp max SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Required" required /></label>
                   </div>
                   <div className="astro-pod-list">
                     <div className="astro-pod-list-head">
@@ -2975,7 +2993,7 @@ export default function App() {
                     <Button variant="bordered" onPress={() => importAstroRoutes(false)}>Import route merge</Button>
                     <Button variant="light" onPress={() => importAstroRoutes(true)}>Replace all routes</Button>
                   </div>
-                  <div className="subtle-line">Bulk route CSV fleksibel: kolom KPI boleh kosong. Sistem tetap merge route lama, baca POD1 sampai POD5, lalu cocokkan SLA WH dan SLA POD per rit bila tersedia.</div>
+                  <div className="subtle-line">Bulk route CSV fleksibel: SLA time boleh kosong, tapi WH temp min/max SLA wajib diisi. Sistem tetap merge route lama, baca POD1 sampai POD5, lalu cocokkan SLA WH dan SLA POD per rit bila tersedia.</div>
                   <label className="field">
                     <span>Search saved routes</span>
                     <div className="search-box historical-search-box">

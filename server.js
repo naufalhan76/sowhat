@@ -4879,10 +4879,11 @@ function resolveAstroAccountId(reference) {
   return '';
 }
 
-function validateAstroRoutes(routes, locations) {
+function validateAstroRoutes(routes, locations, options) {
   const accountIds = new Set(getAllAccountConfigs().map(function (account) { return account.id; }));
   const locationMap = new Map((locations || []).map(function (location) { return [location.id, location]; }));
   const seen = new Set();
+  const requireWhTempRange = Boolean(options && options.requireWhTempRange);
 
   function astroRoutePathKey(route) {
     return [
@@ -4929,6 +4930,16 @@ function validateAstroRoutes(routes, locations) {
     });
     if (!normalized.rit1) {
       throw new Error('Rit 1 wajib valid untuk unit ' + normalized.unitId);
+    }
+    const hasWhTempMin = normalized.whArrivalTempMinSla !== null && normalized.whArrivalTempMinSla !== undefined;
+    const hasWhTempMax = normalized.whArrivalTempMaxSla !== null && normalized.whArrivalTempMaxSla !== undefined;
+    if (requireWhTempRange) {
+      if (!hasWhTempMin || !hasWhTempMax) {
+        throw new Error('WH temp min/max SLA wajib diisi untuk unit ' + normalized.unitId);
+      }
+      if (Number(normalized.whArrivalTempMinSla) > Number(normalized.whArrivalTempMaxSla)) {
+        throw new Error('WH temp min SLA tidak boleh lebih besar dari max SLA untuk unit ' + normalized.unitId);
+      }
     }
     const routeKey = normalized.accountId + '::' + normalized.unitId + '::' + astroRoutePathKey(normalized);
     if (seen.has(routeKey)) {
@@ -5306,8 +5317,30 @@ function buildAstroKpiSummary(rows) {
     podArrivalEligible: 0,
     podArrivalPass: 0,
     trend: [],
+    byWarehouse: [],
   };
   const trendMap = new Map();
+  const warehouseMap = new Map();
+
+  function ensureWarehouseBucket(name) {
+    if (!warehouseMap.has(name)) {
+      warehouseMap.set(name, {
+        warehouse: name,
+        rows: 0,
+        eligibleRows: 0,
+        passRows: 0,
+        failRows: 0,
+        naRows: 0,
+        whArrivalTimeEligible: 0,
+        whArrivalTimePass: 0,
+        whArrivalTempEligible: 0,
+        whArrivalTempPass: 0,
+        podArrivalEligible: 0,
+        podArrivalPass: 0,
+      });
+    }
+    return warehouseMap.get(name);
+  }
 
   (rows || []).forEach(function (row) {
     const kpi = row?.kpi || null;
@@ -5363,6 +5396,34 @@ function buildAstroKpiSummary(rows) {
     } else {
       bucket.naRows += 1;
     }
+
+    const warehouseName = String(row.whName || row.whLocationName || row.whLocationId || row.wh || 'Unknown WH').trim() || 'Unknown WH';
+    const warehouseBucket = ensureWarehouseBucket(warehouseName);
+    warehouseBucket.rows += 1;
+    if (kpi.overallEligible) {
+      warehouseBucket.eligibleRows += 1;
+      if (kpi.overallStatus === 'pass') {
+        warehouseBucket.passRows += 1;
+      } else {
+        warehouseBucket.failRows += 1;
+      }
+    } else {
+      warehouseBucket.naRows += 1;
+    }
+    if (kpi.whArrivalTime?.eligible) {
+      warehouseBucket.whArrivalTimeEligible += 1;
+      if (kpi.whArrivalTime.status === 'pass') warehouseBucket.whArrivalTimePass += 1;
+    }
+    if (kpi.whArrivalTemp?.eligible) {
+      warehouseBucket.whArrivalTempEligible += 1;
+      if (kpi.whArrivalTemp.status === 'pass') warehouseBucket.whArrivalTempPass += 1;
+    }
+    (kpi.podArrivalTimes || []).forEach(function (entry) {
+      if (entry?.eligible) {
+        warehouseBucket.podArrivalEligible += 1;
+        if (entry.status === 'pass') warehouseBucket.podArrivalPass += 1;
+      }
+    });
   });
 
   summary.whArrivalTimeRate = buildPercentValue(summary.whArrivalTimePass, summary.whArrivalTimeEligible);
@@ -5378,6 +5439,21 @@ function buildAstroKpiSummary(rows) {
         ...entry,
         passRate: buildPercentValue(entry.passRows, entry.eligibleRows),
       };
+    });
+  summary.byWarehouse = [...warehouseMap.values()]
+    .map(function (entry) {
+      return {
+        ...entry,
+        overallRate: buildPercentValue(entry.passRows, entry.eligibleRows),
+        whArrivalTimeRate: buildPercentValue(entry.whArrivalTimePass, entry.whArrivalTimeEligible),
+        whArrivalTempRate: buildPercentValue(entry.whArrivalTempPass, entry.whArrivalTempEligible),
+        podArrivalRate: buildPercentValue(entry.podArrivalPass, entry.podArrivalEligible),
+      };
+    })
+    .sort(function (left, right) {
+      return (right.eligibleRows || 0) - (left.eligibleRows || 0)
+        || (right.passRows || 0) - (left.passRows || 0)
+        || String(left.warehouse || '').localeCompare(String(right.warehouse || ''));
     });
   return summary;
 }
@@ -6740,7 +6816,7 @@ async function handleApi(req, res, url) {
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(Array.isArray(body.locations) ? body.locations : []);
-      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : (config.astroRoutes || []), nextLocations);
+      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : (config.astroRoutes || []), nextLocations, { requireWhTempRange: false });
       config = normalizeConfig({
         ...config,
         astroLocations: nextLocations,
@@ -6762,7 +6838,7 @@ async function handleApi(req, res, url) {
     try {
       const body = await readRequestBody(req);
       const nextLocations = validateAstroLocations(config.astroLocations || []);
-      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : [], nextLocations);
+      const nextRoutes = validateAstroRoutes(Array.isArray(body.routes) ? body.routes : [], nextLocations, { requireWhTempRange: true });
       config = normalizeConfig({
         ...config,
         astroLocations: nextLocations,
@@ -6793,7 +6869,7 @@ async function handleApi(req, res, url) {
         : validateAstroLocations([...(config.astroLocations || []).filter(function (location) {
             return !parsed.rows.some(function (incoming) { return incoming.id === location.id; });
           }), ...parsed.rows]);
-      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], mergedLocations);
+      const nextRoutes = validateAstroRoutes(config.astroRoutes || [], mergedLocations, { requireWhTempRange: false });
       config = normalizeConfig({
         ...config,
         astroLocations: mergedLocations,
@@ -6831,7 +6907,7 @@ async function handleApi(req, res, url) {
                 && String(incoming.unitId || '').toUpperCase() === String(route.unitId || '').toUpperCase();
             });
           }), ...parsed.rows];
-      const nextRoutes = validateAstroRoutes(mergedRoutes, nextLocations);
+      const nextRoutes = validateAstroRoutes(mergedRoutes, nextLocations, { requireWhTempRange: true });
       config = normalizeConfig({
         ...config,
         astroLocations: nextLocations,
