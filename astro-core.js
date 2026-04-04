@@ -2,7 +2,7 @@ const MIN_VALID_STAY_MS = 3 * 60 * 1000;
 const GEOFENCE_MIN_VALID_STAY_MS = Number(process.env.GEOFENCE_MIN_VALID_STAY_MS || (5 * 60 * 1000));
 const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 const EXPORT_TIMEZONE = String(process.env.ASTRO_EXPORT_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Bangkok').trim() || 'Asia/Bangkok';
-const ASTRO_SPECIAL_WH_TEMP_THRESHOLD = Number(process.env.ASTRO_SPECIAL_WH_TEMP_THRESHOLD || 10);
+const ASTRO_SPECIAL_WH_TEMP_THRESHOLD = Number(process.env.ASTRO_SPECIAL_WH_TEMP_THRESHOLD || 15);
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 
 function toSolofleetLocalDate(timestamp) {
@@ -574,7 +574,7 @@ function buildSpecialWhTemperatureFallbackVisits(route, location, records, exist
 
   for (const record of sortedRecords) {
     const probeTemp = probeTemperature(record);
-    if (probeTemp === null || probeTemp >= ASTRO_SPECIAL_WH_TEMP_THRESHOLD) {
+    if (probeTemp === null || probeTemp > ASTRO_SPECIAL_WH_TEMP_THRESHOLD) {
       continue;
     }
 
@@ -729,7 +729,7 @@ function resolveWhVisitTiming(route, location, visit, records, ritInfo) {
   if (isSpecialAstroWhTemperatureFallback(location)) {
     const tempThresholdRecord = windowRecords.find((record) => {
       const probeTemp = probeTemperature(record);
-      return probeTemp !== null && probeTemp < ASTRO_SPECIAL_WH_TEMP_THRESHOLD;
+      return probeTemp !== null && probeTemp <= ASTRO_SPECIAL_WH_TEMP_THRESHOLD;
     });
     if (tempThresholdRecord) {
       return {
