@@ -545,6 +545,7 @@ export default function App() {
   const [astroRouteSectionOpen, setAstroRouteSectionOpen] = useState(false);
   const [remoteResetSectionOpen, setRemoteResetSectionOpen] = useState(false);
   const [linkedAccountSectionOpen, setLinkedAccountSectionOpen] = useState(false);
+  const [unitCategorySectionOpen, setUnitCategorySectionOpen] = useState(false);
   const [astroCsvText, setAstroCsvText] = useState('');
   const [astroLocationExpanded, setAstroLocationExpanded] = useState({});
   const [astroRouteExpanded, setAstroRouteExpanded] = useState({});
@@ -2557,12 +2558,15 @@ export default function App() {
                   <p>Set kategori unit untuk account aktif. Unit baru hasil discover akan default ke Uncategorized sampai kamu mapping manual.</p>
                 </div>
                 <div className="inline-buttons">
-                  <Button variant="bordered" onPress={selectVisibleConfiguredUnits}>Select visible</Button>
-                  <Button variant="bordered" onPress={clearConfiguredUnitSelection}>Clear selected</Button>
-                  <Button color="primary" onPress={() => saveConfig(false)}>Save categories</Button>
+                  <Button variant="bordered" className="section-chevron-button" onPress={() => setUnitCategorySectionOpen((current) => !current)} aria-label={unitCategorySectionOpen ? 'Collapse unit category mapping' : 'Expand unit category mapping'}>
+                    {unitCategorySectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </Button>
+                  {unitCategorySectionOpen ? <Button variant="bordered" onPress={selectVisibleConfiguredUnits}>Select visible</Button> : null}
+                  {unitCategorySectionOpen ? <Button variant="bordered" onPress={clearConfiguredUnitSelection}>Clear selected</Button> : null}
+                  {unitCategorySectionOpen ? <Button color="primary" onPress={() => saveConfig(false)}>Save categories</Button> : null}
                 </div>
               </CardHeader>
-              <CardContent>
+              {unitCategorySectionOpen ? <CardContent>
                 <div className="settings-stack">
                   <div className="subtle-line">Account aktif: <strong>{currentAccount?.label || currentAccount?.authEmail || currentAccount?.id || 'primary'}</strong></div>
                   <label className="field">
@@ -2611,7 +2615,7 @@ export default function App() {
                   </div>
                   <div className="subtle-line">CSV category sekarang bisa pakai label / nopol atau unitId. Template download mengikuti unit di account aktif. Kategori tersimpan per account dan per unit.</div>
                 </div>
-              </CardContent>
+              </CardContent> : null}
             </Card>
             <Card className="panel-card">
               <CardHeader className="panel-card-header">
@@ -3749,6 +3753,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 
