@@ -739,67 +739,6 @@ export default function App() {
   const overviewAstroByWarehouse = useMemo(() => [...(overviewAstroKpi?.byWarehouse || [])]
     .sort((left, right) => (right.eligibleRows || 0) - (left.eligibleRows || 0) || (right.failRows || 0) - (left.failRows || 0))
     .slice(0, 6), [overviewAstroKpi]);
-  const overviewTempTrend = useMemo(() => {
-    const grouped = new Map();
-    errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
-      .forEach((row) => {
-        const day = String(row.day || '').trim();
-        if (!day) return;
-        if (!grouped.has(day)) {
-          grouped.set(day, { day, incidents: 0, affectedUnits: 0, totalMinutes: 0 });
-        }
-        const bucket = grouped.get(day);
-        bucket.incidents += Number(row.incidents || 0);
-        bucket.affectedUnits += 1;
-        bucket.totalMinutes += Number(row.totalMinutes || 0);
-      });
-    return [...grouped.values()].sort((left, right) => String(left.day).localeCompare(String(right.day)));
-  }, [errorUnitsSummary, overviewAccountId]);
-  const overviewTempHotspots = useMemo(() => {
-    const grouped = new Map();
-    errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
-      .forEach((row) => {
-        const key = `${row.accountId || 'primary'}::${row.unitId || row.vehicle || row.unitLabel || 'unit'}`;
-        if (!grouped.has(key)) {
-          grouped.set(key, {
-            key,
-            label: row.unitLabel || row.vehicle || row.unitId || '-',
-            unitId: row.unitId || '-',
-            incidents: 0,
-            totalMinutes: 0,
-          });
-        }
-        const bucket = grouped.get(key);
-        bucket.incidents += Number(row.incidents || 0);
-        bucket.totalMinutes += Number(row.totalMinutes || 0);
-      });
-    return [...grouped.values()]
-      .sort((left, right) => (right.incidents || 0) - (left.incidents || 0) || (right.totalMinutes || 0) - (left.totalMinutes || 0))
-      .slice(0, 6);
-  }, [errorUnitsSummary, overviewAccountId]);
-  const overviewTempSummary = useMemo(() => {
-    const affectedUnits = new Set();
-    let totalIncidents = 0;
-    let totalMinutes = 0;
-    let longestMinutes = 0;
-    errorUnitsSummary
-      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
-      .forEach((row) => {
-        affectedUnits.add(row.unitId || row.vehicle || row.unitLabel || `unit-${affectedUnits.size + 1}`);
-        totalIncidents += Number(row.incidents || 0);
-        totalMinutes += Number(row.totalMinutes || 0);
-        longestMinutes = Math.max(longestMinutes, Number(row.longestMinutes || 0));
-      });
-    return {
-      totalIncidents,
-      affectedUnits: affectedUnits.size,
-      totalMinutes,
-      longestMinutes,
-    };
-  }, [errorUnitsSummary, overviewAccountId]);
-
   useEffect(() => {
     if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) {
       return undefined;
@@ -961,6 +900,68 @@ export default function App() {
   const errorOverview = useMemo(() => buildErrorOverview(errorRows), [errorRows]);
   const compileDailyRows = useMemo(() => [...(report?.compileByDay || [])].sort((left, right) => new Date(right.day) - new Date(left.day)), [report]);
   const errorUnitsSummary = useMemo(() => [...(report?.compileByUnitDay || [])].sort((left, right) => (new Date(right.day) - new Date(left.day)) || (right.incidents || 0) - (left.incidents || 0)), [report]);
+
+  const overviewTempTrend = useMemo(() => {
+    const grouped = new Map();
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        const day = String(row.day || '').trim();
+        if (!day) return;
+        if (!grouped.has(day)) {
+          grouped.set(day, { day, incidents: 0, affectedUnits: 0, totalMinutes: 0 });
+        }
+        const bucket = grouped.get(day);
+        bucket.incidents += Number(row.incidents || 0);
+        bucket.affectedUnits += 1;
+        bucket.totalMinutes += Number(row.totalMinutes || 0);
+      });
+    return [...grouped.values()].sort((left, right) => String(left.day).localeCompare(String(right.day)));
+  }, [errorUnitsSummary, overviewAccountId]);
+  const overviewTempHotspots = useMemo(() => {
+    const grouped = new Map();
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        const key = `${row.accountId || 'primary'}::${row.unitId || row.vehicle || row.unitLabel || 'unit'}`;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            key,
+            label: row.unitLabel || row.vehicle || row.unitId || '-',
+            unitId: row.unitId || '-',
+            incidents: 0,
+            totalMinutes: 0,
+          });
+        }
+        const bucket = grouped.get(key);
+        bucket.incidents += Number(row.incidents || 0);
+        bucket.totalMinutes += Number(row.totalMinutes || 0);
+      });
+    return [...grouped.values()]
+      .sort((left, right) => (right.incidents || 0) - (left.incidents || 0) || (right.totalMinutes || 0) - (left.totalMinutes || 0))
+      .slice(0, 6);
+  }, [errorUnitsSummary, overviewAccountId]);
+  const overviewTempSummary = useMemo(() => {
+    const affectedUnits = new Set();
+    let totalIncidents = 0;
+    let totalMinutes = 0;
+    let longestMinutes = 0;
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        affectedUnits.add(row.unitId || row.vehicle || row.unitLabel || `unit-${affectedUnits.size + 1}`);
+        totalIncidents += Number(row.incidents || 0);
+        totalMinutes += Number(row.totalMinutes || 0);
+        longestMinutes = Math.max(longestMinutes, Number(row.longestMinutes || 0));
+      });
+    return {
+      totalIncidents,
+      affectedUnits: affectedUnits.size,
+      totalMinutes,
+      longestMinutes,
+    };
+  }, [errorUnitsSummary, overviewAccountId]);
+
   const autoFilterCards = status?.autoFilterCards || [];
   const hasSolofleetAccounts = connectedAccounts.length > 0;
   const isAdmin = webSessionUser?.role === 'admin';
