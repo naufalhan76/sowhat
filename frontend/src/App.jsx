@@ -736,6 +736,69 @@ export default function App() {
   }, [overviewAccountStats.totalConfiguredUnits, overviewAccountFleetRows]);
   const overviewAstroKpi = overviewAstroSummary?.summary?.kpi || null;
   const overviewAstroTrend = overviewAstroKpi?.trend || overviewAstroSummary?.trend || [];
+  const overviewAstroByWarehouse = useMemo(() => [...(overviewAstroKpi?.byWarehouse || [])]
+    .sort((left, right) => (right.eligibleRows || 0) - (left.eligibleRows || 0) || (right.failRows || 0) - (left.failRows || 0))
+    .slice(0, 6), [overviewAstroKpi]);
+  const overviewTempTrend = useMemo(() => {
+    const grouped = new Map();
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        const day = String(row.day || '').trim();
+        if (!day) return;
+        if (!grouped.has(day)) {
+          grouped.set(day, { day, incidents: 0, affectedUnits: 0, totalMinutes: 0 });
+        }
+        const bucket = grouped.get(day);
+        bucket.incidents += Number(row.incidents || 0);
+        bucket.affectedUnits += 1;
+        bucket.totalMinutes += Number(row.totalMinutes || 0);
+      });
+    return [...grouped.values()].sort((left, right) => String(left.day).localeCompare(String(right.day)));
+  }, [errorUnitsSummary, overviewAccountId]);
+  const overviewTempHotspots = useMemo(() => {
+    const grouped = new Map();
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        const key = `${row.accountId || 'primary'}::${row.unitId || row.vehicle || row.unitLabel || 'unit'}`;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            key,
+            label: row.unitLabel || row.vehicle || row.unitId || '-',
+            unitId: row.unitId || '-',
+            incidents: 0,
+            totalMinutes: 0,
+          });
+        }
+        const bucket = grouped.get(key);
+        bucket.incidents += Number(row.incidents || 0);
+        bucket.totalMinutes += Number(row.totalMinutes || 0);
+      });
+    return [...grouped.values()]
+      .sort((left, right) => (right.incidents || 0) - (left.incidents || 0) || (right.totalMinutes || 0) - (left.totalMinutes || 0))
+      .slice(0, 6);
+  }, [errorUnitsSummary, overviewAccountId]);
+  const overviewTempSummary = useMemo(() => {
+    const affectedUnits = new Set();
+    let totalIncidents = 0;
+    let totalMinutes = 0;
+    let longestMinutes = 0;
+    errorUnitsSummary
+      .filter((row) => String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
+      .forEach((row) => {
+        affectedUnits.add(row.unitId || row.vehicle || row.unitLabel || `unit-${affectedUnits.size + 1}`);
+        totalIncidents += Number(row.incidents || 0);
+        totalMinutes += Number(row.totalMinutes || 0);
+        longestMinutes = Math.max(longestMinutes, Number(row.longestMinutes || 0));
+      });
+    return {
+      totalIncidents,
+      affectedUnits: affectedUnits.size,
+      totalMinutes,
+      longestMinutes,
+    };
+  }, [errorUnitsSummary, overviewAccountId]);
 
   useEffect(() => {
     if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) {
@@ -2384,7 +2447,158 @@ export default function App() {
           
           
 
-                    {activePanel === 'overview' ? <Card className="panel-card overview-dashboard-card"><CardHeader className="panel-card-header"><div><h2>Overview dashboard</h2><p>Ringkasan operasional per account. Moving dan idle dihitung dari snapshot live hari ini, sementara trend Astro mengikuti date range aktif di topbar.</p></div><div className="overview-toolbar"><label className="field overview-account-field"><span>Show account</span><select value={overviewAccountId} onChange={(event) => setOverviewAccountId(event.target.value)}>{overviewAccountOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label></div></CardHeader><CardContent><div className="overview-kpi-grid"><div className="overview-kpi-card danger"><span>Temp error</span><strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong><small>{overviewAccountStats.tempErrorUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit error</small></div><div className="overview-kpi-card success"><span>Moving</span><strong>{fmtPct(overviewAccountStats.movingRate)}</strong><small>{overviewAccountStats.movingUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang jalan</small></div><div className="overview-kpi-card warning"><span>Idle</span><strong>{fmtPct(overviewAccountStats.idleRate)}</strong><small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang diam</small></div></div><div className="overview-dashboard-grid"><div className="overview-chart-card"><div className="overview-chart-head"><div><h3>Live fleet composition</h3><p>Komposisi unit configured untuk account terpilih.</p></div><Chip>{overviewAccountStats.totalConfiguredUnits || 0} configured</Chip></div><div className="overview-donut-layout"><OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} /><div className="overview-legend">{overviewDonutSegments.map((segment) => <div key={segment.key} className="overview-legend-row"><span className={`overview-legend-dot ${segment.tone}`} /><div><strong>{segment.label}</strong><small>{segment.value} unit</small></div></div>)}</div></div></div><div className="overview-chart-card"><div className="overview-chart-head"><div><h3>Astro KPI trend</h3><p>{range.startDate} to {range.endDate} | Mode KPI opsional, route tanpa target tetap muncul sebagai N/A.</p></div><Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroTrend.length} day(s)`}</Chip></div><OverviewAstroTrendChart points={overviewAstroTrend} busy={overviewAstroBusy} /><div className="overview-mini-summary">{overviewAstroKpi ? <><div className="mini-metric"><span>Eligible rit</span><strong>{overviewAstroKpi.eligibleRows || 0}</strong></div><div className="mini-metric"><span>Pass rate</span><strong>{fmtPct(overviewAstroKpi.overallRate || 0)}</strong></div><div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(overviewAstroKpi.whArrivalTimeRate || 0)}</strong></div><div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(overviewAstroKpi.whArrivalTempRate || 0)}</strong></div><div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(overviewAstroKpi.podArrivalRate || 0)}</strong></div></> : <div className="empty-state compact-empty">Belum ada ringkasan Astro untuk account dan range ini.</div>}</div></div></div></CardContent></Card> : null}
+                    {activePanel === 'overview' ? (
+  <Card className="panel-card overview-dashboard-card">
+    <CardHeader className="panel-card-header">
+      <div>
+        <h2>Overview dashboard</h2>
+        <p>Ringkasan operasional per account. Moving dan idle dihitung dari snapshot live hari ini, sementara temp report dan Astro KPI mengikuti date range aktif di topbar.</p>
+      </div>
+      <div className="overview-toolbar">
+        <label className="field overview-account-field">
+          <span>Show account</span>
+          <select value={overviewAccountId} onChange={(event) => setOverviewAccountId(event.target.value)}>
+            {overviewAccountOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+    </CardHeader>
+    <CardContent>
+      <div className="overview-kpi-grid">
+        <div className="overview-kpi-card danger">
+          <span>Temp error</span>
+          <strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong>
+          <small>{overviewAccountStats.tempErrorUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit error</small>
+        </div>
+        <div className="overview-kpi-card success">
+          <span>Moving</span>
+          <strong>{fmtPct(overviewAccountStats.movingRate)}</strong>
+          <small>{overviewAccountStats.movingUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang jalan</small>
+        </div>
+        <div className="overview-kpi-card warning">
+          <span>Idle</span>
+          <strong>{fmtPct(overviewAccountStats.idleRate)}</strong>
+          <small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang diam</small>
+        </div>
+      </div>
+      <div className="overview-dashboard-grid">
+        <div className="overview-chart-card">
+          <div className="overview-chart-head">
+            <div>
+              <h3>Temp report</h3>
+              <p>{range.startDate} to {range.endDate} | Tren temp error dan unit paling sering incident untuk account ini.</p>
+            </div>
+            <Chip color={busy ? 'warning' : 'default'}>{busy ? 'Loading...' : `${overviewTempTrend.length} day(s)`}</Chip>
+          </div>
+          <div className="overview-chart-stack">
+            <OverviewTempTrendChart points={overviewTempTrend} busy={busy} />
+            <OverviewBarList
+              items={overviewTempHotspots}
+              busy={busy}
+              emptyMessage="Belum ada hotspot temp error di range ini."
+              valueKey="incidents"
+              tone="danger"
+              valueFormatter={(value) => `${value}x`}
+              metaFormatter={(item) => `${item.unitId} | ${formatMinutesText(item.totalMinutes)}`}
+            />
+          </div>
+          <div className="overview-mini-summary overview-mini-summary-compact">
+            <div className="mini-metric"><span>Incidents</span><strong>{overviewTempSummary.totalIncidents || 0}</strong></div>
+            <div className="mini-metric"><span>Affected units</span><strong>{overviewTempSummary.affectedUnits || 0}</strong></div>
+            <div className="mini-metric"><span>Total min</span><strong>{formatMinutesText(overviewTempSummary.totalMinutes || 0)}</strong></div>
+            <div className="mini-metric"><span>Longest</span><strong>{formatMinutesText(overviewTempSummary.longestMinutes || 0)}</strong></div>
+          </div>
+        </div>
+
+        <div className="overview-chart-card">
+          <div className="overview-chart-head">
+            <div>
+              <h3>Live fleet composition</h3>
+              <p>Komposisi unit configured untuk account terpilih berdasarkan snapshot hari ini.</p>
+            </div>
+            <Chip>{overviewAccountStats.totalConfiguredUnits || 0} configured</Chip>
+          </div>
+          <div className="overview-donut-layout">
+            <OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} />
+            <div className="overview-legend">
+              {overviewDonutSegments.map((segment) => (
+                <div key={segment.key} className="overview-legend-row">
+                  <span className={`overview-legend-dot ${segment.tone}`} />
+                  <div>
+                    <strong>{segment.label}</strong>
+                    <small>{segment.value} unit</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="overview-mini-summary overview-mini-summary-compact">
+            {overviewDonutSegments.map((segment) => (
+              <div key={`summary-${segment.key}`} className="mini-metric">
+                <span>{segment.label}</span>
+                <strong>{segment.value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="overview-chart-card">
+          <div className="overview-chart-head">
+            <div>
+              <h3>Astro KPI general</h3>
+              <p>{range.startDate} to {range.endDate} | Semua route dengan KPI akan dihitung, route tanpa target tetap tampil sebagai N/A.</p>
+            </div>
+            <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroTrend.length} day(s)`}</Chip>
+          </div>
+          <OverviewAstroTrendChart points={overviewAstroTrend} busy={overviewAstroBusy} />
+          <div className="overview-mini-summary overview-mini-summary-compact">
+            {overviewAstroKpi ? <>
+              <div className="mini-metric"><span>Eligible rit</span><strong>{overviewAstroKpi.eligibleRows || 0}</strong></div>
+              <div className="mini-metric"><span>Pass rate</span><strong>{fmtPct(overviewAstroKpi.overallRate || 0)}</strong></div>
+              <div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(overviewAstroKpi.whArrivalTimeRate || 0)}</strong></div>
+              <div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(overviewAstroKpi.whArrivalTempRate || 0)}</strong></div>
+              <div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(overviewAstroKpi.podArrivalRate || 0)}</strong></div>
+            </> : <div className="empty-state compact-empty">Belum ada ringkasan Astro untuk account dan range ini.</div>}
+          </div>
+        </div>
+
+        <div className="overview-chart-card">
+          <div className="overview-chart-head">
+            <div>
+              <h3>Astro KPI per warehouse</h3>
+              <p>Top warehouse berdasarkan rit eligible. Cocok untuk cepat lihat WH mana yang paling sering miss.</p>
+            </div>
+            <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroByWarehouse.length} WH`}</Chip>
+          </div>
+          <OverviewBarList
+            items={overviewAstroByWarehouse.map((warehouse) => ({
+              ...warehouse,
+              key: warehouse.whName,
+              label: warehouse.whName,
+              tone: (warehouse.overallRate || 0) >= 90 ? 'success' : (warehouse.overallRate || 0) >= 75 ? 'warning' : 'danger',
+            }))}
+            busy={overviewAstroBusy}
+            emptyMessage="Belum ada KPI warehouse di range ini."
+            valueKey="overallRate"
+            tone="default"
+            valueFormatter={(value) => fmtPct(value || 0)}
+            metaFormatter={(item) => `${item.eligibleRows || 0} rit | ${item.failRows || 0} fail | WH temp ${fmtPct(item.whArrivalTempRate || 0)}`}
+          />
+          <div className="overview-mini-table">
+            {overviewAstroByWarehouse.length ? overviewAstroByWarehouse.slice(0, 4).map((warehouse) => (
+              <div key={`warehouse-${warehouse.whName}`} className="overview-mini-table-row">
+                <strong title={warehouse.whName}>{warehouse.whName}</strong>
+                <span>{warehouse.eligibleRows || 0} rit</span>
+                <span>{fmtPct(warehouse.overallRate || 0)} pass</span>
+                <span>{warehouse.failRows || 0} fail</span>
+              </div>
+            )) : <div className="empty-state compact-empty">Belum ada ringkasan WH yang bisa ditampilkan.</div>}
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+) : null}
           {activePanel === 'fleet' ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
@@ -3670,20 +3884,41 @@ function OverviewDonutChart({ segments, total }) {
   })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
 }
 
-function OverviewAstroTrendChart({ points, busy }) {
-  if (busy) return <div className="overview-chart-empty">Loading Astro KPI trend...</div>;
-  if (!(points || []).length) return <div className="overview-chart-empty">Belum ada data Astro KPI di range ini.</div>;
+function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro' }) {
+  if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
+  if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
   const width = 520;
-  const height = 220;
+  const height = 190;
   const padding = 22;
-  const passRates = points.map((point) => Number(point.passRate || 0));
-  const maxValue = Math.max(100, ...passRates);
+  const values = points.map((point) => Number(point?.[valueKey] || 0));
+  const maxValue = Math.max(maxFloor, ...values, 1);
   const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
   const toX = (index) => padding + (index * xStep);
   const toY = (value) => height - padding - ((Number(value || 0) / maxValue) * (height - padding * 2));
-  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point.passRate || 0)}`).join(' ');
-  return <div className="overview-trend-chart"><svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className="overview-trend-line" />{points.map((point, index) => <g key={`${point.day}-${index}`}><circle cx={toX(index)} cy={toY(point.passRate || 0)} r="4" className="overview-trend-dot" /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || '').slice(5)}</text></g>)}</svg></div>;
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[valueKey] || 0)}`).join(' ');
+  return <div className="overview-trend-chart"><svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="4" className={`overview-trend-dot ${tone}`} /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || point.label || '').slice(5) || String(point.label || '').slice(0, 5)}</text></g>)}</svg></div>;
 }
+
+function OverviewAstroTrendChart({ points, busy }) {
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" />;
+}
+
+function OverviewTempTrendChart({ points, busy }) {
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" />;
+}
+
+function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default' }) {
+  if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
+  if (!(items || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk ditampilkan.'}</div>;
+  const maxValue = Math.max(1, ...items.map((item) => Number(item?.[valueKey] || 0)));
+  return <div className="overview-bar-list">{items.map((item) => {
+    const rawValue = Number(item?.[valueKey] || 0);
+    const width = `${Math.max(8, (rawValue / maxValue) * 100)}%`;
+    const appliedTone = item.tone || tone;
+    return <div key={item.key || item.label} className="overview-bar-row"><div className="overview-bar-copy"><strong title={item.label}>{item.label}</strong><small>{metaFormatter ? metaFormatter(item) : ''}</small></div><div className="overview-bar-track"><span className={`overview-bar-fill ${appliedTone}`} style={{ width }} /></div><div className="overview-bar-value">{valueFormatter ? valueFormatter(rawValue, item) : rawValue}</div></div>;
+  })}</div>;
+}
+
 function TemperatureChart({ records, busy, title, description, compact = false }) {
   const chartId = useId().replace(/:/g, '');
   const fullSeries = useMemo(() => (records || [])
