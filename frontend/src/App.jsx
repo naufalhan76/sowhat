@@ -920,7 +920,11 @@ export default function App() {
         bucket.affectedUnits += 1;
         bucket.totalMinutes += Number(row.totalMinutes || 0);
       });
-    return [...grouped.values()].sort((left, right) => String(left.day).localeCompare(String(right.day)));
+    return [...grouped.values()].sort((left, right) => {
+      const leftTime = parseChartDayValue(left.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const rightTime = parseChartDayValue(right.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return leftTime - rightTime || String(left.day || '').localeCompare(String(right.day || ''));
+    });
   }, [errorUnitsSummary, overviewAccountId]);
   const overviewTempHotspots = useMemo(() => {
     const grouped = new Map();
@@ -2493,7 +2497,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 2: Hero – Temp chart (wide) + Fleet donut (narrow) */}
+      {/* Row 2: Hero - Temp chart (wide) + Fleet donut (narrow) */}
       <div className="overview-hero-row">
         <div className="overview-chart-card overview-hero-chart">
           <div className="overview-chart-head">
@@ -2539,7 +2543,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Supplementary – Temp hotspots + Astro KPI general + Astro WH */}
+      {/* Row 3: Supplementary - Temp hotspots + Astro KPI general + Astro WH */}
       <div className="overview-supplementary-row">
         <div className="overview-chart-card">
           <div className="overview-chart-head">
@@ -3918,17 +3922,32 @@ function OverviewDonutChart({ segments, total }) {
   })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
 }
 
-function formatChartDayLabel(dayValue) {
-  if (!dayValue) return '';
+function parseChartDayValue(dayValue) {
+  if (!dayValue) return null;
   const text = String(dayValue).trim();
+  if (!text) return null;
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (match) {
-    const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    if (!Number.isNaN(parsed.getTime())) {
-      return new Intl.DateTimeFormat('en-GB', { month: 'short', day: '2-digit' }).format(parsed);
-    }
+  if (!match) return null;
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatChartDayLabel(dayValue) {
+  const parsed = parseChartDayValue(dayValue);
+  if (parsed) {
+    return new Intl.DateTimeFormat('en-GB', { month: 'short', day: '2-digit' }).format(parsed);
   }
+  const text = String(dayValue || '').trim();
   return text.length > 6 ? text.slice(text.length - 6) : text;
+}
+
+function formatChartDayTitle(dayValue) {
+  const parsed = parseChartDayValue(dayValue);
+  if (parsed) {
+    return new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'long', day: '2-digit' }).format(parsed);
+  }
+  const text = String(dayValue || '').trim();
+  return text || '-';
 }
 
 function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines }) {
@@ -3955,11 +3974,11 @@ function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value
 }
 
 function OverviewAstroTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => fmtDateOnly(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} />;
 }
 
 function OverviewTempTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => fmtDateOnly(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} />;
 }
 
 function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default', tooltipTitle, tooltipLines }) {
@@ -4254,9 +4273,6 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
-
-
-
 
 
 
