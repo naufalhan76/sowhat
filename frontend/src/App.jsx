@@ -1598,15 +1598,31 @@ export default function App() {
     }
   };
 
-  const switchAccount = (accountId) => {
+  const switchAccount = async (accountId) => {
     const nextAccountId = accountId || 'primary';
-    setActiveAccountId(nextAccountId);
-    if (status?.config) {
-      setForm(formFromConfig(status.config, nextAccountId));
+    if (nextAccountId === activeAccountId && status?.config?.activeAccountId === nextAccountId) {
+      return;
     }
-    const firstAccountRow = fleetRows.find((row) => row.accountId === nextAccountId);
-    if (firstAccountRow) {
-      setStopForm((current) => ({ ...current, accountId: nextAccountId, unitId: firstAccountRow.id }));
+    try {
+      const result = await api('/api/config', {
+        method: 'POST',
+        body: JSON.stringify({ activeAccountId: nextAccountId }),
+      });
+      startTransition(() => {
+        const resolvedAccountId = result.config?.activeAccountId || nextAccountId;
+        setActiveAccountId(resolvedAccountId);
+        setStatus((current) => current ? { ...current, config: result.config } : current);
+        setForm(formFromConfig(result.config, resolvedAccountId));
+        setRemoteResetForm(remoteResetFormFromConfig(result.config));
+        const firstAccountRow = fleetRows.find((row) => row.accountId === resolvedAccountId);
+        if (firstAccountRow) {
+          setStopForm((current) => ({ ...current, accountId: resolvedAccountId, unitId: firstAccountRow.id }));
+        } else {
+          setStopForm((current) => ({ ...current, accountId: resolvedAccountId }));
+        }
+      });
+    } catch (error) {
+      setBanner({ tone: 'error', message: error.message || 'Gagal mengganti active Solofleet account.' });
     }
   };
 
