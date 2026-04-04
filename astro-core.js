@@ -1165,14 +1165,14 @@ function flattenAstroRow(row, options) {
     const pod = row.pods[index] || null;
     const podKpi = row.kpi?.podArrivalTimes?.[index] || null;
     const order = index + 1;
-    next[pod__name] = pod?.name || '';
-    next[pod__eta] = formatExcelDate(pod?.eta);
-    next[pod__arrival_temp] = pod?.arrivalTemp ?? '';
-    next[pod__etd] = formatExcelDate(pod?.etd);
-    next[pod__departure_temp] = pod?.departureTemp ?? '';
-    next[pod__stay] = formatStayDuration(pod?.eta, pod?.etd);
-    next[pod__arrival_time_sla] = podKpi?.sla || '';
-    next[pod__arrival_time_kpi] = podKpi?.status || '';
+    next[`pod${order}_name`] = pod?.name || '';
+    next[`pod${order}_eta`] = formatExcelDate(pod?.eta);
+    next[`pod${order}_arrival_temp`] = pod?.arrivalTemp ?? '';
+    next[`pod${order}_etd`] = formatExcelDate(pod?.etd);
+    next[`pod${order}_departure_temp`] = pod?.departureTemp ?? '';
+    next[`pod${order}_stay`] = formatStayDuration(pod?.eta, pod?.etd);
+    next[`pod${order}_arrival_time_sla`] = podKpi?.sla || '';
+    next[`pod${order}_arrival_time_kpi`] = podKpi?.status || '';
   }
   next.pool_name = row.poolName || '';
   next.pool_eta = formatExcelDate(row.poolEta);

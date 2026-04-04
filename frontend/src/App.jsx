@@ -218,7 +218,7 @@ const sanitizeRouteRecords = (records = []) => {
       longitude: Number(record.longitude),
       speed: Number(record.speed ?? 0),
     }))
-    .filter((record) => Number.isFinite(record.timestampMs) && Number.isFinite(record.latitude) && Number.isFinite(record.longitude))
+    .filter((record) => Number.isFinite(record.timestampMs) && Number.isFinite(record.latitude) && Number.isFinite(record.longitude) && record.timestampMs > 1600000000000)
     .sort((left, right) => left.timestampMs - right.timestampMs);
 
   const cleaned = [];
@@ -280,15 +280,19 @@ const calculateTripMetrics = (records = []) => {
 const DISPLAY_TIMEZONE = 'Asia/Bangkok';
 const fmtDate = (value) => {
   const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
+  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'long', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtDateCompact = (value) => {
   const parsed = parseDateValue(value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
+  return parsed ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
 };
 const fmtDateOnly = (value) => {
   const parsed = parseDateValue(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value} 00:00:00` : value);
-  return parsed ? new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: '2-digit' }).format(parsed) : '-';
+  if (!parsed) return '-';
+  const year = parsed.getFullYear();
+  // Ensure we don't accidentally fall back to a fallback epoch year if parsed wrong.
+  // We'll still format the result correctly using robust Date APIs.
+  return new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'long', day: '2-digit' }).format(parsed);
 };
 const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
 const fmtPct = (value, digits = 1) => `${fmtNum(value ?? 0, digits)}%`;
@@ -2364,9 +2368,9 @@ export default function App() {
         <div className="topbar-collapsible">
           <div className="topbar-controls">
             <div className="date-range-group">
-              <input type="date" value={range.startDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, startDate: event.target.value}))} />
+              <input type="date" value={range.startDate} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, startDate: event.target.value}))} />
               <ArrowRight size={14} className="text-muted" />
-              <input type="date" value={range.endDate} onClick={(event) => event.currentTarget.showPicker?.()} onFocus={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, endDate: event.target.value}))} />
+              <input type="date" value={range.endDate} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, endDate: event.target.value}))} />
             </div>
             <div className="search-box">
               <Search size={16} className="search-icon" />
@@ -2587,8 +2591,8 @@ export default function App() {
           <OverviewBarList
             items={overviewAstroByWarehouse.map((warehouse) => ({
               ...warehouse,
-              key: warehouse.whName,
-              label: warehouse.whName,
+              key: warehouse.whName || warehouse.warehouse,
+              label: warehouse.whName || warehouse.warehouse,
               tone: (warehouse.overallRate || 0) >= 90 ? 'success' : (warehouse.overallRate || 0) >= 75 ? 'warning' : 'danger',
             }))}
             busy={overviewAstroBusy}
@@ -3919,10 +3923,12 @@ function formatChartDayLabel(dayValue) {
   const text = String(dayValue).trim();
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${monthNames[Number(match[2]) - 1]} ${match[3]}`;
+    const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat('en-GB', { month: 'short', day: '2-digit' }).format(parsed);
+    }
   }
-  return text.length > 6 ? text.slice(5) : text;
+  return text.length > 6 ? text.slice(text.length - 6) : text;
 }
 
 function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines }) {
