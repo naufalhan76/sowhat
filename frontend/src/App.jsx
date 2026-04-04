@@ -913,27 +913,33 @@ export default function App() {
         const day = String(row.day || '').trim();
         if (!day) return;
         if (!grouped.has(day)) {
-          grouped.set(day, { day, incidents: 0, affectedUnits: 0, totalMinutes: 0 });
+          grouped.set(day, { day, incidents: 0, affectedUnitKeys: new Set(), totalMinutes: 0 });
         }
         const bucket = grouped.get(day);
         bucket.incidents += Number(row.incidents || 0);
-        bucket.affectedUnits += 1;
         bucket.totalMinutes += Number(row.totalMinutes || 0);
+        bucket.affectedUnitKeys.add(String(row.unitId || row.vehicle || row.unitLabel || `unit-${bucket.affectedUnitKeys.size + 1}`));
       });
+
+    const toPoint = (bucket, day) => ({
+      day,
+      incidents: Number(bucket?.incidents || 0),
+      affectedUnits: bucket?.affectedUnitKeys instanceof Set ? bucket.affectedUnitKeys.size : Number(bucket?.affectedUnits || 0),
+      totalMinutes: Number(bucket?.totalMinutes || 0),
+    });
 
     const orderedDays = [...new Set((compileDailyRows || []).map((row) => String(row.day || '').trim()).filter(Boolean))].reverse();
     if (orderedDays.length) {
-      return orderedDays.map((day) => {
-        const bucket = grouped.get(day);
-        return bucket ? { ...bucket } : { day, incidents: 0, affectedUnits: 0, totalMinutes: 0 };
-      });
+      return orderedDays.map((day) => toPoint(grouped.get(day), day));
     }
 
-    return [...grouped.values()].sort((left, right) => {
-      const leftTime = parseChartDayValue(left.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const rightTime = parseChartDayValue(right.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return leftTime - rightTime || String(left.day || '').localeCompare(String(right.day || ''));
-    });
+    return [...grouped.values()]
+      .sort((left, right) => {
+        const leftTime = parseChartDayValue(left.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const rightTime = parseChartDayValue(right.day)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        return leftTime - rightTime || String(left.day || '').localeCompare(String(right.day || ''));
+      })
+      .map((bucket) => toPoint(bucket, bucket.day));
   }, [compileDailyRows, errorUnitsSummary, overviewAccountId]);
   const overviewTempHotspots = useMemo(() => {
     const grouped = new Map();
