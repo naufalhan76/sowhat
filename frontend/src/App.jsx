@@ -2453,7 +2453,7 @@ export default function App() {
     <CardHeader className="panel-card-header">
       <div>
         <h2>Overview dashboard</h2>
-        <p>Ringkasan operasional per account. Moving dan idle dihitung dari snapshot live hari ini, sementara temp report dan Astro KPI mengikuti date range aktif di topbar.</p>
+        <p>Ringkasan operasional per account. Data live + date range topbar.</p>
       </div>
       <div className="overview-toolbar">
         <label className="field overview-account-field">
@@ -3914,25 +3914,38 @@ function OverviewDonutChart({ segments, total }) {
   })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
 }
 
+function formatChartDayLabel(dayValue) {
+  if (!dayValue) return '';
+  const text = String(dayValue).trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${monthNames[Number(match[2]) - 1]} ${match[3]}`;
+  }
+  return text.length > 6 ? text.slice(5) : text;
+}
+
 function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
   if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
   const width = 520;
-  const height = 190;
-  const padding = 22;
+  const height = 200;
+  const padding = 28;
+  const paddingBottom = 36;
   const values = points.map((point) => Number(point?.[valueKey] || 0));
   const maxValue = Math.max(maxFloor, ...values, 1);
   const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
   const toX = (index) => padding + (index * xStep);
-  const toY = (value) => height - padding - ((Number(value || 0) / maxValue) * (height - padding * 2));
+  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - padding - paddingBottom));
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[valueKey] || 0)}`).join(' ');
   const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] || null;
-  const tooltipLeft = hoveredPoint ? `${Math.max(12, Math.min(88, (toX(hoveredIndex) / width) * 100))}%` : '50%';
-  const tooltipTop = hoveredPoint ? `${Math.max(18, Math.min(72, ((toY(hoveredPoint?.[valueKey] || 0) - 18) / height) * 100))}%` : '22%';
+  const hoveredDotY = hoveredPoint ? toY(hoveredPoint?.[valueKey] || 0) : 0;
+  const tooltipLeft = hoveredPoint ? `${Math.max(14, Math.min(86, (toX(hoveredIndex) / width) * 100))}%` : '50%';
+  const tooltipTop = hoveredPoint ? `${Math.max(0, Math.min(50, ((hoveredDotY - 60) / height) * 100))}%` : '10%';
   const tooltipRows = hoveredPoint ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredPoint) : [`Value: ${Number(hoveredPoint?.[valueKey] || 0)}`]) : [];
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
-  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="5" className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || point.label || '').slice(5) || String(point.label || '').slice(0, 5)}</text></g>)}</svg></div>;
+  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>;
 }
 
 function OverviewAstroTrendChart({ points, busy }) {
