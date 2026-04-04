@@ -2501,6 +2501,7 @@ export default function App() {
               tone="danger"
               valueFormatter={(value) => `${value}x`}
               metaFormatter={(item) => `${item.unitId} | ${formatMinutesText(item.totalMinutes)}`}
+              tooltipLines={(item) => [`Incidents: ${item.incidents || 0}`, `Unit ID: ${item.unitId || '-'}`, `Total duration: ${formatMinutesText(item.totalMinutes || 0)}`]}
             />
           </div>
           <div className="overview-mini-summary overview-mini-summary-compact">
@@ -2583,6 +2584,7 @@ export default function App() {
             valueKey="overallRate"
             tone="default"
             valueFormatter={(value) => fmtPct(value || 0)}
+            tooltipLines={(item) => [`Pass rate: ${fmtPct(item.overallRate || 0)}`, `Eligible rit: ${item.eligibleRows || 0}`, `Fail: ${item.failRows || 0}`, `WH temp pass: ${fmtPct(item.whArrivalTempRate || 0)}`, `POD on-time: ${fmtPct(item.podArrivalRate || 0)}`]}
             metaFormatter={(item) => `${item.eligibleRows || 0} rit | ${item.failRows || 0} fail | WH temp ${fmtPct(item.whArrivalTempRate || 0)}`}
           />
           <div className="overview-mini-table">
@@ -3875,17 +3877,20 @@ function OverviewDonutChart({ segments, total }) {
   const chartTotal = Math.max(0, Number(total || 0));
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
+  const [hoveredKey, setHoveredKey] = useState(null);
+  const hoveredSegment = safeSegments.find((segment) => segment.key === hoveredKey) || null;
   let offset = 0;
-  return <div className="overview-donut-chart"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r={radius} className="overview-donut-track" />{safeSegments.map((segment) => {
+  return <div className="overview-donut-chart">{hoveredSegment ? <div className="overview-chart-tooltip overview-chart-tooltip-static"><strong>{hoveredSegment.label}</strong><span>{hoveredSegment.value} unit</span><span>{chartTotal > 0 ? fmtPct((hoveredSegment.value / chartTotal) * 100, 1) : '0.0%'}</span></div> : null}<svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r={radius} className="overview-donut-track" />{safeSegments.map((segment) => {
     const value = Number(segment.value || 0);
     const length = chartTotal > 0 ? (value / chartTotal) * circumference : 0;
-    const circle = <circle key={segment.key} cx="60" cy="60" r={radius} className={`overview-donut-ring ${segment.tone || 'default'}`} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} />;
+    const circle = <circle key={segment.key} cx="60" cy="60" r={radius} className={`overview-donut-ring ${segment.tone || 'default'} ${hoveredKey === segment.key ? 'is-hovered' : ''}`} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} onMouseEnter={() => setHoveredKey(segment.key)} onMouseLeave={() => setHoveredKey((current) => current === segment.key ? null : current)} />;
     offset += length;
     return circle;
   })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
 }
 
-function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro' }) {
+function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines }) {
+  const [hoveredIndex, setHoveredIndex] = useState(null);
   if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
   if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
   const width = 520;
@@ -3897,26 +3902,35 @@ function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value
   const toX = (index) => padding + (index * xStep);
   const toY = (value) => height - padding - ((Number(value || 0) / maxValue) * (height - padding * 2));
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[valueKey] || 0)}`).join(' ');
-  return <div className="overview-trend-chart"><svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="4" className={`overview-trend-dot ${tone}`} /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || point.label || '').slice(5) || String(point.label || '').slice(0, 5)}</text></g>)}</svg></div>;
+  const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] || null;
+  const tooltipLeft = hoveredPoint ? `${Math.max(12, Math.min(88, (toX(hoveredIndex) / width) * 100))}%` : '50%';
+  const tooltipTop = hoveredPoint ? `${Math.max(18, Math.min(72, ((toY(hoveredPoint?.[valueKey] || 0) - 18) / height) * 100))}%` : '22%';
+  const tooltipRows = hoveredPoint ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredPoint) : [`Value: ${Number(hoveredPoint?.[valueKey] || 0)}`]) : [];
+  const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
+  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - padding} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="5" className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 6} textAnchor="middle" className="overview-trend-label">{String(point.day || point.label || '').slice(5) || String(point.label || '').slice(0, 5)}</text></g>)}</svg></div>;
 }
 
 function OverviewAstroTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => fmtDateOnly(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} />;
 }
 
 function OverviewTempTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => fmtDateOnly(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} />;
 }
 
-function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default' }) {
+function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default', tooltipTitle, tooltipLines }) {
+  const [hoveredKey, setHoveredKey] = useState(null);
   if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
   if (!(items || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk ditampilkan.'}</div>;
   const maxValue = Math.max(1, ...items.map((item) => Number(item?.[valueKey] || 0)));
-  return <div className="overview-bar-list">{items.map((item) => {
+  const hoveredItem = items.find((item) => (item.key || item.label) === hoveredKey) || null;
+  const hoveredTitle = hoveredItem ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredItem) : hoveredItem.label) : '';
+  const hoveredLines = hoveredItem ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredItem) : [metaFormatter ? metaFormatter(hoveredItem) : `${Number(hoveredItem?.[valueKey] || 0)}`]) : [];
+  return <div className="overview-bar-list">{hoveredItem ? <div className="overview-chart-tooltip overview-chart-tooltip-static"><strong>{hoveredTitle}</strong>{hoveredLines.filter(Boolean).map((line, index) => <span key={`${hoveredTitle}-${index}`}>{line}</span>)}</div> : null}{items.map((item) => {
     const rawValue = Number(item?.[valueKey] || 0);
     const width = `${Math.max(8, (rawValue / maxValue) * 100)}%`;
     const appliedTone = item.tone || tone;
-    return <div key={item.key || item.label} className="overview-bar-row"><div className="overview-bar-copy"><strong title={item.label}>{item.label}</strong><small>{metaFormatter ? metaFormatter(item) : ''}</small></div><div className="overview-bar-track"><span className={`overview-bar-fill ${appliedTone}`} style={{ width }} /></div><div className="overview-bar-value">{valueFormatter ? valueFormatter(rawValue, item) : rawValue}</div></div>;
+    return <div key={item.key || item.label} className={`overview-bar-row ${hoveredKey === (item.key || item.label) ? 'is-hovered' : ''}`} onMouseEnter={() => setHoveredKey(item.key || item.label)} onMouseLeave={() => setHoveredKey((current) => current === (item.key || item.label) ? null : current)}><div className="overview-bar-copy"><strong title={item.label}>{item.label}</strong><small>{metaFormatter ? metaFormatter(item) : ''}</small></div><div className="overview-bar-track"><span className={`overview-bar-fill ${appliedTone}`} style={{ width }} /></div><div className="overview-bar-value">{valueFormatter ? valueFormatter(rawValue, item) : rawValue}</div></div>;
   })}</div>;
 }
 

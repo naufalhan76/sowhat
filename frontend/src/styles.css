@@ -1467,7 +1467,7 @@ input:focus, select:focus, textarea:focus {
 
 
 
-/* â”€â”€ Historical toolbar (consolidated) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ Historical toolbar (consolidated) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .historical-toolbar {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -3050,7 +3050,7 @@ textarea:focus {
     gap: 14px;
   }
 
-  /* â”€â”€ Controls inside popover â”€â”€ */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ Controls inside popover Ã¢â€â‚¬Ã¢â€â‚¬ */
   .command-center.mobile-topbar-expanded .topbar-controls {
     display: flex;
     flex-direction: column;
@@ -3081,7 +3081,7 @@ textarea:focus {
     width: 100%;
   }
 
-  /* â”€â”€ Actions inside popover â”€â”€ */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ Actions inside popover Ã¢â€â‚¬Ã¢â€â‚¬ */
   .command-center.mobile-topbar-expanded .topbar-actions {
     display: flex;
     flex-direction: column;
@@ -3515,7 +3515,7 @@ textarea:focus {
     display: inline-flex;
   }
 }
-/* â”€â”€ Astro Report Panel â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ Astro Report Panel Ã¢â€â‚¬Ã¢â€â‚¬ */
 .astro-report-panel {
   overflow: visible;
 }
@@ -3696,6 +3696,16 @@ textarea:focus {
   stroke-width: 14;
 }
 
+.overview-donut-ring {
+  cursor: pointer;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+
+.overview-donut-ring.is-hovered {
+  stroke-width: 16;
+  opacity: 1;
+}
+
 .overview-donut-track {
   stroke: rgba(255,255,255,0.08);
 }
@@ -3763,6 +3773,7 @@ textarea:focus {
 .overview-legend-dot.warning { background: #fb923c; }
 
 .overview-trend-chart {
+  position: relative;
   min-height: 190px;
 }
 
@@ -3788,6 +3799,12 @@ textarea:focus {
   fill: #ff7a2f;
   stroke: #0f172a;
   stroke-width: 2;
+  cursor: pointer;
+  transition: transform 140ms ease;
+}
+
+.overview-trend-dot.is-hovered {
+  transform: scale(1.12);
 }
 
 .overview-trend-label {
@@ -3824,6 +3841,7 @@ textarea:focus {
 }
 
 .overview-bar-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3834,6 +3852,13 @@ textarea:focus {
   grid-template-columns: minmax(0, 1.45fr) minmax(120px, 1fr) auto;
   gap: 10px;
   align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  transition: background 140ms ease;
+}
+
+.overview-bar-row.is-hovered {
+  background: rgba(255,255,255,0.035);
 }
 
 .overview-bar-copy {
@@ -3883,6 +3908,42 @@ textarea:focus {
   text-align: right;
   font-weight: 700;
   font-size: 13px;
+}
+
+.overview-chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(7, 11, 19, 0.96);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.28);
+  pointer-events: none;
+  transform: translate(-50%, -110%);
+}
+
+.overview-chart-tooltip-static {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.overview-chart-tooltip strong,
+.overview-chart-tooltip span {
+  display: block;
+}
+
+.overview-chart-tooltip strong {
+  font-size: 13px;
+}
+
+.overview-chart-tooltip span {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .overview-mini-table {
