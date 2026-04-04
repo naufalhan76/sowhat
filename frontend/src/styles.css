@@ -248,6 +248,7 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  position: relative;
   justify-content: space-between;
   gap: clamp(8px, 2vw, 16px);
   padding: 0 clamp(16px, 3vw, 32px);
@@ -2983,7 +2984,7 @@ textarea:focus {
   display: contents;
 }
 
-@media (min-width: 1441px) {
+@media (min-width: 1701px) {
   .topbar {
     display: flex;
     align-items: center;
@@ -2992,91 +2993,132 @@ textarea:focus {
   }
 
   .topbar-controls {
-    max-width: 500px;
+    max-width: 600px;
   }
 }
 
-@media (min-width: 1281px) and (max-width: 1440px) {
+@media (min-width: 961px) and (max-width: 1700px) {
   .topbar {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
     flex-wrap: wrap;
-    gap: clamp(10px, 1.8vw, 14px);
-    padding: 0 clamp(16px, 2.5vw, 24px);
+    align-items: flex-start;
+    gap: clamp(10px, 2vw, 12px);
+    padding: clamp(10px, 1.5vw, 12px) clamp(12px, 2vw, 16px) clamp(8px, 1.5vw, 12px);
   }
 
-  .topbar-controls {
-    flex: 0 1 auto;
-    max-width: none;
-    margin: 0;
-    gap: 10px;
-  }
-
+  .topbar-brand-row,
+  .topbar-collapsible,
+  .topbar-controls,
   .topbar-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-  }
-}
-
-@media (min-width: 961px) and (max-width: 1280px) {
-  .topbar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: clamp(10px, 1.5vw, 16px) clamp(12px, 2vw, 20px);
-    padding: clamp(10px, 1.5vw, 16px) clamp(14px, 2vw, 20px);
+    width: 100%;
   }
 
   .topbar-brand-row {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mobile-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: clamp(6px, 1vw, 8px);
+  }
+
+  .mobile-topbar-toggle {
+    display: inline-flex;
   }
 
   .topbar-collapsible {
-    display: grid;
-    grid-column: 2;
-    gap: clamp(10px, 1.5vw, 12px);
-    min-width: 0;
+    display: none;
+    gap: clamp(10px, 2vw, 12px);
   }
 
-  .topbar-controls {
-    display: grid;
-    grid-template-columns: auto minmax(200px, 1fr);
-    align-items: center;
+  .command-center.mobile-topbar-expanded .topbar-collapsible {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 16px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    width: clamp(300px, 90vw, 420px);
+    gap: 14px;
+  }
+
+  /* ── Controls inside popover ── */
+  .command-center.mobile-topbar-expanded .topbar-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     max-width: none;
     margin: 0;
-    min-width: 0;
-    gap: 10px;
+    width: 100%;
   }
 
-  .topbar-controls .search-box {
-    min-width: 200px;
-  }
-
-  .topbar-actions {
+  .command-center.mobile-topbar-expanded .date-range-group {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
     gap: 8px;
-    justify-content: flex-start;
+  }
+
+  .command-center.mobile-topbar-expanded .date-range-group input {
+    flex: 1;
     min-width: 0;
-  }
-
-  .topbar-actions > * {
-    min-width: auto;
-  }
-
-  .control-inline-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .control-inline-actions .sf-btn {
     font-size: 12px;
-    padding: 6px 10px;
+  }
+
+  .command-center.mobile-topbar-expanded .search-box {
+    width: 100%;
+  }
+
+  .command-center.mobile-topbar-expanded .search-box input {
+    width: 100%;
+  }
+
+  /* ── Actions inside popover ── */
+  .command-center.mobile-topbar-expanded .topbar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .command-center.mobile-topbar-expanded .account-badge {
+    width: 100%;
+    justify-content: flex-start;
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .command-center.mobile-topbar-expanded .control-inline-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .command-center.mobile-topbar-expanded .control-inline-actions .sf-btn {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .command-center.mobile-topbar-expanded .topbar-actions > .sf-btn {
+    width: 100%;
+    font-size: 12px;
   }
 }
+
 .topbar-icon-button {
   width: 42px;
   height: 42px;
@@ -3378,46 +3420,85 @@ textarea:focus {
 }
 
 .command-center.compact-topbar.mobile-topbar-expanded .topbar-collapsible {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  width: clamp(280px, 90vw, 420px);
+  gap: 14px;
 }
 
-.command-center.compact-topbar .topbar-controls {
-  gap: clamp(10px, 2vw, 12px);
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   max-width: none;
   margin: 0;
+  width: 100%;
 }
 
-.command-center.compact-topbar .date-range-group {
+.command-center.compact-topbar.mobile-topbar-expanded .date-range-group {
+  display: flex;
+  align-items: center;
   width: 100%;
-  justify-content: space-between;
-  gap: clamp(4px, 1vw, 6px);
+  gap: 8px;
 }
 
-.command-center.compact-topbar .date-range-group input {
-  width: 100%;
+.command-center.compact-topbar.mobile-topbar-expanded .date-range-group input {
+  flex: 1;
   min-width: 0;
-  font-size: clamp(10px, 0.9vw, 12px);
+  font-size: 12px;
 }
 
-.command-center.compact-topbar .topbar-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(130px, 40vw, 150px), 1fr));
-  gap: clamp(8px, 1.5vw, 10px);
-}
-
-.command-center.compact-topbar .topbar-actions > .sf-btn,
-.command-center.compact-topbar .topbar-actions > .account-badge,
-.command-center.compact-topbar .topbar-actions > .control-inline-actions,
-.command-center.compact-topbar .topbar-actions .sf-btn {
+.command-center.compact-topbar.mobile-topbar-expanded .search-box {
   width: 100%;
-  font-size: clamp(11px, 0.8vw, 12px);
 }
 
-.command-center.compact-topbar .control-inline-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: clamp(6px, 1vw, 8px);
+.command-center.compact-topbar.mobile-topbar-expanded .search-box input {
   width: 100%;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .account-badge {
+  width: 100%;
+  justify-content: flex-start;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .control-inline-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .control-inline-actions .sf-btn {
+  width: 100%;
+  font-size: 12px;
+}
+
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions > .sf-btn {
+  width: 100%;
+  font-size: 12px;
 }
 
 .section-chevron-button {

@@ -1339,7 +1339,7 @@ export default function App() {
   // Auto-compact topbar on narrow viewports, auto-close mobile nav on wide viewports
   useEffect(() => {
     const mobileNavMedia = window.matchMedia('(max-width: 960px)');
-    const compactTopbarMedia = window.matchMedia('(max-width: 1280px)');
+    const compactTopbarMedia = window.matchMedia('(max-width: 1700px)');
     const syncLayout = () => {
       const nextCompactTopbar = compactTopbarMedia.matches;
       const nextMobileNav = mobileNavMedia.matches;
@@ -1347,7 +1347,7 @@ export default function App() {
       if (!nextMobileNav) {
         setMobileNavOpen(false);
       }
-      setMobileTopbarExpanded(!nextCompactTopbar);
+      setMobileTopbarExpanded(false);
     };
     syncLayout();
     mobileNavMedia.addEventListener?.('change', syncLayout);
@@ -3409,6 +3409,7 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
 
 
 
