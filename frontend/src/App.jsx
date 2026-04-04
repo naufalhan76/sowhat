@@ -544,6 +544,7 @@ export default function App() {
   const [astroLocationSectionOpen, setAstroLocationSectionOpen] = useState(false);
   const [astroRouteSectionOpen, setAstroRouteSectionOpen] = useState(false);
   const [remoteResetSectionOpen, setRemoteResetSectionOpen] = useState(false);
+  const [linkedAccountSectionOpen, setLinkedAccountSectionOpen] = useState(false);
   const [astroCsvText, setAstroCsvText] = useState('');
   const [astroLocationExpanded, setAstroLocationExpanded] = useState({});
   const [astroRouteExpanded, setAstroRouteExpanded] = useState({});
@@ -2612,7 +2613,22 @@ export default function App() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Add / refresh linked account</h2><p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button></div></CardHeader><CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent></Card>            <Card className="panel-card">
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Add / refresh linked account</h2>
+                  <p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" className="section-chevron-button" onPress={() => setLinkedAccountSectionOpen((current) => !current)} aria-label={linkedAccountSectionOpen ? 'Collapse linked account form' : 'Expand linked account form'}>
+                    {linkedAccountSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </Button>
+                  {linkedAccountSectionOpen ? <Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button> : null}
+                </div>
+              </CardHeader>
+              {linkedAccountSectionOpen ? <CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent> : null}
+            </Card>
+            <Card className="panel-card">
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Automated remote CPU reset</h2>
@@ -3733,6 +3749,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 
