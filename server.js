@@ -4119,6 +4119,32 @@ async function ensurePostgresSchema() {
     create index if not exists idx_login_rate_limits_scope_reset on login_rate_limits(scope, reset_at);
     create index if not exists idx_remote_reset_logs_triggered_at on remote_reset_logs(triggered_at desc);
     create index if not exists idx_remote_reset_logs_account_unit_time on remote_reset_logs(account_id, unit_id, triggered_at desc);
+
+    create table if not exists astro_route_snapshots (
+      id text primary key,
+      day date not null,
+      account_id text,
+      account_label text,
+      unit_id text not null,
+      unit_label text,
+      customer_name text,
+      route_id text,
+      warehouse_name text,
+      status text not null,
+      reason text,
+      wh_kpi text,
+      pod_kpi text,
+      rit text,
+      pod_count integer,
+      pass_count integer,
+      fail_count integer,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_astro_route_snapshots_day on astro_route_snapshots(day desc);
+    create index if not exists idx_astro_route_snapshots_unit on astro_route_snapshots(unit_id);
+    create index if not exists idx_astro_route_snapshots_warehouse on astro_route_snapshots(warehouse_name);
   `);
 }
 
@@ -6382,6 +6408,124 @@ function scheduleNextPoll() {
   }, delayMs);
 }
 
+let astroSnapshotTimer = null;
+let isFirstAstroSnapshot = true;
+
+function scheduleNextAstroSnapshot() {
+  clearTimeout(astroSnapshotTimer);
+  astroSnapshotTimer = null;
+  if (!state.runtime.isPolling) {
+    return;
+  }
+  const intervalMs = 3 * 60 * 60 * 1000; // Every 3 hours
+  const delayMs = isFirstAstroSnapshot ? 5000 : intervalMs; // Run after 5s on first boot
+  astroSnapshotTimer = setTimeout(function () {
+    const nowMs = Date.now();
+    const startMs = isFirstAstroSnapshot ? nowMs - (4 * 24 * 60 * 60 * 1000) : nowMs - (24 * 60 * 60 * 1000);
+    isFirstAstroSnapshot = false;
+    syncAstroSnapshots(startMs, nowMs).catch((e) => console.error('[AstroSync]', e.message)).finally(scheduleNextAstroSnapshot);
+  }, delayMs);
+}
+
+async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
+  if (!getPostgresConfig().enabled) return { ok: false, message: 'Postgres not enabled' };
+  const searchParams = new URLSearchParams();
+  searchParams.set('startDate', formatLocalDay(rangeStartMs));
+  searchParams.set('endDate', formatLocalDay(rangeEndMs));
+  searchParams.set('summaryOnly', '0');
+
+  const payload = await buildAstroReportPayload(searchParams);
+  const startDay = new Date(formatLocalDay(rangeStartMs) + 'T00:00:00Z');
+  const endDay = new Date(formatLocalDay(rangeEndMs) + 'T00:00:00Z');
+  
+  const insertRows = [];
+  
+  // Iterate through each day in range
+  for (let d = startDay.getTime(); d <= endDay.getTime(); d += 24 * 60 * 60 * 1000) {
+    const dayStr = formatLocalDay(d);
+    
+    for (const route of (config.astroRoutes || [])) {
+      if (route.isActive === false) continue;
+      
+      const accountConfig = getAccountConfigById(route.accountId || 'primary');
+      const unitLabel = resolveAstroUnitLabel(accountConfig, route.unitId) || route.unitId;
+      const whName = (config.astroLocations || []).find(l => l.id === route.whLocationId)?.name || 'WH';
+      
+      const routeRows = (payload.flatRows || []).filter(r => (r.routeId === route.id || r.unitId === route.unitId) && r.serviceDate === dayStr);
+      const diagnostics = (payload.diagnostics || []).filter(d => (d.routeId === route.id || d.unitId === route.unitId || d.unitLabel === unitLabel) && d.serviceDate === dayStr);
+      
+      const id = `${dayStr}::${route.accountId || 'primary'}::${route.unitId}::${route.routeId || route.id}`;
+      
+      let status = 'idle';
+      let reason = 'Unit tidak melakukan perjalanan (Idle)';
+      let wh_kpi = null;
+      let pod_kpi = null;
+      let pod_count = 0;
+      let pass_count = 0;
+      let fail_count = 0;
+      let rit = '-';
+      
+      if (routeRows.length > 0) {
+         status = 'active';
+         reason = '';
+         const firstRow = routeRows[0];
+         wh_kpi = firstRow.whArrivalTempKpi === 'fail' || firstRow.whArrivalTimeKpi === 'fail' ? 'fail' : 'pass';
+         
+         const podKpis = Object.keys(firstRow).filter(k => k.startsWith('pod') && k.endsWith('Kpi'));
+         pod_count = podKpis.length;
+         pod_kpi = 'pass';
+         for (const pk of podKpis) {
+             if (firstRow[pk] === 'fail') pod_kpi = 'fail';
+         }
+         if (wh_kpi === 'fail' || pod_kpi === 'fail') {
+            fail_count = 1;
+         } else {
+            pass_count = 1;
+         }
+         rit = firstRow.rit || '-';
+      } else if (diagnostics.length > 0) {
+         status = diagnostics[0].status;
+         reason = diagnostics[0].reason || 'Tidak ada data valid';
+      }
+      
+      insertRows.push({
+         id,
+         day: dayStr,
+         account_id: route.accountId || 'primary',
+         account_label: accountConfig?.label || route.accountId || 'primary',
+         unit_id: route.unitId,
+         unit_label: unitLabel,
+         customer_name: route.customerName || 'Astro',
+         route_id: route.id,
+         warehouse_name: whName,
+         status,
+         reason,
+         wh_kpi,
+         pod_kpi,
+         rit,
+         pod_count,
+         pass_count,
+         fail_count
+      });
+    }
+  }
+  
+  if (insertRows.length > 0) {
+      await postgresUpsertRows(
+        'astro_route_snapshots',
+        insertRows,
+        [
+          'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'customer_name', 
+          'route_id', 'warehouse_name', 'status', 'reason', 'wh_kpi', 'pod_kpi', 'rit', 
+          'pod_count', 'pass_count', 'fail_count'
+        ],
+        ['id'],
+        { touchUpdatedAt: true }
+      );
+  }
+  return { ok: true, snapshotsSaved: insertRows.length };
+}
+
 async function runPollCycle(trigger) {
   if (pollInFlight) {
     return { skipped: true, message: 'Polling already in progress.' };
@@ -6466,6 +6610,8 @@ function stopPolling() {
   config.autoStart = false;
   clearTimeout(pollTimer);
   pollTimer = null;
+  clearTimeout(astroSnapshotTimer);
+  astroSnapshotTimer = null;
   clearRemoteResetSchedule();
   saveConfig();
   saveState();
@@ -6991,6 +7137,89 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/astro/snapshots/sync' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) return true;
+    try {
+      const body = await readRequestBody(req);
+      const startMs = toTimestampMaybe(body.startDate) || (Date.now() - 4 * 24 * 60 * 60 * 1000);
+      const endMs = toTimestampMaybe(body.endDate) || Date.now();
+      const result = await syncAstroSnapshots(startMs, endMs);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendApiError(res, error, 'Sync gagal.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/astro/snapshots' && method === 'GET') {
+    try {
+      const range = parseDateRange(url.searchParams);
+      const startDay = formatLocalDay(range.rangeStartMs || Date.now());
+      const endDay = formatLocalDay(range.rangeEndMs || Date.now());
+      
+      let rows = [];
+      if (getPostgresConfig().enabled) {
+          const result = await postgresQuery(
+            `select * from astro_route_snapshots where day >= $1 and day <= $2`,
+            [startDay, endDay]
+          );
+          rows = result.rows || [];
+      }
+      
+      // Aggregate into byWarehouse format compatible with the dashboard UI
+      const warehouseGroups = new Map();
+      let totalPass = 0;
+      let totalFail = 0;
+      let totalEligible = 0;
+      
+      for (const r of rows) {
+          if (!warehouseGroups.has(r.warehouse_name)) {
+              warehouseGroups.set(r.warehouse_name, { warehouse: r.warehouse_name, eligibleRows: 0, passRows: 0, failRows: 0, kpi: 0 });
+          }
+          const w = warehouseGroups.get(r.warehouse_name);
+          w.eligibleRows += 1;
+          totalEligible += 1;
+          if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && r.pod_kpi === 'pass')) {
+             w.passRows += 1;
+             totalPass += 1;
+          } else if (r.status === 'active' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail' || r.status === 'request_error') {
+             w.failRows += 1;
+             totalFail += 1;
+          }
+          w.kpi = w.eligibleRows > 0 ? (w.passRows / w.eligibleRows) * 100 : 0;
+      }
+      
+      const byWarehouse = [...warehouseGroups.values()].sort((a,b) => b.eligibleRows - a.eligibleRows);
+      
+      // Also provide trend data grouped by day
+      const trendMap = new Map();
+      for (const r of rows) {
+         if (!trendMap.has(r.day)) trendMap.set(r.day, { day: r.day, passRows: 0, failRows: 0, eligibleRows: 0 });
+         const td = trendMap.get(r.day);
+         td.eligibleRows += 1;
+         if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && r.pod_kpi === 'pass')) td.passRows += 1;
+         else if (r.status === 'active' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail' || r.status === 'request_error') td.failRows += 1;
+      }
+      const trend = [...trendMap.values()].sort((a,b) => a.day.localeCompare(b.day));
+      
+      sendJson(res, 200, {
+          ok: true,
+          overallRate: totalEligible > 0 ? (totalPass / totalEligible) * 100 : 0,
+          kpi: {
+             trend,
+             byWarehouse
+          },
+          summary: { kpi: { trend, byWarehouse } },
+          trend,
+          rows: rows.map(r => ({ ...r, kpi_status: (r.wh_kpi === 'pass' && r.pod_kpi === 'pass') ? 'pass' : (r.wh_kpi === 'fail' || r.pod_kpi === 'fail' ? 'fail' : r.status) }))
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Aksi gagal diproses.');
+    }
+    return true;
+  }
+
   if (pathname === '/api/config' && method === 'GET') {
     const session = await requireAdminSession(req, res);
     if (!session) {
@@ -7449,6 +7678,7 @@ if (require.main === module) {
           saveConfig();
           saveState();
         });
+        scheduleNextAstroSnapshot();
       }
     } catch (e) {
       console.error('Failed to initialize storage on startup:', e);

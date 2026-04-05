@@ -749,11 +749,9 @@ export default function App() {
     }
     let cancelled = false;
     setOverviewAstroBusy(true);
-    api(`/api/astro/report?${new URLSearchParams({
+    api(`/api/astro/snapshots?${new URLSearchParams({
       startDate: range.startDate,
       endDate: range.endDate,
-      accountId: overviewAccountId,
-      summaryOnly: '1',
     }).toString()}`)
       .then((payload) => {
         if (!cancelled) {
@@ -2560,37 +2558,17 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Supplementary - Astro KPI general + Astro WH */}
-      <div className="overview-supplementary-row">
-        <div className="overview-chart-card">
+      {/* Row 3: Astro KPI Per Warehouse */}
+      <div className="overview-supplementary-row details-row">
+        <div className="overview-chart-card overview-hero-chart details-card" style={{ gridColumn: 'span 2' }}>
           <div className="overview-chart-head">
             <div>
-              <h3>Astro KPI general</h3>
-              <p>{range.startDate} to {range.endDate}</p>
-            </div>
-            <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroTrend.length} day(s)`}</Chip>
-          </div>
-          <OverviewAstroTrendChart points={overviewAstroTrend} busy={overviewAstroBusy} />
-          <div className="overview-mini-summary overview-mini-summary-compact">
-            {overviewAstroKpi ? <>
-              <div className="mini-metric"><span>Eligible rit</span><strong>{overviewAstroKpi.eligibleRows || 0}</strong></div>
-              <div className="mini-metric"><span>Pass rate</span><strong>{fmtPct(overviewAstroKpi.overallRate || 0)}</strong></div>
-              <div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(overviewAstroKpi.whArrivalTimeRate || 0)}</strong></div>
-              <div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(overviewAstroKpi.whArrivalTempRate || 0)}</strong></div>
-              <div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(overviewAstroKpi.podArrivalRate || 0)}</strong></div>
-            </> : <div className="empty-state compact-empty">Belum ada ringkasan Astro untuk account dan range ini.</div>}
-          </div>
-        </div>
-
-        <div className="overview-chart-card overview-hero-chart">
-          <div className="overview-chart-head">
-            <div>
-              <h3>KPI per warehouse</h3>
-              <p>Top 4 WH berdasarkan rit eligible.</p>
+              <h3>Astro KPI per Warehouse</h3>
+              <p>{range.startDate} to {range.endDate} — Top 4 WH berdasarkan rit eligible.</p>
             </div>
             <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroByWarehouse.length} WH`}</Chip>
           </div>
-          <div className="overview-wh-charts" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '24px', flex: 1, padding: '0 24px 24px 24px' }}>
+          <div className="overview-wh-charts" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '24px', flex: 1, padding: '0 24px 24px 24px' }}>
             {(() => {
               const targetWarehouses = ['BGO', 'CBN', 'PGS', 'SRG'];
               let selectedWh = overviewAstroByWarehouse.filter(wh => targetWarehouses.some(t => (wh.whName || wh.warehouse || '').toUpperCase().includes(t)));
@@ -2598,16 +2576,15 @@ export default function App() {
                 selectedWh = [...selectedWh, ...overviewAstroByWarehouse.filter(wh => !selectedWh.includes(wh))].slice(0, 4);
               }
               const kpiLines = [
-                { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
-                { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
-                { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
+                { key: 'passRows', colorHex: '#81C784', label: 'Pass' },
+                { key: 'failRows', colorHex: '#E57373', label: 'Fail' },
               ];
-              if (!selectedWh.length) return <div className="empty-state compact-empty" style={{ gridColumn: 'span 2' }}>Belum ada ringkasan WH yang bisa ditampilkan.</div>;
+              if (!selectedWh.length) return <div className="overview-chart-empty" style={{ gridColumn: 'span 4' }}>Belum ada data Warehouse untuk periode ini.</div>;
               
               return selectedWh.map((warehouse) => (
                 <div key={"warehouse-" + (warehouse.whName || warehouse.warehouse)} className="overview-mini-trend-card">
-                  <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'var(--c-text-main)' }}>{warehouse.whName || warehouse.warehouse}</h4>
-                  <OverviewMultiLineChart points={warehouse.trend} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={1} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
+                  <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--c-text-main)', textAlign: 'center' }}>{warehouse.whName || warehouse.warehouse}</h4>
+                  <OverviewMultiLineChart points={warehouse.trend || []} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={1} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
                 </div>
               ));
             })()}
