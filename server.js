@@ -7356,7 +7356,7 @@ async function handleApi(req, res, url) {
       }
       
       for (const w of warehouseGroups.values()) {
-          w.trend.sort((a,b) => a.day.localeCompare(b.day));
+          w.trend.sort((a,b) => String(a.day || '').localeCompare(String(b.day || '')));
       }
       
       const byWarehouse = [...warehouseGroups.values()].sort((a,b) => b.eligibleRows - a.eligibleRows);
@@ -7370,7 +7370,7 @@ async function handleApi(req, res, url) {
          if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && r.pod_kpi === 'pass')) td.passRows += 1;
          else if (r.status === 'active' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail' || r.status === 'request_error') td.failRows += 1;
       }
-      const trend = [...trendMap.values()].sort((a,b) => a.day.localeCompare(b.day));
+      const trend = [...trendMap.values()].sort((a,b) => String(a.day || '').localeCompare(String(b.day || '')));
       
       sendJson(res, 200, {
           ok: true,
