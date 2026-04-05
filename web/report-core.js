@@ -285,7 +285,16 @@
     }
 
     const durationMs = active.endTimestamp - active.startTimestamp;
-    if (durationMs < minDurationMs) {
+    let requiredMinDurationMs = minDurationMs;
+
+    if (active.type === 'temp1' || active.type === 'temp2' || active.type === 'temp1+temp2') {
+      requiredMinDurationMs = Math.max(requiredMinDurationMs, 30 * 60 * 1000);
+      if (active.sampleCount < 8) {
+        return null;
+      }
+    }
+
+    if (durationMs < requiredMinDurationMs) {
       return null;
     }
 

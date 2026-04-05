@@ -4092,19 +4092,21 @@ function formatChartDayTitle(dayValue) {
   return text || '-';
 }
 
-function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines }) {
+function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines, yAxisSuffix = '', legendLabel = null }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
   if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
   const width = 520;
   const height = 200;
-  const padding = 28;
+  const paddingLeft = 40;
+  const paddingRight = 20;
+  const paddingTop = 28;
   const paddingBottom = 36;
   const values = points.map((point) => Number(point?.[valueKey] || 0));
   const maxValue = Math.max(maxFloor, ...values, 1);
-  const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
-  const toX = (index) => padding + (index * xStep);
-  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - padding - paddingBottom));
+  const xStep = points.length > 1 ? (width - paddingLeft - paddingRight) / (points.length - 1) : 0;
+  const toX = (index) => paddingLeft + (index * xStep);
+  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - paddingTop - paddingBottom));
   const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[valueKey] || 0)}`).join(' ');
   const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] || null;
   const hoveredDotY = hoveredPoint ? toY(hoveredPoint?.[valueKey] || 0) : 0;
@@ -4112,7 +4114,8 @@ function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value
   const tooltipTop = hoveredPoint ? `${Math.max(0, Math.min(50, ((hoveredDotY - 60) / height) * 100))}%` : '10%';
   const tooltipRows = hoveredPoint ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredPoint) : [`Value: ${Number(hoveredPoint?.[valueKey] || 0)}`]) : [];
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
-  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>;
+  const yGuides = [0, maxValue / 2, maxValue];
+  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}{yAxisSuffix}</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>{legendLabel ? <div className="overview-chart-legend"><div className="overview-chart-legend-item"><span className={`overview-legend-dot ${tone}`}></span><span>{legendLabel}</span></div></div> : null}</div>;
 }
 
 function OverviewMultiLineChart({ points, busy, emptyMessage, lines, maxFloor = 100, tooltipTitle }) {
@@ -4121,31 +4124,34 @@ function OverviewMultiLineChart({ points, busy, emptyMessage, lines, maxFloor = 
   if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
   const width = 520;
   const height = 200;
-  const padding = 28;
+  const paddingLeft = 40;
+  const paddingRight = 20;
+  const paddingTop = 28;
   const paddingBottom = 36;
   const allValues = points.flatMap(p => lines.map(l => Number(p?.[l.key] || 0)));
   const maxValue = Math.max(maxFloor, ...allValues, 1);
-  const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
-  const toX = (index) => padding + (index * xStep);
-  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - padding - paddingBottom));
+  const xStep = points.length > 1 ? (width - paddingLeft - paddingRight) / (points.length - 1) : 0;
+  const toX = (index) => paddingLeft + (index * xStep);
+  const toY = (value) => height - paddingBottom - ((Number(value || 0) / maxValue) * (height - paddingTop - paddingBottom));
   const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex] || null;
   const hoveredDotYList = hoveredPoint ? lines.map(l => toY(hoveredPoint?.[l.key] || 0)) : [];
   const minHoveredY = hoveredDotYList.length ? Math.min(...hoveredDotYList) : 0;
   const tooltipLeft = hoveredPoint ? `${Math.max(14, Math.min(86, (toX(hoveredIndex) / width) * 100))}%` : '50%';
   const tooltipTop = hoveredPoint ? `${Math.max(0, Math.min(50, ((minHoveredY - 60) / height) * 100))}%` : '10%';
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
-  return <div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{lines.map((l, i) => <span key={l.key || i} style={{color: l.colorHex}}>{l.label}: {fmtPct(hoveredPoint[l.key] || 0)}</span>)}</div> : null}<svg viewBox={"0 0 " + width + " " + height} aria-hidden="true"><line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} className="overview-axis" /><line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} className="overview-axis" />{lines.map(l => {
+  const yGuides = [0, maxValue / 2, maxValue];
+  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{lines.map((l, i) => <span key={l.key || i} style={{color: l.colorHex}}>{l.label}: {fmtPct(hoveredPoint[l.key] || 0)}</span>)}</div> : null}<svg viewBox={"0 0 " + width + " " + height} aria-hidden="true">{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}%</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" />{lines.map(l => {
     const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[l.key] || 0)}`).join(' ');
     return <path key={l.key} d={linePath} fill="none" stroke={l.colorHex || 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-  })}{points.map((point, index) => <g key={"point-"+index} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[lines[0]?.key] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" />{lines.map((l, lIdx) => <circle key={"dot-"+lIdx} cx={toX(index)} cy={toY(point?.[l.key] || 0)} r={hoveredIndex === index ? 5 : 3} fill={l.colorHex || 'currentColor'} stroke="none" />)}<text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>;
+  })}{points.map((point, index) => <g key={"point-"+index} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[lines[0]?.key] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" />{lines.map((l, lIdx) => <circle key={"dot-"+lIdx} cx={toX(index)} cy={toY(point?.[l.key] || 0)} r={hoveredIndex === index ? 5 : 3} fill={l.colorHex || 'currentColor'} stroke="none" />)}<text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div><div className="overview-chart-legend">{lines.map((l, i) => <div key={i} className="overview-chart-legend-item"><span className="overview-legend-dot-custom" style={{backgroundColor: l.colorHex}}></span><span>{l.label}</span></div>)}</div></div>;
 }
 
 function OverviewAstroTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} yAxisSuffix="%" legendLabel="Pass Rate" />;
 }
 
 function OverviewTempTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} legendLabel="Incidents" />;
 }
 
 function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default', tooltipTitle, tooltipLines }) {

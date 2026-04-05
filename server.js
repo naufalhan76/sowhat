@@ -1802,7 +1802,8 @@ function buildCurrentFleetSensorAlerts(accountConfig, accountState, now) {
       continue;
     }
 
-    const type = detectLiveSensorFaultType(snapshot.temp1, snapshot.temp2, snapshot.errSensor || '');
+    const unitState = accountState.units[unit.id] || normalizeUnitState(unit.id, { label: unit.label });
+    const type = detectLiveSensorFaultType(unitState, snapshot, now);
     if (!type) {
       continue;
     }
@@ -2895,17 +2896,56 @@ async function runRemoteResetCycle(trigger) {
   return remoteResetRuntime.lastRunSummary;
 }
 
-function detectLiveSensorFaultType(temp1, temp2) {
-  const sensor1Zero = toNumber(temp1) === 0;
-  const sensor2Zero = toNumber(temp2) === 0;
+function detectLiveSensorFaultType(unitState, snapshot, now) {
+  if (!snapshot) return null;
 
-  if (sensor1Zero && sensor2Zero) {
+  function checkSensor(sensorKey) {
+    if (toNumber(snapshot[sensorKey]) !== 0) return false;
+
+    // We must find a continuous streak of 0.0 stretching back at least 30 mins
+    // And we must have at least 8 records in that streak
+    const currentMs = snapshot.lastUpdatedMs || now;
+    const searchMs = 30 * 60 * 1000;
+    const cutoff = currentMs - searchMs;
+    const records = unitState?.records || [];
+
+    if (records.length === 0) return false;
+
+    let sampleCount = 1;
+    let earliestStreakTime = currentMs;
+
+    // Evaluate backwards
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i];
+      if (record.timestamp >= currentMs) continue;
+
+      const v = toNumber(record[sensorKey]);
+      if (v !== 0) {
+        break;
+      }
+
+      sampleCount++;
+      earliestStreakTime = record.timestamp;
+
+      if (earliestStreakTime <= cutoff) {
+        break;
+      }
+    }
+
+    const duration = currentMs - earliestStreakTime;
+    return duration >= searchMs && sampleCount >= 8;
+  }
+
+  const sensor1Fault = checkSensor('temp1');
+  const sensor2Fault = checkSensor('temp2');
+
+  if (sensor1Fault && sensor2Fault) {
     return 'temp1+temp2';
   }
-  if (sensor1Zero) {
+  if (sensor1Fault) {
     return 'temp1';
   }
-  if (sensor2Zero) {
+  if (sensor2Fault) {
     return 'temp2';
   }
   return null;
@@ -2935,7 +2975,7 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
     const recentAlerts = liveAlerts.filter(function (incident) {
       return incident.unitId === unit.id;
     });
-    const liveSensorFaultType = detectLiveSensorFaultType(vehicleSnapshot?.temp1 ?? null, vehicleSnapshot?.temp2 ?? null);
+    const liveSensorFaultType = detectLiveSensorFaultType(unitState, vehicleSnapshot, now);
     const customerProfile = findCustomerProfileForUnit(accountConfig, unit.id);
     const setpoint = evaluateSetpointStatus(
       customerProfile,

@@ -4263,3 +4263,43 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.overview-trend-chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-axis-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-dasharray: 4 6;
+}
+
+.overview-axis-label {
+  fill: var(--text-muted, #94a3b8);
+  font-size: 11px;
+}
+
+.overview-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.overview-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.overview-legend-dot-custom {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
