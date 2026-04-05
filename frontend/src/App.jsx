@@ -1272,11 +1272,11 @@ export default function App() {
     try {
       const result = await api('/api/astro/snapshots/sync', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ skipExistingDays: true }),
       });
       setBanner({
         tone: 'success',
-        message: `Sync selesai: ${result.snapshotsSaved || 0} row route, ${result.unitCount || 0} unit discan, ${result.eligibleUnitCount || 0} unit eligible KPI, ${result.activeRowCount || 0} row aktif.`
+        message: `Sync selesai: ${result.snapshotsSaved || 0} row snapshot, ${result.processedDays || 0} hari diproses, ${result.skippedDays || 0} hari di-skip, ${result.eligibleUnitCount || 0} unit eligible KPI.`
       });
       await loadAstroSnapshotLogs(true);
     } catch (e) {

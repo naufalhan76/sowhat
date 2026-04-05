@@ -6467,7 +6467,9 @@ function pushAstroSnapshotLog(entry) {
   }
 }
 
-async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
+async function syncAstroSnapshots(rangeStartMs, rangeEndMs, options) {
+  const syncOptions = options || {};
+  const skipExistingDays = syncOptions.skipExistingDays !== false;
   if (!getPostgresConfig().enabled) {
     pushAstroSnapshotLog({ type: 'astro-sync', result: 'skipped', message: 'Postgres not enabled', unitCount: 0, podCount: 0, startDate: '', endDate: '' });
     return { ok: false, message: 'Postgres not enabled' };
@@ -6494,6 +6496,7 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
   }
   const startDay = new Date(formatLocalDay(rangeStartMs) + 'T00:00:00Z');
   const endDay = new Date(formatLocalDay(rangeEndMs) + 'T00:00:00Z');
+  const todayStr = formatLocalDay(Date.now());
   
   const insertRows = [];
   const seenSnapshotIds = new Set();
@@ -6509,6 +6512,54 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
   // Iterate through each day in range
   for (let d = startDay.getTime(); d <= endDay.getTime(); d += 24 * 60 * 60 * 1000) {
     const dayStr = formatLocalDay(d);
+    if (skipExistingDays && dayStr !== todayStr) {
+      const existingSnapshotResult = await postgresQuery(
+        'select count(*)::int as count from astro_route_snapshots where day = $1',
+        [dayStr]
+      );
+      const existingSnapshotCount = Number(existingSnapshotResult.rows?.[0]?.count || 0);
+      if (existingSnapshotCount > 0) {
+        dayBreakdown.push({
+          day: dayStr,
+          rows: 0,
+          activeRows: 0,
+          eligibleRows: 0,
+          requestErrorRows: 0,
+          whCaptured: 0,
+          podCaptured: [],
+          skipped: true,
+          skippedReason: 'existing_snapshot',
+          existingRows: existingSnapshotCount,
+        });
+        pushAstroSnapshotLog({
+          type: 'astro-sync-day',
+          result: 'skipped',
+          message: `Snapshot ${dayStr}: skip, sudah ada ${existingSnapshotCount} row di PostgreSQL`,
+          unitCount: 0,
+          activeUnitCount: 0,
+          eligibleUnitCount: 0,
+          podCount: 0,
+          rowCount: 0,
+          activeRowCount: 0,
+          eligibleRowCount: 0,
+          startDate: dayStr,
+          endDate: dayStr,
+          dayBreakdown: [{
+            day: dayStr,
+            rows: 0,
+            activeRows: 0,
+            eligibleRows: 0,
+            requestErrorRows: 0,
+            whCaptured: 0,
+            podCaptured: [],
+            skipped: true,
+            skippedReason: 'existing_snapshot',
+            existingRows: existingSnapshotCount,
+          }],
+        });
+        continue;
+      }
+    }
 
     console.log(`[AstroSnapshot] Processing ${dayStr}...`);
     const searchParams = new URLSearchParams();
@@ -6724,6 +6775,9 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
     podCount: totalPodCount,
     activeRowCount: activeRows.length,
     eligibleRowCount: eligibleRows.length,
+    skippedDays: dayBreakdown.filter(function (entry) { return entry.skipped; }).length,
+    processedDays: dayBreakdown.filter(function (entry) { return !entry.skipped; }).length,
+    dayBreakdown,
   };
 }
 
@@ -7359,7 +7413,9 @@ async function handleApi(req, res, url) {
       const body = await readRequestBody(req);
       const startMs = toTimestampMaybe(body.startDate) || (Date.now() - 4 * 24 * 60 * 60 * 1000);
       const endMs = toTimestampMaybe(body.endDate) || Date.now();
-      const result = await syncAstroSnapshots(startMs, endMs);
+      const result = await syncAstroSnapshots(startMs, endMs, {
+        skipExistingDays: body.skipExistingDays !== false,
+      });
       sendJson(res, 200, result);
     } catch (error) {
       sendApiError(res, error, 'Sync gagal.');
