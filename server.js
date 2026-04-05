@@ -6514,11 +6514,22 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs, options) {
     const dayStr = formatLocalDay(d);
     if (skipExistingDays && dayStr !== todayStr) {
       const existingSnapshotResult = await postgresQuery(
-        'select count(*)::int as count from astro_route_snapshots where day = $1',
+        `select
+          count(*)::int as count,
+          count(*) filter (
+            where id like '%::rit1'
+               or id like '%::rit2'
+               or id like '%::request_error'
+               or id like '%::na'
+          )::int as modern_count
+         from astro_route_snapshots
+         where day = $1`,
         [dayStr]
       );
       const existingSnapshotCount = Number(existingSnapshotResult.rows?.[0]?.count || 0);
-      if (existingSnapshotCount > 0) {
+      const modernSnapshotCount = Number(existingSnapshotResult.rows?.[0]?.modern_count || 0);
+      const hasLegacySnapshotRows = existingSnapshotCount > 0 && modernSnapshotCount < existingSnapshotCount;
+      if (existingSnapshotCount > 0 && !hasLegacySnapshotRows) {
         dayBreakdown.push({
           day: dayStr,
           rows: 0,
@@ -6558,6 +6569,36 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs, options) {
           }],
         });
         continue;
+      }
+      if (hasLegacySnapshotRows) {
+        await postgresQuery('delete from astro_route_snapshots where day = $1', [dayStr]);
+        pushAstroSnapshotLog({
+          type: 'astro-sync-day',
+          result: 'warning',
+          message: `Snapshot ${dayStr}: hapus ${existingSnapshotCount} legacy row, rebuild dengan format baru`,
+          unitCount: 0,
+          activeUnitCount: 0,
+          eligibleUnitCount: 0,
+          podCount: 0,
+          rowCount: existingSnapshotCount,
+          activeRowCount: 0,
+          eligibleRowCount: 0,
+          startDate: dayStr,
+          endDate: dayStr,
+          dayBreakdown: [{
+            day: dayStr,
+            rows: 0,
+            activeRows: 0,
+            eligibleRows: 0,
+            requestErrorRows: 0,
+            whCaptured: 0,
+            podCaptured: [],
+            skipped: false,
+            skippedReason: '',
+            existingRows: existingSnapshotCount,
+            rebuildingLegacy: true,
+          }],
+        });
       }
     }
 
