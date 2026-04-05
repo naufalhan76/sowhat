@@ -3422,7 +3422,28 @@ export default function App() {
                       log.eligibleUnitCount ?? '-',
                       log.rowCount ?? '-',
                       <Chip color={log.result === 'success' ? 'success' : log.result === 'error' ? 'danger' : 'warning'}>{log.result || '-'}</Chip>,
-                      log.message || '-',
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        <div>{log.message || '-'}</div>
+                        {Array.isArray(log.dayBreakdown) && log.dayBreakdown.length ? (
+                          <div style={{ display: 'grid', gap: 4, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {log.dayBreakdown.map((entry) => {
+                              const podParts = Array.isArray(entry.podCaptured)
+                                ? entry.podCaptured
+                                    .map((count, index) => (count ? `POD${index + 1} ${count}` : ''))
+                                    .filter(Boolean)
+                                : [];
+                              return (
+                                <div key={`${log.timestamp}-${entry.day}`}>
+                                  <strong style={{ color: 'var(--text)' }}>{entry.day}</strong>
+                                  {` | active ${entry.activeRows || 0} | eligible ${entry.eligibleRows || 0} | WH ${entry.whCaptured || 0}`}
+                                  {podParts.length ? ` | ${podParts.join(' | ')}` : ''}
+                                  {entry.requestErrorRows ? ` | error ${entry.requestErrorRows}` : ''}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>,
                     ])}
                   />
                 )}
