@@ -5886,11 +5886,21 @@ async function fetchUnitHistoryChunk(accountConfig, unitId, rangeStartMs, rangeE
   });
 
   const text = await response.text();
+  let cleanErrorText = text.slice(0, 130).replace(/[\r\n]+/g, ' ').trim();
+  if (/<!doctype html|<html/i.test(text)) {
+    const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      cleanErrorText = `External Server Error: ${titleMatch[1].trim()}`;
+    } else {
+      cleanErrorText = 'External Server returned HTML instead of JSON.';
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${text.slice(0, 180)}`);
+    throw new Error(`HTTP ${response.status}: ${cleanErrorText}`);
   }
   if (/<!doctype html|<html/i.test(text)) {
-    throw new Error('Solofleet returned HTML instead of JSON. Session cookie may be expired.');
+    throw new Error(`Session cookie may be expired (HTML result): ${cleanErrorText}`);
   }
 
   const payload = core.parsePossiblyDoubleEncodedJson(text);
