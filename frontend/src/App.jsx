@@ -935,7 +935,10 @@ export default function App() {
         let dayStr = String(row.day || '').trim();
         // Standarisasi string hari menjadi YYYY-MM-DD kalau formatnya menyimpang (seperti '01 Apr 2026')
         if (dayStr && !/^\d{4}-\d{2}-\d{2}$/.test(dayStr)) {
-          const parsed = new Date(Date.parse(dayStr));
+          // If only day/month is provided, force it to use the year from the UI range 
+          // to avoid JS fallback to year 2001.
+          const fallbackYear = range.startDate ? new Date(range.startDate).getFullYear() : new Date().getFullYear();
+          const parsed = new Date(Date.parse(`${dayStr} ${fallbackYear}`));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
@@ -2595,7 +2598,7 @@ export default function App() {
           <div className="overview-chart-head">
             <div>
               <h3>Temp report</h3>
-              <p>{range.startDate} to {range.endDate} | Tren temp error dan unit paling sering incident.</p>
+              <p>Tren temp error dan unit paling sering incident.</p>
             </div>
             <Chip color={busy ? 'warning' : 'default'}>{busy ? 'Loading...' : `${overviewTempTrend.length} day(s)`}</Chip>
           </div>
@@ -2635,19 +2638,19 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Astro KPI Per Warehouse — 2×2 Grid */}
+      {/* Row 3: Astro KPI Per Warehouse — Horizontal Grid */}
       <div className="overview-supplementary-row details-row">
         <div className="overview-chart-card overview-hero-chart details-card" style={{ gridColumn: 'span 2' }}>
           <div className="overview-chart-head">
             <div>
               <h3>Astro KPI per Warehouse</h3>
-              <p>{range.startDate} to {range.endDate} — Data ditampilkan sequential per warehouse.</p>
+              <p>Data ditampilkan sequential per warehouse.</p>
             </div>
             <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
               {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
             </Chip>
           </div>
-          <div className="overview-wh-grid-2x2">
+          <div className="overview-wh-grid-horizontal">
             {(() => {
               const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
               const kpiLines = [
@@ -4063,7 +4066,7 @@ function formatChartDayLabel(dayValue) {
 function formatChartDayTitle(dayValue) {
   const parsed = parseChartDayValue(dayValue);
   if (parsed) {
-    return new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'long', day: '2-digit' }).format(parsed);
+    return new Intl.DateTimeFormat('en-GB', { month: 'long', day: '2-digit' }).format(parsed);
   }
   const text = String(dayValue || '').trim();
   return text || '-';

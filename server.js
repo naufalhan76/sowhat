@@ -7245,6 +7245,14 @@ async function handleApi(req, res, url) {
           rows = result.rows || [];
       }
       
+      for (const r of rows) {
+          if (r.day && r.day instanceof Date) {
+              r.day = formatLocalDay(r.day.getTime());
+          } else if (r.day) {
+              r.day = String(r.day);
+          }
+      }
+      
       // Aggregate into byWarehouse format compatible with the dashboard UI
       const warehouseGroups = new Map();
       let totalPass = 0;
