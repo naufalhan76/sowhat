@@ -101,6 +101,10 @@ let pollTimer = null;
 let remoteResetTimer = null;
 let pollInFlight = false;
 let remoteResetInFlight = false;
+let astroSyncTimer = null;
+const ASTRO_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const ASTRO_SNAPSHOT_LOG_LIMIT = 100;
+const astroSnapshotLogs = [];
 const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
@@ -6432,8 +6436,18 @@ function scheduleNextAstroSnapshot() {
   }, delayMs);
 }
 
+function pushAstroSnapshotLog(entry) {
+  astroSnapshotLogs.unshift({ timestamp: Date.now(), ...entry });
+  if (astroSnapshotLogs.length > ASTRO_SNAPSHOT_LOG_LIMIT) {
+    astroSnapshotLogs.length = ASTRO_SNAPSHOT_LOG_LIMIT;
+  }
+}
+
 async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
-  if (!getPostgresConfig().enabled) return { ok: false, message: 'Postgres not enabled' };
+  if (!getPostgresConfig().enabled) {
+    pushAstroSnapshotLog({ type: 'astro-sync', result: 'skipped', message: 'Postgres not enabled', unitCount: 0, podCount: 0, startDate: '', endDate: '' });
+    return { ok: false, message: 'Postgres not enabled' };
+  }
   const searchParams = new URLSearchParams();
   searchParams.set('startDate', formatLocalDay(rangeStartMs));
   searchParams.set('endDate', formatLocalDay(rangeEndMs));
@@ -6521,7 +6535,11 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
     }
   }
   
+  const uniqueUnits = new Set(insertRows.map(r => r.unit_id));
+  const totalPodCount = insertRows.reduce((sum, r) => sum + (r.pod_count || 0), 0);
+
   if (insertRows.length > 0) {
+    try {
       await postgresUpsertRows(
         'astro_route_snapshots',
         insertRows,
@@ -6533,8 +6551,43 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
         ['id'],
         { touchUpdatedAt: true }
       );
+      pushAstroSnapshotLog({
+        type: 'astro-sync',
+        result: 'success',
+        message: `Berhasil snapshot ${insertRows.length} row, ${uniqueUnits.size} nopol, ${totalPodCount} POD`,
+        unitCount: uniqueUnits.size,
+        podCount: totalPodCount,
+        rowCount: insertRows.length,
+        startDate: formatLocalDay(rangeStartMs),
+        endDate: formatLocalDay(rangeEndMs),
+      });
+    } catch (error) {
+      pushAstroSnapshotLog({
+        type: 'astro-sync',
+        result: 'error',
+        message: error.message || 'Upsert failed',
+        unitCount: uniqueUnits.size,
+        podCount: totalPodCount,
+        rowCount: insertRows.length,
+        startDate: formatLocalDay(rangeStartMs),
+        endDate: formatLocalDay(rangeEndMs),
+      });
+      throw error;
+    }
+  } else {
+    pushAstroSnapshotLog({
+      type: 'astro-sync',
+      result: 'success',
+      message: 'Tidak ada data snapshot untuk di-sync',
+      unitCount: 0,
+      podCount: 0,
+      rowCount: 0,
+      startDate: formatLocalDay(rangeStartMs),
+      endDate: formatLocalDay(rangeEndMs),
+    });
   }
-  return { ok: true, snapshotsSaved: insertRows.length };
+  state.runtime.lastSnapshotAt = new Date().toISOString();
+  return { ok: true, snapshotsSaved: insertRows.length, unitCount: uniqueUnits.size, podCount: totalPodCount };
 }
 
 async function runPollCycle(trigger) {
@@ -7145,6 +7198,20 @@ async function handleApi(req, res, url) {
     } catch (error) {
       sendApiError(res, error, 'Aksi gagal diproses.');
     }
+    return true;
+  }
+
+  if (pathname === '/api/astro/snapshots/logs' && method === 'GET') {
+    sendJson(res, 200, {
+      ok: true,
+      logs: astroSnapshotLogs,
+      autoSync: {
+        enabled: Boolean(astroSnapshotTimer),
+        intervalHours: 3,
+        lastSyncAt: state.runtime.lastSnapshotAt || null,
+        isPolling: state.runtime.isPolling,
+      },
+    });
     return true;
   }
 

@@ -577,6 +577,11 @@ export default function App() {
   const [overviewAccountId, setOverviewAccountId] = useState('primary');
   const [overviewAstroSummary, setOverviewAstroSummary] = useState(null);
   const [overviewAstroBusy, setOverviewAstroBusy] = useState(false);
+  const [revealedWhCount, setRevealedWhCount] = useState(0);
+  const [astroSnapshotLogs, setAstroSnapshotLogs] = useState([]);
+  const [astroSnapshotLogsBusy, setAstroSnapshotLogsBusy] = useState(false);
+  const [astroSnapshotAutoSync, setAstroSnapshotAutoSync] = useState(null);
+  const [astroSnapshotConsoleSectionOpen, setAstroSnapshotConsoleSectionOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
@@ -749,6 +754,7 @@ export default function App() {
     }
     let cancelled = false;
     setOverviewAstroBusy(true);
+    setRevealedWhCount(0);
     api(`/api/astro/snapshots?${new URLSearchParams({
       startDate: range.startDate,
       endDate: range.endDate,
@@ -772,6 +778,22 @@ export default function App() {
       cancelled = true;
     };
   }, [activePanel, overviewAccountId, range.startDate, range.endDate]);
+
+  // Staggered reveal: after data loads, reveal WH cards one by one
+  useEffect(() => {
+    if (overviewAstroBusy || !overviewAstroSummary) {
+      setRevealedWhCount(0);
+      return undefined;
+    }
+    setRevealedWhCount(0);
+    let count = 0;
+    const timer = setInterval(() => {
+      count += 1;
+      setRevealedWhCount(count);
+      if (count >= 4) clearInterval(timer);
+    }, 800);
+    return () => clearInterval(timer);
+  }, [overviewAstroBusy, overviewAstroSummary]);
 
   const astroReportColumns = useMemo(() => {
     const base = [
@@ -905,42 +927,63 @@ export default function App() {
 
   const overviewTempTrend = useMemo(() => {
     const grouped = new Map();
-    errorUnitsSummary
+    const rowsToProcess = Array.isArray(errorUnitsSummary) ? errorUnitsSummary : [];
+    
+    rowsToProcess
       .filter((row) => overviewAccountId === 'all' || String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
       .forEach((row) => {
-        const day = String(row.day || '').trim();
-        if (!day) return;
-        if (!grouped.has(day)) {
-          grouped.set(day, { day, incidents: 0, affectedUnitKeys: new Set(), totalMinutes: 0 });
+        let dayStr = String(row.day || '').trim();
+        // Standarisasi string hari menjadi YYYY-MM-DD kalau formatnya menyimpang (seperti '01 Apr 2026')
+        if (dayStr && !/^\d{4}-\d{2}-\d{2}$/.test(dayStr)) {
+          const parsed = new Date(Date.parse(dayStr));
+          if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const d = String(parsed.getDate()).padStart(2, '0');
+            dayStr = `${y}-${m}-${d}`;
+          }
         }
-        const bucket = grouped.get(day);
+        if (!dayStr) return;
+        
+        if (!grouped.has(dayStr)) {
+          grouped.set(dayStr, { day: dayStr, incidents: 0, affectedUnitKeys: new Set(), totalMinutes: 0 });
+        }
+        const bucket = grouped.get(dayStr);
         bucket.incidents += Number(row.incidents || 0);
         bucket.totalMinutes += Number(row.totalMinutes || 0);
         bucket.affectedUnitKeys.add(String(row.unitId || row.vehicle || row.unitLabel || `unit-${bucket.affectedUnitKeys.size + 1}`));
       });
 
-    const toPoint = (bucket, day) => ({
-      day,
-      incidents: Number(bucket?.incidents || 0),
-      affectedUnits: bucket?.affectedUnitKeys instanceof Set ? bucket.affectedUnitKeys.size : Number(bucket?.affectedUnits || 0),
-      totalMinutes: Number(bucket?.totalMinutes || 0),
-    });
-
-    const start = new Date(range.startDate);
-    const end = new Date(range.endDate);
-    const days = [];
-    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-      let current = new Date(start);
-      while (current <= end) {
-        days.push(current.toISOString().split('T')[0]);
-        current.setDate(current.getDate() + 1);
+    const daysSet = new Set();
+    const startObj = new Date(range.startDate);
+    const endObj = new Date(range.endDate);
+    
+    if (!isNaN(startObj.getTime()) && !isNaN(endObj.getTime())) {
+      // Gunakan iterasi UTC yang stabil untuk menghindari skip hari karena DST lokal
+      let currentUtc = new Date(Date.UTC(startObj.getFullYear(), startObj.getMonth(), startObj.getDate()));
+      const endUtc = new Date(Date.UTC(endObj.getFullYear(), endObj.getMonth(), endObj.getDate()));
+      
+      while (currentUtc <= endUtc) {
+        daysSet.add(currentUtc.toISOString().split('T')[0]);
+        currentUtc.setUTCDate(currentUtc.getUTCDate() + 1);
       }
-    } else {
-      days.push(...[...new Set((compileDailyRows || []).map((row) => String(row.day || '').trim()).filter(Boolean))].reverse());
     }
+    
+    // Safety check: Paksakan seluruh day yang berisi incident tampil di chart
+    [...grouped.keys()].forEach((d) => daysSet.add(d));
 
-    return days.map(day => toPoint(grouped.get(day), day));
-  }, [compileDailyRows, errorUnitsSummary, overviewAccountId, range.startDate, range.endDate]);
+    const finalDays = [...daysSet].sort();
+
+    return finalDays.map((day) => {
+      const bucket = grouped.get(day);
+      return {
+        day,
+        incidents: Number(bucket?.incidents || 0),
+        affectedUnits: bucket?.affectedUnitKeys instanceof Set ? bucket.affectedUnitKeys.size : Number(bucket?.affectedUnits || 0),
+        totalMinutes: Number(bucket?.totalMinutes || 0),
+      };
+    });
+  }, [errorUnitsSummary, overviewAccountId, range.startDate, range.endDate]);
   const overviewTempHotspots = useMemo(() => {
     const grouped = new Map();
     errorUnitsSummary
@@ -1202,6 +1245,40 @@ export default function App() {
       });
     } finally {
       if (!quiet) stopBusy();
+    }
+  };
+
+  const loadAstroSnapshotLogs = async (quiet = false) => {
+    if (!quiet) setAstroSnapshotLogsBusy(true);
+    try {
+      const payload = await api('/api/astro/snapshots/logs');
+      startTransition(() => {
+        setAstroSnapshotLogs(payload.logs || []);
+        setAstroSnapshotAutoSync(payload.autoSync || null);
+      });
+    } catch (e) {
+      if (!quiet) setBanner({ tone: 'error', message: `Gagal load snapshot logs: ${e.message}` });
+    } finally {
+      setAstroSnapshotLogsBusy(false);
+    }
+  };
+
+  const triggerAstroSnapshotSync = async () => {
+    startBusy('Menjalankan Astro snapshot sync...');
+    try {
+      const result = await api('/api/astro/snapshots/sync', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setBanner({
+        tone: 'success',
+        message: `Sync selesai: ${result.snapshotsSaved || 0} row, ${result.unitCount || 0} nopol, ${result.podCount || 0} POD.`,
+      });
+      await loadAstroSnapshotLogs(true);
+    } catch (e) {
+      setBanner({ tone: 'error', message: `Sync gagal: ${e.message}` });
+    } finally {
+      stopBusy();
     }
   };
 
@@ -2558,36 +2635,59 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Astro KPI Per Warehouse */}
+      {/* Row 3: Astro KPI Per Warehouse — 2×2 Grid */}
       <div className="overview-supplementary-row details-row">
         <div className="overview-chart-card overview-hero-chart details-card" style={{ gridColumn: 'span 2' }}>
           <div className="overview-chart-head">
             <div>
               <h3>Astro KPI per Warehouse</h3>
-              <p>{range.startDate} to {range.endDate} — Top 4 WH berdasarkan rit eligible.</p>
+              <p>{range.startDate} to {range.endDate} — Data ditampilkan sequential per warehouse.</p>
             </div>
-            <Chip color={overviewAstroBusy ? 'warning' : 'default'}>{overviewAstroBusy ? 'Loading...' : `${overviewAstroByWarehouse.length} WH`}</Chip>
+            <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
+              {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
+            </Chip>
           </div>
-          <div className="overview-wh-charts" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '24px', flex: 1, padding: '0 24px 24px 24px' }}>
+          <div className="overview-wh-grid-2x2">
             {(() => {
-              const targetWarehouses = ['BGO', 'CBN', 'PGS', 'SRG'];
-              let selectedWh = overviewAstroByWarehouse.filter(wh => targetWarehouses.some(t => (wh.whName || wh.warehouse || '').toUpperCase().includes(t)));
-              if (selectedWh.length < 4) {
-                selectedWh = [...selectedWh, ...overviewAstroByWarehouse.filter(wh => !selectedWh.includes(wh))].slice(0, 4);
-              }
+              const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
               const kpiLines = [
                 { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
                 { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
                 { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
               ];
-              if (!selectedWh.length) return <div className="overview-chart-empty" style={{ gridColumn: 'span 4' }}>Belum ada data Warehouse untuk periode ini.</div>;
-              
-              return selectedWh.map((warehouse) => (
-                <div key={"warehouse-" + (warehouse.whName || warehouse.warehouse)} className="overview-mini-trend-card">
-                  <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--c-text-main)', textAlign: 'center' }}>{warehouse.whName || warehouse.warehouse}</h4>
-                  <OverviewMultiLineChart points={warehouse.trend || []} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={100} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
-                </div>
-              ));
+
+              return TARGET_WH.map((whKey, index) => {
+                const warehouseData = overviewAstroByWarehouse.find(wh =>
+                  (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
+                );
+                const isRevealed = !overviewAstroBusy && index < revealedWhCount;
+
+                return (
+                  <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`}>
+                    <h4 className="overview-wh-card-title">WH {whKey}</h4>
+                    {isRevealed ? (
+                      warehouseData ? (
+                        <OverviewMultiLineChart
+                          points={warehouseData.trend || []}
+                          busy={false}
+                          lines={kpiLines}
+                          emptyMessage="Belum ada trend WH."
+                          maxFloor={100}
+                          tooltipTitle={(point) => formatChartDayTitle(point?.day)}
+                        />
+                      ) : (
+                        <div className="overview-chart-empty">Belum ada data untuk WH {whKey}.</div>
+                      )
+                    ) : (
+                      <div className="wh-card-shimmer">
+                        <div className="wh-shimmer-bar" />
+                        <div className="wh-shimmer-bar short" />
+                        <span className="wh-loading-text">Sedang Menarik Data...</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              });
             })()}
           </div>
         </div>
@@ -3281,6 +3381,52 @@ export default function App() {
               </CardContent> : null}
             </Card>
             </> : null}
+
+          {activePanel === 'config' ? <>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Astro Snapshot Console</h2>
+                  <p>Kelola snapshot KPI Astro ke PostgreSQL. Auto-sync berjalan setiap 3 jam saat polling aktif.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" className="section-chevron-button" onPress={() => {
+                    const next = !astroSnapshotConsoleSectionOpen;
+                    setAstroSnapshotConsoleSectionOpen(next);
+                    if (next) loadAstroSnapshotLogs(true);
+                  }} aria-label={astroSnapshotConsoleSectionOpen ? 'Collapse' : 'Expand'}>
+                    {astroSnapshotConsoleSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </Button>
+                  {astroSnapshotConsoleSectionOpen ? <Button variant="bordered" onPress={() => loadAstroSnapshotLogs(false)}>Refresh Logs</Button> : null}
+                  {astroSnapshotConsoleSectionOpen ? <Button color="primary" onPress={triggerAstroSnapshotSync}>Sync Now</Button> : null}
+                </div>
+              </CardHeader>
+              {astroSnapshotConsoleSectionOpen ? <CardContent>
+                <div className="metric-strip admin-storage-strip">
+                  <div className="mini-metric"><span>Auto-sync</span><strong style={{ color: astroSnapshotAutoSync?.isPolling ? 'var(--success, #34d399)' : 'var(--text-muted)' }}>{astroSnapshotAutoSync?.isPolling ? 'Active' : 'Inactive'}</strong></div>
+                  <div className="mini-metric"><span>Interval</span><strong>{astroSnapshotAutoSync?.intervalHours || 3} jam</strong></div>
+                  <div className="mini-metric"><span>Last sync</span><strong>{astroSnapshotAutoSync?.lastSyncAt ? fmtDate(astroSnapshotAutoSync.lastSyncAt) : 'Belum pernah'}</strong></div>
+                  <div className="mini-metric"><span>Log entries</span><strong>{astroSnapshotLogs.length}</strong></div>
+                </div>
+                {astroSnapshotLogsBusy ? <div className="overview-chart-empty">Memuat log...</div> : (
+                  <DataTable
+                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                    columns={['Waktu', 'Range', 'Nopol', 'POD', 'Rows', 'Status', 'Message']}
+                    emptyMessage="Belum ada snapshot log. Klik Sync Now untuk menjalankan snapshot pertama."
+                    rows={astroSnapshotLogs.map((log) => [
+                      fmtDate(log.timestamp),
+                      log.startDate && log.endDate ? `${log.startDate} → ${log.endDate}` : '-',
+                      log.unitCount ?? '-',
+                      log.podCount ?? '-',
+                      log.rowCount ?? '-',
+                      <Chip color={log.result === 'success' ? 'success' : log.result === 'error' ? 'danger' : 'warning'}>{log.result || '-'}</Chip>,
+                      log.message || '-',
+                    ])}
+                  />
+                )}
+              </CardContent> : null}
+            </Card>
+          </> : null}
 
           {activePanel === 'admin' ? <>
             <Card className="panel-card">
