@@ -4134,6 +4134,8 @@ async function ensurePostgresSchema() {
       reason text,
       wh_kpi text,
       pod_kpi text,
+      wh_time_kpi text,
+      wh_temp_kpi text,
       rit text,
       pod_count integer,
       pass_count integer,
@@ -4145,6 +4147,9 @@ async function ensurePostgresSchema() {
     create index if not exists idx_astro_route_snapshots_day on astro_route_snapshots(day desc);
     create index if not exists idx_astro_route_snapshots_unit on astro_route_snapshots(unit_id);
     create index if not exists idx_astro_route_snapshots_warehouse on astro_route_snapshots(warehouse_name);
+
+    alter table astro_route_snapshots add column if not exists wh_time_kpi text;
+    alter table astro_route_snapshots add column if not exists wh_temp_kpi text;
   `);
 }
 
@@ -6460,6 +6465,8 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
       let reason = 'Unit tidak melakukan perjalanan (Idle)';
       let wh_kpi = null;
       let pod_kpi = null;
+      let wh_time_kpi = null;
+      let wh_temp_kpi = null;
       let pod_count = 0;
       let pass_count = 0;
       let fail_count = 0;
@@ -6469,7 +6476,9 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
          status = 'active';
          reason = '';
          const firstRow = routeRows[0];
-         wh_kpi = firstRow.whArrivalTempKpi === 'fail' || firstRow.whArrivalTimeKpi === 'fail' ? 'fail' : 'pass';
+         wh_time_kpi = firstRow.whArrivalTimeKpi === 'fail' ? 'fail' : 'pass';
+         wh_temp_kpi = firstRow.whArrivalTempKpi === 'fail' ? 'fail' : 'pass';
+         wh_kpi = wh_time_kpi === 'fail' || wh_temp_kpi === 'fail' ? 'fail' : 'pass';
          
          const podKpis = Object.keys(firstRow).filter(k => k.startsWith('pod') && k.endsWith('Kpi'));
          pod_count = podKpis.length;
@@ -6502,6 +6511,8 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
          reason,
          wh_kpi,
          pod_kpi,
+         wh_time_kpi,
+         wh_temp_kpi,
          rit,
          pod_count,
          pass_count,
@@ -6516,7 +6527,7 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
         insertRows,
         [
           'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'customer_name', 
-          'route_id', 'warehouse_name', 'status', 'reason', 'wh_kpi', 'pod_kpi', 'rit', 
+          'route_id', 'warehouse_name', 'status', 'reason', 'wh_kpi', 'pod_kpi', 'wh_time_kpi', 'wh_temp_kpi', 'rit', 
           'pod_count', 'pass_count', 'fail_count'
         ],
         ['id'],
@@ -7173,21 +7184,83 @@ async function handleApi(req, res, url) {
       let totalFail = 0;
       let totalEligible = 0;
       
-      for (const r of rows) {
-          if (!warehouseGroups.has(r.warehouse_name)) {
-              warehouseGroups.set(r.warehouse_name, { warehouse: r.warehouse_name, eligibleRows: 0, passRows: 0, failRows: 0, kpi: 0 });
+      const prepareWH = (wh) => {
+          if (!warehouseGroups.has(wh)) {
+              warehouseGroups.set(wh, { 
+                  warehouse: wh, 
+                  trend: [], 
+                  eligibleRows: 0, 
+                  passRows: 0, 
+                  failRows: 0, 
+                  kpi: 0
+              });
           }
-          const w = warehouseGroups.get(r.warehouse_name);
+          return warehouseGroups.get(wh);
+      };
+      
+      const whTrendMap = new Map();
+      const getWhTrendDay = (wh, day) => {
+          const key = wh + '::' + day;
+          if (!whTrendMap.has(key)) {
+              whTrendMap.set(key, { 
+                  day, 
+                  warehouse: wh,
+                  eligibleRows: 0, 
+                  whArrivalTimePass: 0, 
+                  whArrivalTimeEligible: 0,
+                  whArrivalTempPass: 0,
+                  whArrivalTempEligible: 0,
+                  podArrivalPass: 0,
+                  podArrivalEligible: 0
+              });
+          }
+          return whTrendMap.get(key);
+      };
+
+      for (const r of rows) {
+          const w = prepareWH(r.warehouse_name);
           w.eligibleRows += 1;
           totalEligible += 1;
-          if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && r.pod_kpi === 'pass')) {
+          if (r.status === 'active' && r.wh_kpi === 'pass' && r.pod_kpi === 'pass') {
              w.passRows += 1;
              totalPass += 1;
-          } else if (r.status === 'active' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail' || r.status === 'request_error') {
+          } else if (r.status === 'active' || r.status === 'request_error') {
              w.failRows += 1;
              totalFail += 1;
           }
           w.kpi = w.eligibleRows > 0 ? (w.passRows / w.eligibleRows) * 100 : 0;
+          
+          if (r.status === 'active' || r.status === 'request_error' || r.wh_time_kpi || r.pod_kpi) {
+              const td = getWhTrendDay(r.warehouse_name, r.day);
+              td.eligibleRows += 1;
+              if (r.wh_time_kpi) {
+                  td.whArrivalTimeEligible += 1;
+                  if (r.wh_time_kpi === 'pass') td.whArrivalTimePass += 1;
+              }
+              if (r.wh_temp_kpi) {
+                  td.whArrivalTempEligible += 1;
+                  if (r.wh_temp_kpi === 'pass') td.whArrivalTempPass += 1;
+              }
+              if (r.pod_kpi) {
+                  td.podArrivalEligible += 1;
+                  if (r.pod_kpi === 'pass') td.podArrivalPass += 1;
+              }
+          }
+      }
+      
+      for (const td of whTrendMap.values()) {
+        const w = prepareWH(td.warehouse);
+        w.trend.push({
+            day: td.day,
+            whArrivalTimeRate: td.whArrivalTimeEligible > 0 ? (td.whArrivalTimePass / td.whArrivalTimeEligible) * 100 : 0,
+            whArrivalTempRate: td.whArrivalTempEligible > 0 ? (td.whArrivalTempPass / td.whArrivalTempEligible) * 100 : 0,
+            podArrivalRate: td.podArrivalEligible > 0 ? (td.podArrivalPass / td.podArrivalEligible) * 100 : 0,
+            eligibleRows: td.eligibleRows
+        });
+      }
+      
+      for (const w of warehouseGroups.values()) {
+          w.trend.sort((a,b) => a.day.localeCompare(b.day));
       }
       
       const byWarehouse = [...warehouseGroups.values()].sort((a,b) => b.eligibleRows - a.eligibleRows);

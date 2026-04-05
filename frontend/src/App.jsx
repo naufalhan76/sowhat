@@ -2576,15 +2576,16 @@ export default function App() {
                 selectedWh = [...selectedWh, ...overviewAstroByWarehouse.filter(wh => !selectedWh.includes(wh))].slice(0, 4);
               }
               const kpiLines = [
-                { key: 'passRows', colorHex: '#81C784', label: 'Pass' },
-                { key: 'failRows', colorHex: '#E57373', label: 'Fail' },
+                { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
+                { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
+                { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
               ];
               if (!selectedWh.length) return <div className="overview-chart-empty" style={{ gridColumn: 'span 4' }}>Belum ada data Warehouse untuk periode ini.</div>;
               
               return selectedWh.map((warehouse) => (
                 <div key={"warehouse-" + (warehouse.whName || warehouse.warehouse)} className="overview-mini-trend-card">
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--c-text-main)', textAlign: 'center' }}>{warehouse.whName || warehouse.warehouse}</h4>
-                  <OverviewMultiLineChart points={warehouse.trend || []} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={1} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
+                  <OverviewMultiLineChart points={warehouse.trend || []} busy={overviewAstroBusy} lines={kpiLines} emptyMessage="Belum ada trend WH." maxFloor={100} tooltipTitle={(point) => formatChartDayTitle(point?.day)} />
                 </div>
               ));
             })()}
