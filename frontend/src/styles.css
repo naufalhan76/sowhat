@@ -4151,11 +4151,14 @@ textarea:focus {
 }
 
 /* ── Astro KPI Per Warehouse Horizontal Grid ── */
+.overview-astro-fullwidth {
+  width: 100%;
+}
+
 .overview-wh-grid-horizontal {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  padding: 0 16px 16px 16px;
+  gap: 12px;
 }
 
 .overview-wh-card {

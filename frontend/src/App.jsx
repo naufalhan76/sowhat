@@ -2638,61 +2638,59 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Astro KPI Per Warehouse — Horizontal Grid */}
-      <div className="overview-supplementary-row details-row">
-        <div className="overview-chart-card overview-hero-chart details-card" style={{ gridColumn: 'span 2' }}>
-          <div className="overview-chart-head">
-            <div>
-              <h3>Astro KPI per Warehouse</h3>
-              <p>Data ditampilkan sequential per warehouse.</p>
-            </div>
-            <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
-              {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
-            </Chip>
+      {/* Row 3: Astro KPI Per Warehouse — Full-width Horizontal Grid */}
+      <div className="overview-chart-card overview-astro-fullwidth">
+        <div className="overview-chart-head">
+          <div>
+            <h3>Astro KPI per Warehouse</h3>
+            <p>Data ditampilkan sequential per warehouse.</p>
           </div>
-          <div className="overview-wh-grid-horizontal">
-            {(() => {
-              const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
-              const kpiLines = [
-                { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
-                { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
-                { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
-              ];
+          <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
+            {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
+          </Chip>
+        </div>
+        <div className="overview-wh-grid-horizontal">
+          {(() => {
+            const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
+            const kpiLines = [
+              { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
+              { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
+              { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
+            ];
 
-              return TARGET_WH.map((whKey, index) => {
-                const warehouseData = overviewAstroByWarehouse.find(wh =>
-                  (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
-                );
-                const isRevealed = !overviewAstroBusy && index < revealedWhCount;
+            return TARGET_WH.map((whKey, index) => {
+              const warehouseData = overviewAstroByWarehouse.find(wh =>
+                (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
+              );
+              const isRevealed = !overviewAstroBusy && index < revealedWhCount;
 
-                return (
-                  <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`}>
-                    <h4 className="overview-wh-card-title">WH {whKey}</h4>
-                    {isRevealed ? (
-                      warehouseData ? (
-                        <OverviewMultiLineChart
-                          points={warehouseData.trend || []}
-                          busy={false}
-                          lines={kpiLines}
-                          emptyMessage="Belum ada trend WH."
-                          maxFloor={100}
-                          tooltipTitle={(point) => formatChartDayTitle(point?.day)}
-                        />
-                      ) : (
-                        <div className="overview-chart-empty">Belum ada data untuk WH {whKey}.</div>
-                      )
+              return (
+                <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`}>
+                  <h4 className="overview-wh-card-title">WH {whKey}</h4>
+                  {isRevealed ? (
+                    warehouseData ? (
+                      <OverviewMultiLineChart
+                        points={warehouseData.trend || []}
+                        busy={false}
+                        lines={kpiLines}
+                        emptyMessage="Belum ada trend WH."
+                        maxFloor={100}
+                        tooltipTitle={(point) => formatChartDayTitle(point?.day)}
+                      />
                     ) : (
-                      <div className="wh-card-shimmer">
-                        <div className="wh-shimmer-bar" />
-                        <div className="wh-shimmer-bar short" />
-                        <span className="wh-loading-text">Sedang Menarik Data...</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-          </div>
+                      <div className="overview-chart-empty">Belum ada data untuk WH {whKey}.</div>
+                    )
+                  ) : (
+                    <div className="wh-card-shimmer">
+                      <div className="wh-shimmer-bar" />
+                      <div className="wh-shimmer-bar short" />
+                      <span className="wh-loading-text">Sedang Menarik Data...</span>
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
     </CardContent>
