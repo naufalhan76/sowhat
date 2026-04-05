@@ -6469,6 +6469,13 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
     pushAstroSnapshotLog({ type: 'astro-sync', result: 'skipped', message: 'Postgres not enabled', unitCount: 0, podCount: 0, startDate: '', endDate: '' });
     return { ok: false, message: 'Postgres not enabled' };
   }
+  const isSnapshotEligibleRow = function (row) {
+    return row.status === 'active'
+      || row.status === 'request_error'
+      || Boolean(row.wh_time_kpi)
+      || Boolean(row.wh_temp_kpi)
+      || Boolean(row.pod_kpi);
+  };
   const searchParams = new URLSearchParams();
   searchParams.set('startDate', formatLocalDay(rangeStartMs));
   searchParams.set('endDate', formatLocalDay(rangeEndMs));
@@ -6490,9 +6497,21 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
       const accountConfig = getAccountConfigById(route.accountId || 'primary');
       const unitLabel = resolveAstroUnitLabel(accountConfig, route.unitId) || route.unitId;
       const whName = (config.astroLocations || []).find(l => l.id === route.whLocationId)?.name || 'WH';
-      
-      const routeRows = (payload.flatRows || []).filter(r => (r.routeId === route.id || r.unitId === route.unitId) && r.serviceDate === dayStr);
-      const diagnostics = (payload.diagnostics || []).filter(d => (d.routeId === route.id || d.unitId === route.unitId || d.unitLabel === unitLabel) && d.serviceDate === dayStr);
+      const routeRows = (payload.flatRows || []).filter(function (row) {
+        if (row.serviceDate !== dayStr) return false;
+        if (String(row.routeId || '').trim() && String(route.id || '').trim()) {
+          return String(row.routeId || '').trim() === String(route.id || '').trim();
+        }
+        return String(row.unitId || '').trim().toUpperCase() === String(route.unitId || '').trim().toUpperCase();
+      });
+      const diagnostics = (payload.diagnostics || []).filter(function (entry) {
+        if (entry.serviceDate !== dayStr) return false;
+        if (String(entry.routeId || '').trim() && String(route.id || '').trim()) {
+          return String(entry.routeId || '').trim() === String(route.id || '').trim();
+        }
+        return String(entry.unitId || '').trim().toUpperCase() === String(route.unitId || '').trim().toUpperCase()
+          || String(entry.unitLabel || '').trim() === unitLabel;
+      });
       
       const id = `${dayStr}::${route.accountId || 'primary'}::${route.unitId}::${route.routeId || route.id}`;
       
@@ -6511,20 +6530,25 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
          status = 'active';
          reason = '';
          const firstRow = routeRows[0];
-         wh_time_kpi = firstRow.whArrivalTimeKpi === 'fail' ? 'fail' : 'pass';
-         wh_temp_kpi = firstRow.whArrivalTempKpi === 'fail' ? 'fail' : 'pass';
-         wh_kpi = wh_time_kpi === 'fail' || wh_temp_kpi === 'fail' ? 'fail' : 'pass';
-         
-         const podKpis = Object.keys(firstRow).filter(k => k.startsWith('pod') && k.endsWith('Kpi'));
+         wh_time_kpi = firstRow.whArrivalTimeKpi || null;
+         wh_temp_kpi = firstRow.whArrivalTempKpi || null;
+         wh_kpi = wh_time_kpi === 'fail' || wh_temp_kpi === 'fail'
+           ? 'fail'
+           : (wh_time_kpi === 'pass' || wh_temp_kpi === 'pass' ? 'pass' : null);
+
+         const podKpis = Object.keys(firstRow).filter(function (key) {
+           return /^pod\d+Kpi$/.test(key) && firstRow[key];
+         });
          pod_count = podKpis.length;
-         pod_kpi = 'pass';
-         for (const pk of podKpis) {
-             if (firstRow[pk] === 'fail') pod_kpi = 'fail';
-         }
-         if (wh_kpi === 'fail' || pod_kpi === 'fail') {
-            fail_count = 1;
-         } else {
+         pod_kpi = podKpis.some(function (key) { return firstRow[key] === 'fail'; })
+           ? 'fail'
+           : (podKpis.some(function (key) { return firstRow[key] === 'pass'; }) ? 'pass' : null);
+
+         const overallKpiStatus = firstRow.overallKpi || null;
+         if (overallKpiStatus === 'pass' || (wh_kpi === 'pass' && (pod_kpi === 'pass' || pod_kpi === null))) {
             pass_count = 1;
+         } else if (overallKpiStatus === 'fail' || wh_kpi === 'fail' || pod_kpi === 'fail') {
+            fail_count = 1;
          }
          rit = firstRow.rit || '-';
       } else if (diagnostics.length > 0) {
@@ -6557,6 +6581,10 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
   }
   
   const uniqueUnits = new Set(insertRows.map(r => r.unit_id));
+  const activeRows = insertRows.filter(function (row) { return row.status === 'active'; });
+  const eligibleRows = insertRows.filter(isSnapshotEligibleRow);
+  const uniqueActiveUnits = new Set(activeRows.map(r => r.unit_id));
+  const uniqueEligibleUnits = new Set(eligibleRows.map(r => r.unit_id));
   const totalPodCount = insertRows.reduce((sum, r) => sum + (r.pod_count || 0), 0);
 
   if (insertRows.length > 0) {
@@ -6575,10 +6603,14 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
       pushAstroSnapshotLog({
         type: 'astro-sync',
         result: 'success',
-        message: `Berhasil snapshot ${insertRows.length} row, ${uniqueUnits.size} nopol, ${totalPodCount} POD`,
+        message: `Berhasil simpan ${insertRows.length} row route, ${uniqueUnits.size} unit discan, ${uniqueEligibleUnits.size} unit eligible KPI, ${activeRows.length} row aktif`,
         unitCount: uniqueUnits.size,
+        activeUnitCount: uniqueActiveUnits.size,
+        eligibleUnitCount: uniqueEligibleUnits.size,
         podCount: totalPodCount,
         rowCount: insertRows.length,
+        activeRowCount: activeRows.length,
+        eligibleRowCount: eligibleRows.length,
         startDate: formatLocalDay(rangeStartMs),
         endDate: formatLocalDay(rangeEndMs),
       });
@@ -6588,8 +6620,12 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
         result: 'error',
         message: error.message || 'Upsert failed',
         unitCount: uniqueUnits.size,
+        activeUnitCount: uniqueActiveUnits.size,
+        eligibleUnitCount: uniqueEligibleUnits.size,
         podCount: totalPodCount,
         rowCount: insertRows.length,
+        activeRowCount: activeRows.length,
+        eligibleRowCount: eligibleRows.length,
         startDate: formatLocalDay(rangeStartMs),
         endDate: formatLocalDay(rangeEndMs),
       });
@@ -6601,14 +6637,27 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs) {
       result: 'success',
       message: 'Tidak ada data snapshot untuk di-sync',
       unitCount: 0,
+      activeUnitCount: 0,
+      eligibleUnitCount: 0,
       podCount: 0,
       rowCount: 0,
+      activeRowCount: 0,
+      eligibleRowCount: 0,
       startDate: formatLocalDay(rangeStartMs),
       endDate: formatLocalDay(rangeEndMs),
     });
   }
   state.runtime.lastSnapshotAt = new Date().toISOString();
-  return { ok: true, snapshotsSaved: insertRows.length, unitCount: uniqueUnits.size, podCount: totalPodCount };
+  return {
+    ok: true,
+    snapshotsSaved: insertRows.length,
+    unitCount: uniqueUnits.size,
+    activeUnitCount: uniqueActiveUnits.size,
+    eligibleUnitCount: uniqueEligibleUnits.size,
+    podCount: totalPodCount,
+    activeRowCount: activeRows.length,
+    eligibleRowCount: eligibleRows.length,
+  };
 }
 
 async function runPollCycle(trigger) {
@@ -7256,13 +7305,17 @@ async function handleApi(req, res, url) {
       const range = parseDateRange(url.searchParams);
       const startDay = formatLocalDay(range.rangeStartMs || Date.now());
       const endDay = formatLocalDay(range.rangeEndMs || Date.now());
-      
+      const accountId = String(url.searchParams.get('accountId') || 'all').trim() || 'all';
+
       let rows = [];
       if (getPostgresConfig().enabled) {
-          const result = await postgresQuery(
-            `select * from astro_route_snapshots where day >= $1 and day <= $2`,
-            [startDay, endDay]
-          );
+          const params = [startDay, endDay];
+          let query = `select * from astro_route_snapshots where day >= $1 and day <= $2`;
+          if (accountId !== 'all') {
+            query += ` and account_id = $3`;
+            params.push(accountId);
+          }
+          const result = await postgresQuery(query, params);
           rows = result.rows || [];
       }
       
@@ -7314,19 +7367,33 @@ async function handleApi(req, res, url) {
       };
 
       for (const r of rows) {
+          const isEligible = r.status === 'active'
+            || r.status === 'request_error'
+            || Boolean(r.wh_time_kpi)
+            || Boolean(r.wh_temp_kpi)
+            || Boolean(r.pod_kpi);
+          const isPass = r.kpi_status === 'pass'
+            || (r.wh_kpi === 'pass' && (r.pod_kpi === 'pass' || r.pod_kpi === null));
+          const isFail = r.status === 'request_error'
+            || r.kpi_status === 'fail'
+            || r.wh_kpi === 'fail'
+            || r.pod_kpi === 'fail';
+
           const w = prepareWH(r.warehouse_name);
-          w.eligibleRows += 1;
-          totalEligible += 1;
-          if (r.status === 'active' && r.wh_kpi === 'pass' && r.pod_kpi === 'pass') {
-             w.passRows += 1;
-             totalPass += 1;
-          } else if (r.status === 'active' || r.status === 'request_error') {
-             w.failRows += 1;
-             totalFail += 1;
+          if (isEligible) {
+              w.eligibleRows += 1;
+              totalEligible += 1;
+              if (isPass) {
+                 w.passRows += 1;
+                 totalPass += 1;
+              } else if (isFail) {
+                 w.failRows += 1;
+                 totalFail += 1;
+              }
           }
           w.kpi = w.eligibleRows > 0 ? (w.passRows / w.eligibleRows) * 100 : 0;
           
-          if (r.status === 'active' || r.status === 'request_error' || r.wh_time_kpi || r.pod_kpi) {
+          if (isEligible) {
               const td = getWhTrendDay(r.warehouse_name, r.day);
               td.eligibleRows += 1;
               if (r.wh_time_kpi) {
@@ -7364,11 +7431,17 @@ async function handleApi(req, res, url) {
       // Also provide trend data grouped by day
       const trendMap = new Map();
       for (const r of rows) {
+         const isEligible = r.status === 'active'
+           || r.status === 'request_error'
+           || Boolean(r.wh_time_kpi)
+           || Boolean(r.wh_temp_kpi)
+           || Boolean(r.pod_kpi);
+         if (!isEligible) continue;
          if (!trendMap.has(r.day)) trendMap.set(r.day, { day: r.day, passRows: 0, failRows: 0, eligibleRows: 0 });
          const td = trendMap.get(r.day);
          td.eligibleRows += 1;
-         if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && r.pod_kpi === 'pass')) td.passRows += 1;
-         else if (r.status === 'active' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail' || r.status === 'request_error') td.failRows += 1;
+         if (r.kpi_status === 'pass' || (r.wh_kpi === 'pass' && (r.pod_kpi === 'pass' || r.pod_kpi === null))) td.passRows += 1;
+         else if (r.status === 'request_error' || r.kpi_status === 'fail' || r.wh_kpi === 'fail' || r.pod_kpi === 'fail') td.failRows += 1;
       }
       const trend = [...trendMap.values()].sort((a,b) => String(a.day || '').localeCompare(String(b.day || '')));
       

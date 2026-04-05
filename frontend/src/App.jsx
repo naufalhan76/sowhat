@@ -758,6 +758,7 @@ export default function App() {
     api(`/api/astro/snapshots?${new URLSearchParams({
       startDate: range.startDate,
       endDate: range.endDate,
+      accountId: overviewAccountId,
     }).toString()}`)
       .then((payload) => {
         if (!cancelled) {
@@ -1275,7 +1276,7 @@ export default function App() {
       });
       setBanner({
         tone: 'success',
-        message: `Sync selesai: ${result.snapshotsSaved || 0} row, ${result.unitCount || 0} nopol, ${result.podCount || 0} POD.`,
+        message: `Sync selesai: ${result.snapshotsSaved || 0} row route, ${result.unitCount || 0} unit discan, ${result.eligibleUnitCount || 0} unit eligible KPI, ${result.activeRowCount || 0} row aktif.`
       });
       await loadAstroSnapshotLogs(true);
     } catch (e) {
@@ -2638,7 +2639,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Row 3: Astro KPI Per Warehouse — Full-width Horizontal Grid */}
+      {/* Row 3: Astro KPI Per Warehouse - Full-width Horizontal Grid */}
       <div className="overview-chart-card overview-astro-fullwidth">
         <div className="overview-chart-head">
           <div>
@@ -3412,13 +3413,13 @@ export default function App() {
                 {astroSnapshotLogsBusy ? <div className="overview-chart-empty">Memuat log...</div> : (
                   <DataTable
                     pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Waktu', 'Range', 'Nopol', 'POD', 'Rows', 'Status', 'Message']}
+                    columns={['Waktu', 'Range', 'Units', 'Eligible', 'Rows', 'Status', 'Message']}
                     emptyMessage="Belum ada snapshot log. Klik Sync Now untuk menjalankan snapshot pertama."
                     rows={astroSnapshotLogs.map((log) => [
                       fmtDate(log.timestamp),
-                      log.startDate && log.endDate ? `${log.startDate} → ${log.endDate}` : '-',
+                      log.startDate && log.endDate ? `${log.startDate} -> ${log.endDate}` : '-',
                       log.unitCount ?? '-',
-                      log.podCount ?? '-',
+                      log.eligibleUnitCount ?? '-',
                       log.rowCount ?? '-',
                       <Chip color={log.result === 'success' ? 'success' : log.result === 'error' ? 'danger' : 'warning'}>{log.result || '-'}</Chip>,
                       log.message || '-',
