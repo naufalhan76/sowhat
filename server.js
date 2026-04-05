@@ -6534,7 +6534,27 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs, options) {
     }
     routesByAccountUnit.get(routeKey).push(route);
   }
-  const startDay = new Date(formatLocalDay(rangeStartMs) + 'T00:00:00Z');
+  let effectiveStartMs = rangeStartMs;
+  if (skipExistingDays) {
+    const legacySnapshotResult = await postgresQuery(
+      `select min(day)::text as earliest_day
+       from astro_route_snapshots
+       where not (
+         id like '%::rit1'
+         or id like '%::rit2'
+         or id like '%::request_error'
+         or id like '%::na'
+       )`
+    );
+    const earliestLegacyDay = String(legacySnapshotResult.rows?.[0]?.earliest_day || '').trim();
+    if (earliestLegacyDay) {
+      const earliestLegacyMs = toTimestampMaybe(`${earliestLegacyDay}T00:00:00.000Z`);
+      if (Number.isFinite(earliestLegacyMs)) {
+        effectiveStartMs = Math.min(effectiveStartMs, earliestLegacyMs);
+      }
+    }
+  }
+  const startDay = new Date(formatLocalDay(effectiveStartMs) + 'T00:00:00Z');
   const endDay = new Date(formatLocalDay(rangeEndMs) + 'T00:00:00Z');
   const todayStr = formatLocalDay(Date.now());
   
