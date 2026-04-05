@@ -5568,7 +5568,11 @@ async function buildAstroReportPayload(searchParams) {
   const paddedStart = range.rangeStartMs - (24 * 60 * 60 * 1000);
   const paddedEnd = range.rangeEndMs + (24 * 60 * 60 * 1000);
 
+  const ASTRO_FETCH_DELAY_MS = 10000; // 10 detik jeda per nopol supaya vendor API ga crash
+  let routeIndex = 0;
+
   for (const route of activeRoutes) {
+    routeIndex++;
     const accountConfig = getAccountConfigById(route.accountId || 'primary');
     if (!accountConfig) {
       warnings.push('Account Astro route tidak ditemukan untuk ' + route.unitId + '.');
@@ -5579,7 +5583,14 @@ async function buildAstroReportPayload(searchParams) {
       continue;
     }
 
+    // Rate-limit: jeda 10 detik antar nopol (skip delay di nopol pertama)
+    if (routeIndex > 1) {
+      console.log(`[AstroReport] Waiting ${ASTRO_FETCH_DELAY_MS / 1000}s before fetching ${route.unitId} (${routeIndex}/${activeRoutes.length})...`);
+      await new Promise(resolve => setTimeout(resolve, ASTRO_FETCH_DELAY_MS));
+    }
+
     try {
+      console.log(`[AstroReport] Fetching ${route.unitId} (${routeIndex}/${activeRoutes.length})...`);
       const resolvedRouteUnitId = resolveAstroUnitId(accountConfig, route.unitId) || route.unitId;
       const history = await fetchUnitHistory(accountConfig, resolvedRouteUnitId, paddedStart, paddedEnd);
       const unitLabel = resolveAstroUnitLabel(accountConfig, resolvedRouteUnitId) || route.unitId;
@@ -7823,6 +7834,11 @@ module.exports = {
 
 if (require.main === module) {
   const server = http.createServer(requestHandler);
+
+  // Timeout 30 menit untuk long-running Astro sync requests
+  server.setTimeout(30 * 60 * 1000);
+  server.keepAliveTimeout = 30 * 60 * 1000;
+
   server.listen(PORT, HOST, async function () {
     console.log(`Solofleet auto monitor running at http://${HOST}:${PORT}`);
     try {
