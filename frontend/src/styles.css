@@ -4648,3 +4648,131 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.trip-monitor-card-actions {
+  position: relative;
+  display: inline-flex;
+}
+
+.trip-monitor-card-button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trip-monitor-card-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 148px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(10, 15, 24, 0.98);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  z-index: 12;
+}
+
+.trip-monitor-card-menu button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.trip-monitor-card-menu button:hover {
+  background: rgba(249, 115, 22, 0.08);
+  color: var(--accent);
+}
+
+.trip-monitor-flat-board {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.trip-monitor-card {
+  appearance: none;
+  width: 100%;
+  min-height: 78px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.trip-monitor-card:hover {
+  transform: none;
+}
+
+.trip-monitor-card-head {
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-monitor-card-titleblock {
+  gap: 2px;
+}
+
+.trip-monitor-card-titleblock strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--text-main);
+}
+
+.trip-monitor-card-subline {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-monitor-card-note {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #bfdbfe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-monitor-severity-badge {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.trip-monitor-card-warning,
+.trip-monitor-card-critical {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(180deg, rgba(61, 16, 22, 0.96) 0%, rgba(33, 12, 18, 0.96) 100%);
+}
+
+.trip-monitor-card-warning .trip-monitor-card-subline,
+.trip-monitor-card-critical .trip-monitor-card-subline {
+  color: rgba(254, 202, 202, 0.82);
+}
+
+@media (max-width: 720px) {
+  .trip-monitor-flat-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trip-monitor-card {
+    min-height: 74px;
+  }
+}

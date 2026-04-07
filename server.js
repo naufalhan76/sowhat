@@ -3327,6 +3327,29 @@ function normalizePlateKey(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function collectPlateCandidates() {
+  const candidates = new Set();
+  const texts = Array.prototype.slice.call(arguments);
+  for (const rawValue of texts) {
+    const text = String(rawValue || '').toUpperCase().trim();
+    if (!text) {
+      continue;
+    }
+    const compact = normalizePlateKey(text);
+    if (compact.length >= 5) {
+      candidates.add(compact);
+    }
+    const matches = text.match(/\b([A-Z]{1,2})\s*[-/]?\s*(\d{1,4})\s*[-/]?\s*([A-Z]{1,3})\b/g) || [];
+    for (const match of matches) {
+      const normalized = normalizePlateKey(match);
+      if (normalized.length >= 5) {
+        candidates.add(normalized);
+      }
+    }
+  }
+  return [...candidates];
+}
+
 function extractTmsCsrfToken(html) {
   const text = String(html || '');
   const patterns = [
@@ -3900,6 +3923,7 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
   const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
   const plateRaw = String(doc?.plat_no || '').trim();
   const normalizedPlate = normalizePlateKey(plateRaw);
+  const plateCandidates = collectPlateCandidates(plateRaw);
   const startTimestamp = toTimestampMaybe(doc?.start_actual_time_load || loadTask?.eta || Date.now());
   return {
     jobOrderId: String(doc?.name || '').trim(),
@@ -3907,6 +3931,7 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
     tenantLabel: tenantLabel || '',
     customerName: String(doc?.customer || '').trim(),
     normalizedPlate,
+    plateCandidates,
     plateRaw,
     unitLabel: plateRaw,
     jobOrderStatus: String(doc?.job_order_status || '').trim(),
@@ -3936,7 +3961,7 @@ function buildFleetPlateIndex(now) {
   }
   const byPlate = new Map();
   for (const row of allRows) {
-    const keys = [normalizePlateKey(row.label), normalizePlateKey(row.alias), normalizePlateKey(row.id)].filter(Boolean);
+    const keys = collectPlateCandidates(row.label, row.alias, row.vehicle, row.id);
     for (const key of keys) {
       if (!byPlate.has(key) || rowPriority(row) > rowPriority(byPlate.get(key))) {
         byPlate.set(key, row);
@@ -4065,7 +4090,9 @@ function severityRank(value) {
 function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
   const groups = new Map();
   for (const snapshot of jobSnapshots) {
-    const fleetRow = snapshot.normalizedPlate ? fleetIndex.byPlate.get(snapshot.normalizedPlate) : null;
+    const fleetRow = (snapshot.plateCandidates || []).map(function (candidate) {
+      return fleetIndex.byPlate.get(candidate);
+    }).find(Boolean) || (snapshot.normalizedPlate ? fleetIndex.byPlate.get(snapshot.normalizedPlate) : null);
     const groupKey = fleetRow ? `matched::${fleetRow.accountId}::${fleetRow.id}` : `unmatched::${snapshot.normalizedPlate || snapshot.jobOrderId}`;
     if (!groups.has(groupKey)) {
       groups.set(groupKey, { fleetRow, items: [] });
@@ -4311,7 +4338,7 @@ function scheduleNextTmsSync() {
 
 async function findLatestTmsMonitorDay() {
   const result = await postgresQuery(
-    `select day
+    `select day::text as day
      from tms_monitor_rows
      order by day desc
      limit 1`,
@@ -4323,7 +4350,7 @@ async function findLatestTmsMonitorDay() {
 async function listTmsMonitorRows(searchParams, overrideDay) {
   const day = String(overrideDay || searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
   const params = [day];
-  let query = `select * from tms_monitor_rows where day = $1`;
+  let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata, updated_at from tms_monitor_rows where day = $1`;
   const customer = String(searchParams.get('customer') || '').trim();
   if (customer) {
     params.push(customer);

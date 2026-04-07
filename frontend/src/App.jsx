@@ -1408,24 +1408,35 @@ export default function App() {
   const loadTripMonitorBoard = async (quiet = false) => {
     if (!quiet) setTripMonitorBusy(true);
     try {
-      const query = new URLSearchParams({ day: tripMonitorFilters.day || today(0) });
+      const normalizedDay = /^\d{4}-\d{2}-\d{2}$/.test(String(tripMonitorFilters.day || '').trim())
+        ? String(tripMonitorFilters.day || '').trim()
+        : today(0);
+      const query = new URLSearchParams({ day: normalizedDay });
       if (tripMonitorFilters.customer && tripMonitorFilters.customer !== 'all') query.set('customer', tripMonitorFilters.customer);
       if (tripMonitorFilters.severity && tripMonitorFilters.severity !== 'all') query.set('severity', tripMonitorFilters.severity);
       const payload = await api(`/api/tms/board?${query.toString()}`);
       startTransition(() => {
         setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
         const effectiveDay = payload.summary?.effectiveDay || '';
-        if (effectiveDay && effectiveDay !== tripMonitorFilters.day) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDay)) && effectiveDay !== tripMonitorFilters.day) {
           setTripMonitorFilters((current) => current.day === effectiveDay ? current : ({ ...current, day: effectiveDay }));
         }
       });
+      return payload;
     } catch (error) {
       if (!quiet) setBanner({ tone: 'error', message: error.message || 'Trip Monitor gagal dimuat.' });
+      throw error;
     } finally {
       setTripMonitorBusy(false);
     }
   };
 
+  const refreshTripMonitorBoard = async () => {
+    await Promise.all([
+      loadTripMonitorBoard(false),
+      loadTmsLogs(true),
+    ]);
+  };
   const saveTmsConfig = async () => {
     startBusy('Menyimpan config TMS...');
     try {
@@ -2993,7 +3004,7 @@ export default function App() {
                   <p>Board exception-based untuk unit yang masih punya JO aktif di TMS.</p>
                 </div>
                 <div className="inline-buttons">
-                  <Button variant="bordered" onPress={() => loadTripMonitorBoard(false)}>{tripMonitorBusy ? <><Spinner size="sm" /> Refreshing</> : 'Refresh board'}</Button>
+                  <Button variant="bordered" onPress={refreshTripMonitorBoard}>{tripMonitorBusy ? <><Spinner size="sm" /> Refreshing</> : 'Refresh board'}</Button>
                   {isAdmin ? <Button color="primary" onPress={triggerTmsSync}>Sync TMS</Button> : null}
                 </div>
               </CardHeader>
@@ -4771,34 +4782,20 @@ function tmsIncidentIcon(code) {
   }
 }
 
-function TripMonitorUnitCard({ row, onOpen, onOpenHistorical, onOpenMap, onOpenFleet }) {
-  return <div className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`}>
+function TripMonitorUnitCard({ row, onOpen }) {
+  const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
+  const incidentCount = (row.incidentCodes || []).length;
+  return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen}>
     <div className="trip-monitor-card-head">
       <div className="trip-monitor-card-titleblock">
-        <button type="button" className="trip-monitor-unit-link" onClick={onOpenHistorical}>
-          <strong>{row.unitLabel || row.unitId || row.normalizedPlate || '-'}</strong>
-        </button>
-        <div className="subtle-line">{row.jobOrderId || '-'} | {row.customerName || '-'}</div>
+        <strong>{unitLabel}</strong>
+        <div className="trip-monitor-card-subline">{row.jobOrderId || '-'} | {row.customerName || '-'}</div>
       </div>
-      {(row.incidentCodes || []).length ? <span className={`trip-monitor-severity-badge trip-monitor-severity-badge-${row.severity || 'normal'}`}>{(row.incidentCodes || []).length}</span> : null}
+      <span className={`trip-monitor-severity-badge trip-monitor-severity-badge-${row.severity || 'normal'}`}>{incidentCount || 0}</span>
     </div>
-    <div className="trip-monitor-card-body">
-      <div className="trip-monitor-route-line">{row.originName || '-'} {' -> '} {row.destinationName || '-'}</div>
-      <div className="trip-monitor-eta-line">ETA muat {formatEtaText(row.etaOrigin)} | ETA tujuan {formatEtaText(row.etaDestination)}</div>
-      <div className="trip-monitor-eta-line">Temp {row.tempMin ?? '-'} to {row.tempMax ?? '-'} | {row.driverAppStatus || '-'}</div>
-      {row.unmatchedReason ? <div className="trip-monitor-alert">{row.unmatchedReason}</div> : null}
-      <div className="trip-monitor-chip-grid">
-        {(row.incidentCodes || []).length ? row.incidentCodes.map((code) => <span key={`${row.rowId}-${code}`} className={`trip-monitor-chip trip-monitor-chip-${TMS_INCIDENT_META[code]?.tone || 'default'}`}>{tmsIncidentIcon(code)}</span>) : <span className="trip-monitor-chip trip-monitor-chip-success">OK</span>}
-      </div>
-    </div>
-    <div className="trip-monitor-card-footer">
-      <button type="button" className="trip-monitor-card-button" onClick={onOpenFleet}>Graphic</button>
-      <button type="button" className="trip-monitor-card-button" onClick={onOpenMap}>Map</button>
-      <button type="button" className="trip-monitor-card-button" onClick={onOpen}>Detail</button>
-    </div>
-  </div>;
+    {row.unmatchedReason ? <div className="trip-monitor-card-note">{row.unmatchedReason}</div> : null}
+  </button>;
 }
-
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -4877,6 +4874,12 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
 
 
 
