@@ -5333,6 +5333,28 @@ async function postgresLoadJsonSetting(tableName, jsonColumn) {
   return result.rows.length ? result.rows[0][jsonColumn] : null;
 }
 
+function normalizePostgresValue(value) {
+  if (value === undefined) {
+    return null;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return value;
+}
+
 async function postgresUpsertRows(tableName, rows, columns, conflictColumns, options) {
   if (!rows.length) {
     return 0;
@@ -5342,7 +5364,7 @@ async function postgresUpsertRows(tableName, rows, columns, conflictColumns, opt
   const params = [];
   const valueRows = rows.map(function (row, rowIndex) {
     const placeholders = columns.map(function (_column, columnIndex) {
-      params.push(row[columns[columnIndex]]);
+      params.push(normalizePostgresValue(row[columns[columnIndex]]));
       return `$${rowIndex * columns.length + columnIndex + 1}`;
     });
     return `(${placeholders.join(', ')})`;
