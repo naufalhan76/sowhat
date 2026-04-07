@@ -1,9 +1,9 @@
 
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
-  Activity, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Flag, LayoutDashboard, Map as MapIcon, Menu, Navigation,
-  RefreshCw, Settings, ShieldAlert, Thermometer, X, Zap, Search
+  Activity, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, Navigation,
+  PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
   const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
@@ -92,6 +92,42 @@ const UNIT_CATEGORY_TONES = {
   oncall: 'info',
   'dedicated-astro': 'primary',
   'dedicated-havi': 'success',
+};
+const EMPTY_TMS_FORM = {
+  tenantLabel: 'CargoShare TMS',
+  baseUrl: 'https://1903202401.cargoshare.id',
+  username: '',
+  password: '',
+  autoSync: true,
+  syncIntervalMinutes: 15,
+  geofenceRadiusMeters: 250,
+  longStopMinutes: 45,
+  appStagnantMinutes: 45,
+};
+const TMS_SEVERITY_META = {
+  critical: { label: 'Critical', tone: 'danger' },
+  warning: { label: 'Warning', tone: 'warning' },
+  normal: { label: 'Normal', tone: 'success' },
+  unmatched: { label: 'Unmatched', tone: 'info' },
+  'no-job-order': { label: 'No JO', tone: 'default' },
+};
+const TMS_BOARD_COLUMNS = [
+  { key: 'critical', label: 'Critical' },
+  { key: 'warning', label: 'Warning' },
+  { key: 'normal', label: 'Normal' },
+  { key: 'unmatched', label: 'Unmatched' },
+  { key: 'no-job-order', label: 'No JO' },
+];
+const TMS_INCIDENT_META = {
+  'gps-error': { label: 'GPS error', tone: 'danger' },
+  'temp-error': { label: 'Temp error', tone: 'danger' },
+  'late-origin': { label: 'Late load', tone: 'warning' },
+  'late-destination': { label: 'Late destination', tone: 'warning' },
+  'geofence-origin': { label: 'Miss load geofence', tone: 'info' },
+  'geofence-destination': { label: 'Miss destination geofence', tone: 'info' },
+  'long-stop': { label: 'Long stop', tone: 'warning' },
+  'app-stagnant': { label: 'App stagnan', tone: 'warning' },
+  'driver-not-ready': { label: 'Driver not ready', tone: 'default' },
 };
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 const GEOFENCE_LOCATION_LABELS = {
@@ -400,6 +436,24 @@ const remoteResetFormFromConfig = (config) => ({
   enabled: Boolean(config?.remoteResetAutomation?.enabled),
   selectedAccountIds: Array.isArray(config?.remoteResetAutomation?.selectedAccountIds) ? config.remoteResetAutomation.selectedAccountIds : [],
 });
+const tmsFormFromConfig = (config) => {
+  const source = config?.tms || config || {};
+  return {
+    tenantLabel: source.tenantLabel || EMPTY_TMS_FORM.tenantLabel,
+    baseUrl: source.baseUrl || EMPTY_TMS_FORM.baseUrl,
+    username: source.username || '',
+    password: '',
+    autoSync: source.autoSync !== false,
+    syncIntervalMinutes: Number(source.syncIntervalMinutes || EMPTY_TMS_FORM.syncIntervalMinutes),
+    geofenceRadiusMeters: Number(source.geofenceRadiusMeters || EMPTY_TMS_FORM.geofenceRadiusMeters),
+    longStopMinutes: Number(source.longStopMinutes || EMPTY_TMS_FORM.longStopMinutes),
+    appStagnantMinutes: Number(source.appStagnantMinutes || EMPTY_TMS_FORM.appStagnantMinutes),
+  };
+};
+const tmsSeverityLabel = (value) => TMS_SEVERITY_META[String(value || '').toLowerCase()]?.label || 'Normal';
+const tmsSeverityTone = (value) => TMS_SEVERITY_META[String(value || '').toLowerCase()]?.tone || 'default';
+const tmsIncidentLabel = (value) => TMS_INCIDENT_META[String(value || '').toLowerCase()]?.label || value || '-';
+const formatEtaText = (value) => value ? `${fmtDateOnly(value)} ${fmtClock(value)}` : '-';
 const csv = (name, rows) => {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
@@ -582,6 +636,15 @@ export default function App() {
   const [astroSnapshotLogsBusy, setAstroSnapshotLogsBusy] = useState(false);
   const [astroSnapshotAutoSync, setAstroSnapshotAutoSync] = useState(null);
   const [astroSnapshotConsoleSectionOpen, setAstroSnapshotConsoleSectionOpen] = useState(false);
+  const [tmsForm, setTmsForm] = useState(EMPTY_TMS_FORM);
+  const [tmsLogs, setTmsLogs] = useState([]);
+  const [tmsLogsBusy, setTmsLogsBusy] = useState(false);
+  const [tripMonitorBoard, setTripMonitorBoard] = useState({ rows: [], summary: null });
+  const [tripMonitorBusy, setTripMonitorBusy] = useState(false);
+  const [tripMonitorFilters, setTripMonitorFilters] = useState({ day: today(0), customer: 'all', severity: 'all', incidentCode: 'all', appStatus: 'all', search: '' });
+  const [tripMonitorDetail, setTripMonitorDetail] = useState(null);
+  const [tripMonitorDetailBusy, setTripMonitorDetailBusy] = useState(false);
+  const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
@@ -748,6 +811,32 @@ export default function App() {
   const overviewAstroByWarehouse = useMemo(() => [...(overviewAstroKpi?.byWarehouse || [])]
     .sort((left, right) => (right.eligibleRows || 0) - (left.eligibleRows || 0) || (right.failRows || 0) - (left.failRows || 0))
     .slice(0, 6), [overviewAstroKpi]);
+  const tmsConfig = status?.config?.tms || null;
+  const tripMonitorRows = tripMonitorBoard?.rows || [];
+  const tripMonitorSummary = tripMonitorBoard?.summary || {
+    total: 0,
+    bySeverity: { critical: 0, warning: 0, normal: 0, unmatched: 0, 'no-job-order': 0 },
+    byIncident: {},
+    customers: [],
+    lastSync: null,
+  };
+  const tripMonitorCustomerOptions = useMemo(() => ['all', ...(tripMonitorSummary.customers || [])], [tripMonitorSummary.customers]);
+  const tripMonitorIncidentOptions = useMemo(() => ['all', ...Object.keys(tripMonitorSummary.byIncident || {}).sort()], [tripMonitorSummary.byIncident]);
+  const filteredTripMonitorRows = useMemo(() => {
+    const q = String(tripMonitorFilters.search || '').trim().toLowerCase();
+    const appNeedle = String(tripMonitorFilters.appStatus || '').trim().toLowerCase();
+    return tripMonitorRows.filter((row) => {
+      if (tripMonitorFilters.customer !== 'all' && row.customerName !== tripMonitorFilters.customer) return false;
+      if (tripMonitorFilters.severity !== 'all' && row.severity !== tripMonitorFilters.severity) return false;
+      if (tripMonitorFilters.incidentCode !== 'all' && !(row.incidentCodes || []).includes(tripMonitorFilters.incidentCode)) return false;
+      if (appNeedle && !String(row.driverAppStatus || '').toLowerCase().includes(appNeedle)) return false;
+      if (q) {
+        const haystack = [row.unitId, row.unitLabel, row.jobOrderId, row.originName, row.destinationName, row.customerName, row.driverAppStatus, row.incidentSummary].join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tripMonitorRows, tripMonitorFilters]);
   useEffect(() => {
     if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) {
       return undefined;
@@ -795,6 +884,22 @@ export default function App() {
     }, 800);
     return () => clearInterval(timer);
   }, [overviewAstroBusy, overviewAstroSummary]);
+
+  useEffect(() => {
+    if (activePanel !== 'trip-monitor' || !webSessionUser) {
+      return undefined;
+    }
+    loadTripMonitorBoard(true).catch(() => {});
+    return undefined;
+  }, [activePanel, tripMonitorFilters.day, webSessionUser?.id]);
+
+  useEffect(() => {
+    if (activePanel !== 'config' || webSessionUser?.role !== 'admin') {
+      return undefined;
+    }
+    loadTmsLogs(true).catch(() => {});
+    return undefined;
+  }, [activePanel, webSessionUser?.role]);
 
   const astroReportColumns = useMemo(() => {
     const base = [
@@ -1040,6 +1145,7 @@ export default function App() {
   const navItems = useMemo(() => ([
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'fleet', label: 'Fleet Live', icon: Navigation },
+    { id: 'trip-monitor', label: 'Trip Monitor', icon: Truck },
     { id: 'map', label: 'Map', icon: MapIcon },
     { id: 'astro-report', label: 'Astro Report', icon: BarChart3 },
     { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer },
@@ -1200,6 +1306,7 @@ export default function App() {
         setActiveAccountId(nextActiveAccountId);
         setForm(formFromConfig(nextStatus.config, nextActiveAccountId));
         setRemoteResetForm(remoteResetFormFromConfig(nextStatus.config));
+        setTmsForm(tmsFormFromConfig(nextStatus.config));
         setLoaded(true);
       }
       setAuthModal((current) => current.open ? { open: false, message: '' } : current);
@@ -1264,6 +1371,128 @@ export default function App() {
       if (!quiet) setBanner({ tone: 'error', message: `Gagal load snapshot logs: ${e.message}` });
     } finally {
       setAstroSnapshotLogsBusy(false);
+    }
+  };
+
+  const loadTmsLogs = async (quiet = false) => {
+    if (!quiet) setTmsLogsBusy(true);
+    try {
+      const payload = await api('/api/tms/logs?limit=30');
+      startTransition(() => {
+        setTmsLogs(payload.logs || []);
+      });
+    } catch (error) {
+      if (!quiet) setBanner({ tone: 'error', message: error.message || 'Gagal load TMS logs.' });
+    } finally {
+      setTmsLogsBusy(false);
+    }
+  };
+
+  const loadTripMonitorBoard = async (quiet = false) => {
+    if (!quiet) setTripMonitorBusy(true);
+    try {
+      const query = new URLSearchParams({ day: tripMonitorFilters.day || today(0) });
+      if (tripMonitorFilters.customer && tripMonitorFilters.customer !== 'all') query.set('customer', tripMonitorFilters.customer);
+      if (tripMonitorFilters.severity && tripMonitorFilters.severity !== 'all') query.set('severity', tripMonitorFilters.severity);
+      const payload = await api(`/api/tms/board?${query.toString()}`);
+      startTransition(() => {
+        setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
+      });
+    } catch (error) {
+      if (!quiet) setBanner({ tone: 'error', message: error.message || 'Trip Monitor gagal dimuat.' });
+    } finally {
+      setTripMonitorBusy(false);
+    }
+  };
+
+  const saveTmsConfig = async () => {
+    startBusy('Menyimpan config TMS...');
+    try {
+      await api('/api/tms/config', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantLabel: tmsForm.tenantLabel,
+          baseUrl: tmsForm.baseUrl,
+          username: tmsForm.username,
+          password: tmsForm.password,
+          autoSync: Boolean(tmsForm.autoSync),
+          syncIntervalMinutes: Number(tmsForm.syncIntervalMinutes || 15),
+          geofenceRadiusMeters: Number(tmsForm.geofenceRadiusMeters || 250),
+          longStopMinutes: Number(tmsForm.longStopMinutes || 45),
+          appStagnantMinutes: Number(tmsForm.appStagnantMinutes || 45),
+        }),
+      });
+      await loadDashboard(true, true);
+      startTransition(() => {
+        setTmsForm((current) => ({ ...current, password: '' }));
+        setBanner({ tone: 'success', message: 'Config TMS tersimpan.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const loginWithTms = async () => {
+    startBusy('Menyambungkan akun TMS...');
+    try {
+      await api('/api/tms/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantLabel: tmsForm.tenantLabel,
+          baseUrl: tmsForm.baseUrl,
+          username: tmsForm.username,
+          password: tmsForm.password,
+        }),
+      });
+      await loadDashboard(true, true);
+      await loadTmsLogs(true);
+      startTransition(() => {
+        setTmsForm((current) => ({ ...current, password: '' }));
+        setBanner({ tone: 'success', message: 'Login TMS berhasil.' });
+      });
+    } catch (error) {
+      setBanner({ tone: 'error', message: error.message || 'Login TMS gagal.' });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const logoutTms = async () => {
+    startBusy('Memutuskan sesi TMS...');
+    try {
+      await api('/api/tms/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+      await loadDashboard(true, true);
+      startTransition(() => {
+        setBanner({ tone: 'success', message: 'Sesi TMS dihapus.' });
+      });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const triggerTmsSync = async () => {
+    startBusy('Menjalankan sync TMS...');
+    try {
+      const payload = await api('/api/tms/sync', { method: 'POST', body: JSON.stringify({}) });
+      await Promise.all([loadTripMonitorBoard(true), loadTmsLogs(true), loadDashboard(false, true)]);
+      setBanner({ tone: 'success', message: payload.result?.message || 'Sync TMS selesai.' });
+    } catch (error) {
+      setBanner({ tone: 'error', message: error.message || 'Sync TMS gagal.' });
+    } finally {
+      stopBusy();
+    }
+  };
+
+  const openTripMonitorDetail = async (rowId) => {
+    if (!rowId) return;
+    setTripMonitorDetailBusy(true);
+    try {
+      const payload = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId }).toString()}`);
+      startTransition(() => setTripMonitorDetail(payload.detail || null));
+    } catch (error) {
+      setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
+    } finally {
+      setTripMonitorDetailBusy(false);
     }
   };
 
@@ -1971,6 +2200,44 @@ export default function App() {
     setSelectedUnitId(row.id);
     setActivePanel('fleet');
     setExpandedFleetRowKey((current) => current === nextKey ? '' : nextKey);
+  };
+  const resolveTripMonitorFleetRow = (row) => {
+    const metadataFleetRow = row?.metadata?.fleetRow;
+    if (metadataFleetRow?.id) {
+      return fleetRows.find((fleetRow) => fleetRow.id === metadataFleetRow.id && (fleetRow.accountId || 'primary') === (metadataFleetRow.accountId || 'primary')) || metadataFleetRow;
+    }
+    const [unitAccountId, unitId] = String(row?.unitKey || '').split('::');
+    if (unitId) {
+      return fleetRows.find((fleetRow) => fleetRow.id === unitId && (fleetRow.accountId || 'primary') === (unitAccountId || 'primary')) || null;
+    }
+    if (row?.unitId) {
+      return fleetRows.find((fleetRow) => fleetRow.id === row.unitId) || null;
+    }
+    return null;
+  };
+  const openTripMonitorInvestigation = (row, target = 'historical') => {
+    const fleetRow = resolveTripMonitorFleetRow(row);
+    if (!fleetRow?.id) {
+      setBanner({ tone: 'error', message: 'Unit ini belum match ke Solofleet, jadi detail investigasi belum bisa dibuka.' });
+      return;
+    }
+    setTripMonitorDetail(null);
+    if (target === 'fleet') {
+      toggleFleetGraph(fleetRow);
+      return;
+    }
+    if (target === 'map') {
+      setSelectedUnitAccountId(fleetRow.accountId || 'primary');
+      setSelectedUnitId(fleetRow.id);
+      setMapAccountFilter(fleetRow.accountId || 'primary');
+      setMapSearch(fleetRow.label || fleetRow.id || row?.unitLabel || row?.unitId || '');
+      setActivePanel('map');
+      return;
+    }
+    setSelectedUnitAccountId(fleetRow.accountId || 'primary');
+    setSelectedUnitId(fleetRow.id);
+    setActivePanel('historical');
+    loadHistoricalDetail(fleetRow.accountId || 'primary', fleetRow.id, historicalRangeDraft, false).catch(() => {});
   };
   const selectHistoricalUnit = (value) => {
     const [accountId, unitId] = String(value || '').split('::');
@@ -2697,6 +2964,88 @@ export default function App() {
     </CardContent>
   </Card>
 ) : null}
+          {activePanel === 'trip-monitor' ? <>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>Trip Monitor</h2>
+                  <p>Kanban monitoring incident-based untuk JO aktif harian dari TMS.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" onPress={() => loadTripMonitorBoard(false)}>{tripMonitorBusy ? <><Spinner size="sm" /> Refreshing</> : 'Refresh board'}</Button>
+                  {isAdmin ? <Button variant="bordered" onPress={() => loadTmsLogs(false)}>{tmsLogsBusy ? <><Spinner size="sm" /> Logs</> : 'Refresh logs'}</Button> : null}
+                  {isAdmin ? <Button color="primary" onPress={triggerTmsSync}>Sync TMS</Button> : null}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overview-kpi-grid">
+                  {TMS_BOARD_COLUMNS.map((column) => <div key={column.key} className={`overview-kpi-card ${tmsSeverityTone(column.key)}`}><span>{column.label}</span><strong>{tripMonitorSummary.bySeverity?.[column.key] || 0}</strong><small>{tmsSeverityLabel(column.key)} unit</small></div>)}
+                </div>
+                <div className="historical-toolbar astro-toolbar">
+                  <label className="historical-field">
+                    <span>Day</span>
+                    <input type="date" value={tripMonitorFilters.day} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, day: event.target.value }))} />
+                  </label>
+                  <label className="historical-field">
+                    <span>Customer</span>
+                    <select value={tripMonitorFilters.customer} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, customer: event.target.value }))}>
+                      {tripMonitorCustomerOptions.map((option) => <option key={`customer-${option}`} value={option}>{option === 'all' ? 'All customers' : option}</option>)}
+                    </select>
+                  </label>
+                  <label className="historical-field">
+                    <span>Severity</span>
+                    <select value={tripMonitorFilters.severity} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, severity: event.target.value }))}>
+                      <option value="all">All severity</option>
+                      {Object.keys(TMS_SEVERITY_META).map((key) => <option key={key} value={key}>{tmsSeverityLabel(key)}</option>)}
+                    </select>
+                  </label>
+                  <label className="historical-field">
+                    <span>Incident</span>
+                    <select value={tripMonitorFilters.incidentCode} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, incidentCode: event.target.value }))}>
+                      <option value="all">All incidents</option>
+                      {tripMonitorIncidentOptions.filter((option) => option !== 'all').map((option) => <option key={option} value={option}>{tmsIncidentLabel(option)}</option>)}
+                    </select>
+                  </label>
+                  <label className="historical-field">
+                    <span>App status</span>
+                    <input type="text" value={tripMonitorFilters.appStatus} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, appStatus: event.target.value }))} placeholder="Search app status..." />
+                  </label>
+                  <label className="historical-field historical-search-field">
+                    <span>Search</span>
+                    <div className="search-box historical-search-box">
+                      <Search size={16} className="search-icon" />
+                      <input type="search" value={tripMonitorFilters.search} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Cari nopol, JO, origin, destination..." />
+                    </div>
+                  </label>
+                </div>
+                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Last sync: {tripMonitorSummary.lastSync?.createdAt ? fmtDate(tripMonitorSummary.lastSync.createdAt) : 'Belum pernah'} | Rows: {tripMonitorRows.length}</div>
+                <div className="trip-monitor-board">
+                  {TMS_BOARD_COLUMNS.map((column) => {
+                    const rows = filteredTripMonitorRows.filter((row) => row.severity === column.key);
+                    return <div key={`column-${column.key}`} className={`trip-monitor-column trip-monitor-column-${column.key}`}>
+                      <div className="trip-monitor-column-head">
+                        <div>
+                          <strong>{column.label}</strong>
+                          <div className="subtle-line">{rows.length} unit</div>
+                        </div>
+                        <Chip color={tmsSeverityTone(column.key)}>{rows.length}</Chip>
+                      </div>
+                      <div className="trip-monitor-column-body">
+                        {rows.length ? rows.map((row) => <TripMonitorUnitCard
+                          key={row.rowId}
+                          row={row}
+                          onOpen={() => openTripMonitorDetail(row.rowId)}
+                          onOpenHistorical={() => openTripMonitorInvestigation(row, 'historical')}
+                          onOpenMap={() => openTripMonitorInvestigation(row, 'map')}
+                          onOpenFleet={() => openTripMonitorInvestigation(row, 'fleet')}
+                        />) : <div className="empty-state trip-monitor-empty">Belum ada unit di kolom ini.</div>}
+                      </div>
+                    </div>;
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </> : null}
           {activePanel === 'fleet' ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
@@ -3114,6 +3463,42 @@ export default function App() {
                 </div>
               </CardHeader>
               {linkedAccountSectionOpen ? <CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent> : null}
+            </Card>
+            <Card className="panel-card">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h2>TMS integration</h2>
+                  <p>Login akun TMS read-only untuk fetch JO aktif dan membangun Trip Monitor kanban.</p>
+                </div>
+                <div className="inline-buttons">
+                  <Button variant="bordered" className="section-chevron-button" onPress={() => setTmsConfigSectionOpen((current) => !current)} aria-label={tmsConfigSectionOpen ? 'Collapse TMS integration' : 'Expand TMS integration'}>{tmsConfigSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
+                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={() => loadTmsLogs(false)}>{tmsLogsBusy ? <><Spinner size="sm" /> Logs</> : 'Refresh logs'}</Button> : null}
+                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={logoutTms}>Logout TMS</Button> : null}
+                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={loginWithTms}>Connect TMS</Button> : null}
+                  {tmsConfigSectionOpen ? <Button color="primary" onPress={saveTmsConfig}>Save TMS config</Button> : null}
+                </div>
+              </CardHeader>
+              {tmsConfigSectionOpen ? <CardContent>
+                <div className="settings-stack">
+                  <div className="subtle-line">{tmsConfig?.hasVerifiedSession ? 'Session verified' : tmsConfig?.hasSessionCookie ? 'Session ada tapi belum diverifikasi' : 'Belum ada session TMS'} | Cookie preview: {tmsConfig?.sessionCookiePreview || '-'} | Last sync: {tmsLogs[0]?.createdAt ? fmtDate(tmsLogs[0].createdAt) : 'Belum ada'}</div>
+                  <div className="form-grid astro-config-grid">
+                    <label className="field"><span>Tenant label</span><input type="text" value={tmsForm.tenantLabel} onChange={(event) => setTmsForm((current) => ({ ...current, tenantLabel: event.target.value }))} placeholder="CargoShare TMS" /></label>
+                    <label className="field"><span>Base URL</span><input type="text" value={tmsForm.baseUrl} onChange={(event) => setTmsForm((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://1903202401.cargoshare.id" /></label>
+                    <label className="field"><span>Username</span><input type="text" value={tmsForm.username} onChange={(event) => setTmsForm((current) => ({ ...current, username: event.target.value }))} placeholder="TMS username" /></label>
+                    <label className="field"><span>Password</span><input type="password" value={tmsForm.password} onChange={(event) => setTmsForm((current) => ({ ...current, password: event.target.value }))} placeholder={tmsConfig?.hasPassword ? 'Kosongkan untuk pakai password tersimpan' : 'TMS password'} /></label>
+                    <label className="field checkbox-field"><input type="checkbox" checked={tmsForm.autoSync} onChange={(event) => setTmsForm((current) => ({ ...current, autoSync: event.target.checked }))} /><span>Auto sync</span></label>
+                    <label className="field"><span>Sync interval (min)</span><input type="number" min="5" value={tmsForm.syncIntervalMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, syncIntervalMinutes: event.target.value }))} /></label>
+                    <label className="field"><span>Geofence radius (m)</span><input type="number" min="50" value={tmsForm.geofenceRadiusMeters} onChange={(event) => setTmsForm((current) => ({ ...current, geofenceRadiusMeters: event.target.value }))} /></label>
+                    <label className="field"><span>Long stop (min)</span><input type="number" min="5" value={tmsForm.longStopMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, longStopMinutes: event.target.value }))} /></label>
+                    <label className="field"><span>App stagnant (min)</span><input type="number" min="5" value={tmsForm.appStagnantMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, appStagnantMinutes: event.target.value }))} /></label>
+                  </div>
+                  <div className="inline-buttons">
+                    <Button variant="bordered" onPress={triggerTmsSync}>Sync now</Button>
+                    <Button variant="bordered" onPress={() => { setActivePanel('trip-monitor'); loadTripMonitorBoard(false).catch(() => {}); }}>Open Trip Monitor</Button>
+                  </div>
+                  <DataTable pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }} columns={['Time', 'Status', 'Summary']} emptyMessage="Belum ada log sync TMS." rows={tmsLogs.map((log) => [fmtDate(log.createdAt), <Chip color={log.status === 'success' ? 'success' : log.status === 'error' ? 'danger' : 'default'}>{log.status || 'info'}</Chip>, <div><div>{log.summary || '-'}</div><div className="subtle-line">{log.message || '-'}</div></div>])} />
+                </div>
+              </CardContent> : null}
             </Card>
             <Card className="panel-card">
               <CardHeader className="panel-card-header">
@@ -3680,6 +4065,7 @@ export default function App() {
         
       </main>
       
+      {tripMonitorDetail ? <div className="auth-modal-backdrop" onClick={() => setTripMonitorDetail(null)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{tripMonitorDetail.unitId || tripMonitorDetail.unitLabel || '-'}</h2><p>{tripMonitorDetail.customerName || '-'} | {tripMonitorDetail.severity ? tmsSeverityLabel(tripMonitorDetail.severity) : '-'}</p></div><div className="inline-buttons">{resolveTripMonitorFleetRow(tripMonitorDetail)?.id ? <><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'fleet')}>Open fleet graphic</Button><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'map')}>Open map</Button><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'historical')}>Open historical</Button></> : null}<Button variant="bordered" onPress={() => setTripMonitorDetail(null)}>Close</Button></div></CardHeader><CardContent>{tripMonitorDetailBusy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(tripMonitorDetail.severity)}</strong></div><div className="mini-metric"><span>Board status</span><strong>{tripMonitorDetail.boardStatus || '-'}</strong></div><div className="mini-metric"><span>Day</span><strong>{tripMonitorDetail.day || '-'}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{tripMonitorDetail.metadata?.jobOrders?.length || 0}</strong></div></div><DataTable columns={['Incident', 'Severity', 'Detail']} emptyMessage="Belum ada incident untuk row ini." rows={(tripMonitorDetail.metadata?.incidents || []).map((incident) => [tmsIncidentLabel(incident.code), <Chip color={incident.severity === 'critical' ? 'danger' : 'warning'}>{incident.severity || 'warning'}</Chip>, incident.detail || '-'])} /><DataTable columns={['JO', 'Origin', 'Destination', 'ETA load', 'ETA destination', 'Status']} emptyMessage="Belum ada job order di row ini." rows={(tripMonitorDetail.metadata?.jobOrders || []).map((job) => [job.jobOrderId || '-', job.originName || '-', job.destinationName || '-', formatEtaText(job.etaOrigin), formatEtaText(job.etaDestination), job.jobOrderStatus || job.workflowState || '-'])} /><DataTable columns={['Field', 'Value']} emptyMessage="Belum ada detail fleet terkait." rows={tripMonitorDetail.metadata?.fleetRow ? [['Account', tripMonitorDetail.metadata.fleetRow.accountLabel || tripMonitorDetail.metadata.fleetRow.accountId || '-'], ['Location', tripMonitorDetail.metadata.fleetRow.locationSummary || '-'], ['Speed', fmtNum(tripMonitorDetail.metadata.fleetRow.speed, 0)], ['Temp 1', fmtNum(tripMonitorDetail.metadata.fleetRow.liveTemp1)], ['Temp 2', fmtNum(tripMonitorDetail.metadata.fleetRow.liveTemp2)], ['GPS', tripMonitorDetail.metadata.fleetRow.errGps || 'OK'], ['Sensor', tripMonitorDetail.metadata.fleetRow.errSensor || 'OK']] : []} /></div>}</CardContent></Card></div> : null}
       {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
       {expandedFleetRow ? <div className="fleet-detail-modal-backdrop" onClick={() => setExpandedFleetRowKey('')}>
@@ -4368,6 +4754,57 @@ function TemperatureChart({ records, busy, title, description, compact = false }
   </div>;
 }
 
+function tmsIncidentIcon(code) {
+  switch (code) {
+    case 'gps-error':
+      return <Route size={13} />;
+    case 'temp-error':
+      return <Thermometer size={13} />;
+    case 'long-stop':
+      return <Clock3 size={13} />;
+    case 'late-origin':
+    case 'late-destination':
+      return <AlertTriangle size={13} />;
+    case 'geofence-origin':
+    case 'geofence-destination':
+      return <MapPinOff size={13} />;
+    default:
+      return <PackageSearch size={13} />;
+  }
+}
+
+function TripMonitorUnitCard({ row, onOpen, onOpenHistorical, onOpenMap, onOpenFleet }) {
+  return <div className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`}>
+    <div className="trip-monitor-card-head">
+      <div className="trip-monitor-card-titleblock">
+        <button type="button" className="trip-monitor-unit-link" onClick={onOpenHistorical}>
+          <strong>{row.unitLabel || row.unitId || row.normalizedPlate || '-'}</strong>
+        </button>
+        <div className="subtle-line">{row.unitId || row.normalizedPlate || '-'}</div>
+      </div>
+      <Chip color={tmsSeverityTone(row.severity)}>{tmsSeverityLabel(row.severity)}</Chip>
+    </div>
+    <div className="trip-monitor-card-body">
+      <div className="trip-monitor-meta"><span>JO</span><strong>{row.jobOrderId || '-'}</strong></div>
+      <div className="trip-monitor-meta"><span>Origin</span><strong>{row.originName || '-'}</strong></div>
+      <div className="trip-monitor-meta"><span>Destination</span><strong>{row.destinationName || '-'}</strong></div>
+      <div className="trip-monitor-meta trip-monitor-meta-inline"><span>Temp</span><strong>{row.tempMin ?? '-'} to {row.tempMax ?? '-'}</strong></div>
+      <div className="trip-monitor-meta"><span>ETA load</span><strong>{formatEtaText(row.etaOrigin)}</strong></div>
+      <div className="trip-monitor-meta"><span>ETA destination</span><strong>{formatEtaText(row.etaDestination)}</strong></div>
+      <div className="trip-monitor-meta"><span>Driver app</span><strong>{row.driverAppStatus || '-'}</strong></div>
+      {row.unmatchedReason ? <div className="trip-monitor-alert">{row.unmatchedReason}</div> : null}
+      <div className="trip-monitor-chip-grid">
+        {(row.incidentCodes || []).length ? row.incidentCodes.map((code) => <span key={`${row.rowId}-${code}`} className={`trip-monitor-chip trip-monitor-chip-${TMS_INCIDENT_META[code]?.tone || 'default'}`}>{tmsIncidentIcon(code)}<span>{tmsIncidentLabel(code)}</span></span>) : <span className="trip-monitor-chip trip-monitor-chip-default">No incident</span>}
+      </div>
+    </div>
+    <div className="trip-monitor-card-footer">
+      <button type="button" className="trip-monitor-card-button" onClick={onOpen}>Detail</button>
+      <button type="button" className="trip-monitor-card-button" onClick={onOpenFleet}>Graphic</button>
+      <button type="button" className="trip-monitor-card-button" onClick={onOpenMap}>Map</button>
+    </div>
+  </div>;
+}
+
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -4446,6 +4883,28 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

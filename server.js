@@ -30,6 +30,20 @@ const DEFAULT_REMOTE_RESET_AUTOMATION = {
   onlyWhenPollingActive: true,
 };
 
+const DEFAULT_TMS_CONFIG = {
+  tenantLabel: 'Primary TMS',
+  baseUrl: '',
+  username: '',
+  password: '',
+  sessionCookie: '',
+  csrfToken: '',
+  autoSync: true,
+  syncIntervalMinutes: 15,
+  geofenceRadiusMeters: 300,
+  longStopMinutes: 45,
+  appStagnantMinutes: 60,
+};
+
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -71,6 +85,7 @@ const DEFAULT_CONFIG = {
   activeAccountId: 'primary',
   webSessionSecret: '',
   remoteResetAutomation: DEFAULT_REMOTE_RESET_AUTOMATION,
+  tms: DEFAULT_TMS_CONFIG,
 };
 
 const DEFAULT_STATE = {
@@ -102,9 +117,12 @@ let remoteResetTimer = null;
 let pollInFlight = false;
 let remoteResetInFlight = false;
 let astroSyncTimer = null;
+let tmsSyncTimer = null;
 const ASTRO_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const ASTRO_SNAPSHOT_LOG_LIMIT = 100;
 const astroSnapshotLogs = [];
+const TMS_SYNC_LOG_LIMIT = 100;
+const tmsSyncLogs = [];
 const API_MONITOR_LIMIT = 250;
 const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
@@ -118,6 +136,7 @@ const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
 const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 5000);
 const POSTGRES_CONNECT_TIMEOUT_MS = Number(process.env.POSTGRES_CONNECT_TIMEOUT_MS || 5000);
 const POSTGRES_QUERY_TIMEOUT_MS = Number(process.env.POSTGRES_QUERY_TIMEOUT_MS || 8000);
+const TMS_REQUEST_TIMEOUT_MS = Number(process.env.TMS_REQUEST_TIMEOUT_MS || 20000);
 const UNIT_CATEGORY_LABELS = {
   oncall: 'OnCall',
   'dedicated-astro': 'Dedicated Astro',
@@ -485,6 +504,23 @@ function normalizeRemoteResetAutomation(value) {
   };
 }
 
+function normalizeTmsConfig(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    tenantLabel: String(source.tenantLabel || DEFAULT_TMS_CONFIG.tenantLabel).trim() || DEFAULT_TMS_CONFIG.tenantLabel,
+    baseUrl: String(source.baseUrl || '').trim().replace(/\/+$/, ''),
+    username: String(source.username || '').trim(),
+    password: String(source.password || '').trim(),
+    sessionCookie: String(source.sessionCookie || '').trim(),
+    csrfToken: String(source.csrfToken || '').trim(),
+    autoSync: source.autoSync === undefined ? Boolean(DEFAULT_TMS_CONFIG.autoSync) : Boolean(source.autoSync),
+    syncIntervalMinutes: Math.max(5, Number(source.syncIntervalMinutes || DEFAULT_TMS_CONFIG.syncIntervalMinutes)),
+    geofenceRadiusMeters: Math.max(50, Number(source.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters)),
+    longStopMinutes: Math.max(5, Number(source.longStopMinutes || DEFAULT_TMS_CONFIG.longStopMinutes)),
+    appStagnantMinutes: Math.max(5, Number(source.appStagnantMinutes || DEFAULT_TMS_CONFIG.appStagnantMinutes)),
+  };
+}
+
 function normalizeConfig(raw) {
   const merged = {
     ...clone(DEFAULT_CONFIG),
@@ -532,6 +568,7 @@ function normalizeConfig(raw) {
   merged.activeAccountId = String(merged.activeAccountId || 'primary').trim() || 'primary';
   merged.webSessionSecret = String(merged.webSessionSecret || '').trim();
   merged.remoteResetAutomation = normalizeRemoteResetAutomation(merged.remoteResetAutomation);
+  merged.tms = normalizeTmsConfig(merged.tms);
   merged.webUsers = Array.isArray(merged.webUsers)
     ? merged.webUsers.map(normalizeWebUser).filter(Boolean)
     : [];
@@ -2483,6 +2520,21 @@ function sanitizeConfigForClient() {
     astroLocations: config.astroLocations,
     astroRoutes: config.astroRoutes,
     remoteResetAutomation: config.remoteResetAutomation,
+    tms: {
+      tenantLabel: config.tms?.tenantLabel || DEFAULT_TMS_CONFIG.tenantLabel,
+      baseUrl: config.tms?.baseUrl || '',
+      username: config.tms?.username || '',
+      hasPassword: Boolean(config.tms?.password),
+      hasSessionCookie: Boolean(config.tms?.sessionCookie),
+      hasVerifiedSession: Boolean(config.tms?.sessionCookie && config.tms?.csrfToken),
+      sessionCookiePreview: maskCookie(config.tms?.sessionCookie || ''),
+      csrfTokenPreview: maskCookie(config.tms?.csrfToken || ''),
+      autoSync: Boolean(config.tms?.autoSync),
+      syncIntervalMinutes: Number(config.tms?.syncIntervalMinutes || DEFAULT_TMS_CONFIG.syncIntervalMinutes),
+      geofenceRadiusMeters: Number(config.tms?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters),
+      longStopMinutes: Number(config.tms?.longStopMinutes || DEFAULT_TMS_CONFIG.longStopMinutes),
+      appStagnantMinutes: Number(config.tms?.appStagnantMinutes || DEFAULT_TMS_CONFIG.appStagnantMinutes),
+    },
     activeAccountId: config.activeAccountId,
     accounts: getAllAccountConfigs().map(function (account) {
       return {
@@ -3215,6 +3267,194 @@ function mergeCookieHeaders() {
   }).join('; ');
 }
 
+function normalizePlateKey(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function extractTmsCsrfToken(html) {
+  const text = String(html || '');
+  const patterns = [
+    /csrf_token["']?\s*[:=]\s*["']([^"']+)["']/i,
+    /frappe\.csrf_token\s*=\s*["']([^"']+)["']/i,
+    /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return String(match[1]).trim();
+    }
+  }
+  return '';
+}
+
+function getTmsConfig() {
+  return normalizeTmsConfig(config?.tms);
+}
+
+function hasTmsCredentials(tmsConfig) {
+  const runtime = normalizeTmsConfig(tmsConfig || config?.tms);
+  return Boolean(runtime.baseUrl && runtime.username && runtime.password);
+}
+
+function pushTmsSyncLog(entry) {
+  const row = {
+    id: String(entry.id || `tms-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    syncedAt: entry.syncedAt || new Date().toISOString(),
+    status: String(entry.status || 'info'),
+    fetchedCount: Number(entry.fetchedCount || 0),
+    matchedCount: Number(entry.matchedCount || 0),
+    unmatchedCount: Number(entry.unmatchedCount || 0),
+    criticalCount: Number(entry.criticalCount || 0),
+    warningCount: Number(entry.warningCount || 0),
+    normalCount: Number(entry.normalCount || 0),
+    noJobOrderCount: Number(entry.noJobOrderCount || 0),
+    message: String(entry.message || '').trim(),
+    details: entry.details && typeof entry.details === 'object' ? entry.details : {},
+  };
+  tmsSyncLogs.push(row);
+  if (tmsSyncLogs.length > TMS_SYNC_LOG_LIMIT) {
+    tmsSyncLogs.splice(0, tmsSyncLogs.length - TMS_SYNC_LOG_LIMIT);
+  }
+  return row;
+}
+
+function parseTmsSyncLogRow(row) {
+  return {
+    id: String(row.id || ''),
+    syncedAt: row.synced_at || row.syncedAt || null,
+    status: String(row.status || 'info'),
+    fetchedCount: Number(row.fetched_count || row.fetchedCount || 0),
+    matchedCount: Number(row.matched_count || row.matchedCount || 0),
+    unmatchedCount: Number(row.unmatched_count || row.unmatchedCount || 0),
+    criticalCount: Number(row.critical_count || row.criticalCount || 0),
+    warningCount: Number(row.warning_count || row.warningCount || 0),
+    normalCount: Number(row.normal_count || row.normalCount || 0),
+    noJobOrderCount: Number(row.no_job_order_count || row.noJobOrderCount || 0),
+    message: String(row.message || ''),
+    details: row.details && typeof row.details === 'object' ? row.details : {},
+  };
+}
+
+async function appendTmsSyncLog(entry) {
+  const logRow = pushTmsSyncLog(entry);
+  if (!getPostgresConfig().enabled) {
+    return logRow;
+  }
+  await postgresUpsertRows(
+    'tms_sync_logs',
+    [{
+      id: logRow.id,
+      synced_at: logRow.syncedAt,
+      status: logRow.status,
+      fetched_count: logRow.fetchedCount,
+      matched_count: logRow.matchedCount,
+      unmatched_count: logRow.unmatchedCount,
+      critical_count: logRow.criticalCount,
+      warning_count: logRow.warningCount,
+      normal_count: logRow.normalCount,
+      no_job_order_count: logRow.noJobOrderCount,
+      message: logRow.message,
+      details: JSON.stringify(logRow.details || {}),
+    }],
+    ['id', 'synced_at', 'status', 'fetched_count', 'matched_count', 'unmatched_count', 'critical_count', 'warning_count', 'normal_count', 'no_job_order_count', 'message', 'details'],
+    ['id'],
+    { touchUpdatedAt: false },
+  );
+  return logRow;
+}
+
+async function listTmsSyncLogs(limit = 20) {
+  const resolvedLimit = Math.max(1, Math.min(100, Number(limit || 20)));
+  if (!getPostgresConfig().enabled) {
+    return [...tmsSyncLogs].slice().reverse().slice(0, resolvedLimit);
+  }
+  const result = await postgresQuery(
+    `select id, synced_at, status, fetched_count, matched_count, unmatched_count, critical_count, warning_count, normal_count, no_job_order_count, message, details
+     from tms_sync_logs
+     order by synced_at desc
+     limit $1`,
+    [resolvedLimit],
+  );
+  return result.rows.map(parseTmsSyncLogRow);
+}
+
+async function fetchTmsText(urlValue, options) {
+  const controller = new AbortController();
+  const timeout = setTimeout(function () {
+    controller.abort();
+  }, TMS_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(urlValue, {
+      method: options?.method || 'GET',
+      headers: options?.headers || {},
+      body: options?.body,
+      redirect: options?.redirect || 'follow',
+      signal: controller.signal,
+    });
+    const bodyText = await response.text();
+    return { response, bodyText };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchTmsJson(urlValue, options) {
+  const { response, bodyText } = await fetchTmsText(urlValue, options);
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (!response.ok) {
+    throw new Error(`TMS request failed. HTTP ${response.status}`);
+  }
+  if (contentType.includes('text/html') || /<html/i.test(bodyText)) {
+    throw new Error('TMS session expired or redirected to login page.');
+  }
+  try {
+    return { response, payload: JSON.parse(bodyText || '{}') };
+  } catch (error) {
+    throw new Error('Invalid JSON response from TMS.');
+  }
+}
+
+function parseFrappeCountPayload(payload) {
+  if (typeof payload?.message === 'number') return Number(payload.message || 0);
+  if (typeof payload?.message?.count === 'number') return Number(payload.message.count || 0);
+  if (typeof payload?.count === 'number') return Number(payload.count || 0);
+  return 0;
+}
+
+function parseFrappeListRows(payload) {
+  const source = payload?.message || payload || {};
+  if (Array.isArray(source)) {
+    return source;
+  }
+  if (Array.isArray(source.values)) {
+    const keys = Array.isArray(source.keys) ? source.keys : [];
+    return source.values.map(function (row) {
+      if (!Array.isArray(row)) return row;
+      const mapped = {};
+      keys.forEach(function (key, index) {
+        const cleanKey = String(key || '').replace(/`/g, '').split('.').pop();
+        mapped[cleanKey] = row[index];
+      });
+      return mapped;
+    });
+  }
+  if (Array.isArray(source.result)) {
+    return source.result;
+  }
+  if (Array.isArray(source.data)) {
+    return source.data;
+  }
+  return [];
+}
+
+function parseFrappeDocPayload(payload) {
+  if (Array.isArray(payload?.docs) && payload.docs[0]) return payload.docs[0];
+  if (Array.isArray(payload?.message?.docs) && payload.message.docs[0]) return payload.message.docs[0];
+  if (payload?.docs && typeof payload.docs === 'object' && !Array.isArray(payload.docs)) return payload.docs;
+  if (payload?.message && typeof payload.message === 'object' && !Array.isArray(payload.message)) return payload.message;
+  return null;
+}
+
 async function loginToSolofleet(email, password, rememberMe, options) {
   const loginOptions = options && typeof options === 'object' ? options : {};
   const normalizedEmail = String(email || '').trim();
@@ -3346,6 +3586,739 @@ function logoutFromSolofleet(accountId) {
   saveConfig();
   saveState();
   return sanitizeConfigForClient();
+}
+
+async function loginToTms(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const current = getTmsConfig();
+  const nextConfig = normalizeTmsConfig({
+    ...current,
+    tenantLabel: source.tenantLabel ?? current.tenantLabel,
+    baseUrl: source.baseUrl ?? current.baseUrl,
+    username: source.username ?? current.username,
+    password: source.password === undefined || source.password === null || source.password === ''
+      ? current.password
+      : source.password,
+    autoSync: source.autoSync ?? current.autoSync,
+    syncIntervalMinutes: source.syncIntervalMinutes ?? current.syncIntervalMinutes,
+    geofenceRadiusMeters: source.geofenceRadiusMeters ?? current.geofenceRadiusMeters,
+    longStopMinutes: source.longStopMinutes ?? current.longStopMinutes,
+    appStagnantMinutes: source.appStagnantMinutes ?? current.appStagnantMinutes,
+  });
+
+  if (!nextConfig.baseUrl || !nextConfig.username || !nextConfig.password) {
+    throw new Error('Base URL, username, dan password TMS wajib diisi.');
+  }
+
+  const loginPageUrl = new URL('/login?redirect-to=/', nextConfig.baseUrl);
+  const loginPageResponse = await fetch(loginPageUrl, {
+    method: 'GET',
+    headers: {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+  });
+  const loginPageHtml = await loginPageResponse.text();
+  if (!loginPageResponse.ok) {
+    throw new Error(`Unable to open TMS login page. HTTP ${loginPageResponse.status}`);
+  }
+
+  const initialCookies = buildCookieHeader(loginPageResponse.headers.getSetCookie ? loginPageResponse.headers.getSetCookie() : []);
+  const loginBody = new URLSearchParams({
+    cmd: 'login',
+    usr: nextConfig.username,
+    pwd: nextConfig.password,
+    device: 'desktop',
+  });
+  const submitResponse = await fetch(new URL('/', nextConfig.baseUrl), {
+    method: 'POST',
+    redirect: 'manual',
+    headers: {
+      accept: 'application/json,text/html;q=0.9,*/*;q=0.8',
+      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      cookie: initialCookies,
+      referer: String(loginPageUrl),
+      'x-frappe-csrf-token': 'None',
+    },
+    body: loginBody.toString(),
+  });
+  const submitText = await submitResponse.text();
+  const submitCookies = buildCookieHeader(submitResponse.headers.getSetCookie ? submitResponse.headers.getSetCookie() : []);
+  const mergedCookie = mergeCookieHeaders(initialCookies, submitCookies);
+  if (!mergedCookie) {
+    throw new Error(/Invalid Login|incorrect|failed/i.test(submitText)
+      ? 'TMS login failed. Check username/password.'
+      : 'TMS login did not return a session cookie.');
+  }
+
+  const appPageUrl = new URL('/app/job-order?start_actual_time_load=%5B%22Timespan%22%2C%22today%22%5D', nextConfig.baseUrl);
+  const appPageResponse = await fetch(appPageUrl, {
+    method: 'GET',
+    headers: {
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      cookie: mergedCookie,
+      referer: String(loginPageUrl),
+    },
+  });
+  const appPageHtml = await appPageResponse.text();
+  if (!appPageResponse.ok) {
+    throw new Error(`Unable to open TMS app page. HTTP ${appPageResponse.status}`);
+  }
+  const csrfToken = extractTmsCsrfToken(appPageHtml);
+  if (!csrfToken) {
+    throw new Error('TMS login succeeded but csrf token was not found.');
+  }
+
+  config = normalizeConfig({
+    ...config,
+    tms: {
+      ...nextConfig,
+      sessionCookie: mergedCookie,
+      csrfToken,
+    },
+  });
+  saveConfig();
+  scheduleNextTmsSync();
+  return sanitizeConfigForClient().tms;
+}
+
+function logoutFromTms() {
+  config = normalizeConfig({
+    ...config,
+    tms: {
+      ...config.tms,
+      sessionCookie: '',
+      csrfToken: '',
+    },
+  });
+  saveConfig();
+  scheduleNextTmsSync();
+  return sanitizeConfigForClient().tms;
+}
+
+async function tmsRequest(pathname, options, allowRetry = true) {
+  const runtime = getTmsConfig();
+  if (!runtime.baseUrl) {
+    throw new Error('TMS base URL is not configured.');
+  }
+  let effective = runtime;
+  if (!effective.sessionCookie || !effective.csrfToken) {
+    if (!hasTmsCredentials(effective)) {
+      throw new Error('TMS session is not ready. Save credentials and connect first.');
+    }
+    await loginToTms(effective);
+    effective = getTmsConfig();
+  }
+
+  const targetUrl = pathname instanceof URL ? pathname : new URL(pathname, effective.baseUrl);
+  const method = String(options?.method || 'GET').toUpperCase();
+  const headers = {
+    accept: 'application/json,text/plain,*/*',
+    cookie: effective.sessionCookie,
+    referer: String(new URL('/app/job-order?start_actual_time_load=%5B%22Timespan%22%2C%22today%22%5D', effective.baseUrl)),
+    'x-frappe-csrf-token': effective.csrfToken,
+    ...(options?.headers || {}),
+  };
+  let body = options?.body;
+  if (body instanceof URLSearchParams) {
+    headers['content-type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    body = body.toString();
+  }
+
+  try {
+    return await fetchTmsJson(targetUrl, { method, headers, body });
+  } catch (error) {
+    if (allowRetry && /session expired|login page|HTTP 403|HTTP 401/i.test(String(error.message || '')) && hasTmsCredentials(effective)) {
+      await loginToTms(effective);
+      return tmsRequest(pathname, options, false);
+    }
+    throw error;
+  }
+}
+
+async function fetchTmsJobOrderCount() {
+  const body = new URLSearchParams({
+    doctype: 'Job Order',
+    filters: JSON.stringify([['Job Order', 'start_actual_time_load', 'Timespan', 'today']]),
+    fields: JSON.stringify([]),
+    distinct: 'false',
+    limit: '1001',
+  });
+  const { payload } = await tmsRequest('/api/method/frappe.desk.reportview.get_count', {
+    method: 'POST',
+    body,
+  });
+  return parseFrappeCountPayload(payload);
+}
+
+async function fetchTmsJobOrderListPage(start, pageLength) {
+  const body = new URLSearchParams({
+    doctype: 'Job Order',
+    fields: JSON.stringify([
+      '`tabJob Order`.`name`',
+      '`tabJob Order`.`job_order_status`',
+      '`tabJob Order`.`fleet_type`',
+      '`tabJob Order`.`plat_no`',
+      '`tabJob Order`.`start_actual_time_load`',
+      '`tabJob Order`.`actual_distance_km`',
+      '`tabJob Order`.`customer`',
+      '`tabJob Order`.`modified`',
+    ]),
+    filters: JSON.stringify([['Job Order', 'start_actual_time_load', 'Timespan', 'today']]),
+    order_by: '`tabJob Order`.`modified` DESC',
+    start: String(start || 0),
+    page_length: String(pageLength || 100),
+    view: 'List',
+    group_by: '`tabJob Order`.`name`',
+    with_comment_count: 'true',
+  });
+  const { payload } = await tmsRequest('/api/method/frappe.desk.reportview.get', {
+    method: 'POST',
+    body,
+  });
+  return parseFrappeListRows(payload);
+}
+
+async function fetchTmsJobOrderList() {
+  const total = await fetchTmsJobOrderCount();
+  const pageLength = 100;
+  const rows = [];
+  for (let start = 0; start < Math.max(total, pageLength); start += pageLength) {
+    const page = await fetchTmsJobOrderListPage(start, pageLength);
+    rows.push(...page);
+    if (page.length < pageLength) break;
+  }
+  return rows;
+}
+
+async function fetchTmsJobOrderDoc(jobOrderId) {
+  const encoded = encodeURIComponent(String(jobOrderId || '').trim());
+  const { payload } = await tmsRequest(`/api/method/frappe.desk.form.load.getdoc?doctype=Job%20Order&name=${encoded}&_=${Date.now()}`, {
+    method: 'GET',
+  });
+  const doc = parseFrappeDocPayload(payload);
+  if (!doc) {
+    throw new Error(`TMS detail JO ${jobOrderId} tidak ditemukan.`);
+  }
+  return doc;
+}
+
+function getTmsTaskArrays(doc) {
+  const taskList = Array.isArray(doc?.task_list) ? [...doc.task_list] : [];
+  const workflowLines = Array.isArray(doc?.job_workflow_line) ? [...doc.job_workflow_line] : [];
+  const driverAssign = Array.isArray(doc?.driver_assign) ? [...doc.driver_assign] : [];
+  taskList.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
+  workflowLines.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
+  return { taskList, workflowLines, driverAssign };
+}
+
+const TMS_TERMINAL_STATUSES = new Set([
+  'closed',
+  'completed',
+  'cancelled',
+  'canceled',
+  'delivered',
+  'finished',
+  'done',
+  'void',
+]);
+
+function isTmsJobActive(doc) {
+  const status = String(doc?.job_order_status || '').trim().toLowerCase();
+  if (status && TMS_TERMINAL_STATUSES.has(status)) {
+    return false;
+  }
+  const { workflowLines, taskList } = getTmsTaskArrays(doc);
+  const finalTask = [...taskList].reverse().find(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; }) || taskList[taskList.length - 1] || null;
+  if (!finalTask) return true;
+  const finalTaskName = String(finalTask.task_address || '').trim();
+  return !workflowLines.some(function (line) {
+    return String(line.task_address || '').trim() === finalTaskName
+      && /selesai bongkar|completed unload|finished unload/i.test(String(line.status_description || ''));
+  });
+}
+
+function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
+  const { taskList, workflowLines, driverAssign } = getTmsTaskArrays(doc);
+  const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
+  const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
+  const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
+  const plateRaw = String(doc?.plat_no || '').trim();
+  const normalizedPlate = normalizePlateKey(plateRaw);
+  const startTimestamp = toTimestampMaybe(doc?.start_actual_time_load || loadTask?.eta || Date.now());
+  return {
+    jobOrderId: String(doc?.name || '').trim(),
+    day: formatLocalDay(startTimestamp || Date.now()),
+    tenantLabel: tenantLabel || '',
+    customerName: String(doc?.customer || '').trim(),
+    normalizedPlate,
+    plateRaw,
+    unitLabel: plateRaw,
+    jobOrderStatus: String(doc?.job_order_status || '').trim(),
+    workflowState: String(doc?.workflow_state || '').trim(),
+    originName: String(loadTask?.task_address || doc?.homebase_location || '').trim(),
+    destinationName: String(destinationTask?.task_address || doc?.finish_location || '').trim(),
+    tempMin: toNumber(doc?.custom_minimum_temperature),
+    tempMax: toNumber(doc?.custom_maximum_temperature),
+    etaOrigin: toTimestampMaybe(loadTask?.eta || doc?.start_actual_time_load),
+    etaDestination: toTimestampMaybe(destinationTask?.eta || doc?.finish_actual_time_unload),
+    active: isTmsJobActive(doc),
+    taskList,
+    workflowLines,
+    driverAssign,
+    rawDoc: doc,
+  };
+}
+
+function buildFleetPlateIndex(now) {
+  const allRows = [];
+  for (const accountConfig of getAllAccountConfigs()) {
+    const accountState = ensureAccountState(accountConfig.id);
+    syncFleetSnapshotRecords(accountConfig, accountState, now);
+    const liveAlerts = buildLiveAlerts(accountConfig, accountState, now);
+    const rows = annotateFleetRowsWithPods(accountConfig, buildFleetRows(accountConfig, accountState, now, liveAlerts));
+    allRows.push(...rows);
+  }
+  const byPlate = new Map();
+  for (const row of allRows) {
+    const keys = [normalizePlateKey(row.label), normalizePlateKey(row.alias), normalizePlateKey(row.id)].filter(Boolean);
+    for (const key of keys) {
+      if (!byPlate.has(key) || rowPriority(row) > rowPriority(byPlate.get(key))) {
+        byPlate.set(key, row);
+      }
+    }
+  }
+  return { allRows, byPlate };
+}
+
+function findWorkflowStatus(workflowLines, taskName, pattern) {
+  return workflowLines.find(function (line) {
+    return (!taskName || String(line.task_address || '').trim() === taskName)
+      && pattern.test(String(line.status_description || ''));
+  }) || null;
+}
+
+function distanceMetersBetween(leftLat, leftLng, rightLat, rightLng) {
+  const a = toNumber(leftLat);
+  const b = toNumber(leftLng);
+  const c = toNumber(rightLat);
+  const d = toNumber(rightLng);
+  if (![a, b, c, d].every(Number.isFinite)) {
+    return null;
+  }
+  const toRad = function (value) { return value * Math.PI / 180; };
+  const earth = 6371000;
+  const dLat = toRad(c - a);
+  const dLng = toRad(d - b);
+  const aa = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+    + Math.cos(toRad(a)) * Math.cos(toRad(c)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return earth * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+}
+
+function evaluateTmsIncidents(snapshot, fleetRow, tmsConfig, now) {
+  const incidents = [];
+  const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
+  const longStopMinutes = Number(tmsConfig?.longStopMinutes || DEFAULT_TMS_CONFIG.longStopMinutes);
+  const stagnantMinutes = Number(tmsConfig?.appStagnantMinutes || DEFAULT_TMS_CONFIG.appStagnantMinutes);
+  const { taskList, workflowLines, driverAssign } = snapshot;
+  const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
+  const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
+  const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
+  const loadArrivedLine = findWorkflowStatus(workflowLines, String(loadTask?.task_address || '').trim(), /tiba/i);
+  const destinationArrivedLine = findWorkflowStatus(workflowLines, String(destinationTask?.task_address || '').trim(), /tiba/i);
+  const destinationDoneLine = findWorkflowStatus(workflowLines, String(destinationTask?.task_address || '').trim(), /selesai bongkar/i);
+  const latestWorkflow = [...workflowLines].sort(function (left, right) {
+    return (toTimestampMaybe(right.checked_time) || 0) - (toTimestampMaybe(left.checked_time) || 0);
+  })[0] || null;
+  const driver = driverAssign[0] || null;
+  const liveLat = fleetRow?.latitude ?? null;
+  const liveLng = fleetRow?.longitude ?? null;
+  const originDistance = distanceMetersBetween(liveLat, liveLng, loadTask?.latitude, loadTask?.longitude);
+  const destinationDistance = distanceMetersBetween(liveLat, liveLng, destinationTask?.latitude, destinationTask?.longitude);
+  const originEta = snapshot.etaOrigin;
+  const destinationEta = snapshot.etaDestination;
+  const destinationEtaLateByMinutes = destinationEta && now > destinationEta ? Math.round((now - destinationEta) / 60000) : 0;
+  const originEtaLateByMinutes = originEta && now > originEta ? Math.round((now - originEta) / 60000) : 0;
+  const latestWorkflowAgeMinutes = latestWorkflow?.checked_time ? Math.round((now - toTimestampMaybe(latestWorkflow.checked_time)) / 60000) : null;
+
+  if (fleetRow?.errGps) {
+    incidents.push({ code: 'gps-error', label: 'GPS error', severity: 'critical', detail: String(fleetRow.errGps || 'GPS error') });
+  }
+  if (fleetRow?.hasLiveSensorFault) {
+    incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
+  }
+  if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
+    incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
+  }
+  if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && !destinationDoneLine) {
+    incidents.push({ code: 'late-destination', label: 'Late to destination', severity: destinationEtaLateByMinutes >= 120 ? 'critical' : 'warning', detail: `ETA tujuan lewat ${destinationEtaLateByMinutes} menit` });
+  }
+  if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine && originDistance !== null && originDistance > radius) {
+    incidents.push({ code: 'geofence-origin', label: 'Missed load geofence', severity: 'warning', detail: `Jarak ${Math.round(originDistance)} m dari tempat muat` });
+  }
+  if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && destinationDistance !== null && destinationDistance > radius) {
+    incidents.push({ code: 'geofence-destination', label: 'Missed destination geofence', severity: 'warning', detail: `Jarak ${Math.round(destinationDistance)} m dari tujuan` });
+  }
+  if (
+    snapshot.active
+    && fleetRow?.hasLiveSnapshot
+    && !fleetRow?.isMoving
+    && latestWorkflowAgeMinutes !== null
+    && latestWorkflowAgeMinutes >= longStopMinutes
+    && (originDistance === null || originDistance > radius)
+    && (destinationDistance === null || destinationDistance > radius)
+  ) {
+    incidents.push({ code: 'long-stop', label: 'Long stop', severity: 'warning', detail: `Berhenti >= ${latestWorkflowAgeMinutes} menit` });
+  }
+  if (snapshot.active && latestWorkflowAgeMinutes !== null && latestWorkflowAgeMinutes >= stagnantMinutes) {
+    incidents.push({ code: 'app-stagnant', label: 'App stagnan', severity: 'warning', detail: `Tidak ada update workflow ${latestWorkflowAgeMinutes} menit` });
+  }
+  if (snapshot.active && driver && /not ready/i.test(String(driver.driver_status || ''))) {
+    incidents.push({ code: 'driver-not-ready', label: 'Driver not ready', severity: 'warning', detail: 'Driver app masih Not Ready' });
+  }
+
+  return incidents;
+}
+
+function chooseHeadlineSnapshot(items, fleetRow, tmsConfig, now) {
+  const scored = items.map(function (item) {
+    const incidents = evaluateTmsIncidents(item, fleetRow, tmsConfig, now);
+    const severityScore = incidents.some(function (incident) { return incident.severity === 'critical'; }) ? 2 : incidents.length ? 1 : 0;
+    const etaScore = -(item.etaDestination || item.etaOrigin || 0);
+    return { item, incidents, severityScore, etaScore };
+  }).sort(function (left, right) {
+    return right.severityScore - left.severityScore || right.etaScore - left.etaScore;
+  });
+  return scored[0] || null;
+}
+
+function summarizeIncidentCodes(incidents) {
+  return [...new Set((incidents || []).map(function (incident) { return incident.code; }).filter(Boolean))];
+}
+
+function severityRank(value) {
+  switch (String(value || '').toLowerCase()) {
+    case 'critical': return 5;
+    case 'warning': return 4;
+    case 'normal': return 3;
+    case 'unmatched': return 2;
+    case 'no-job-order': return 1;
+    default: return 0;
+  }
+}
+
+function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
+  const groups = new Map();
+  for (const snapshot of jobSnapshots) {
+    const fleetRow = snapshot.normalizedPlate ? fleetIndex.byPlate.get(snapshot.normalizedPlate) : null;
+    const groupKey = fleetRow ? `matched::${fleetRow.accountId}::${fleetRow.id}` : `unmatched::${snapshot.normalizedPlate || snapshot.jobOrderId}`;
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { fleetRow, items: [] });
+    }
+    groups.get(groupKey).items.push(snapshot);
+  }
+
+  const rows = [];
+  for (const [groupKey, group] of groups.entries()) {
+    const activeItems = group.items.filter(function (item) { return item.active; });
+    const inactiveItems = group.items.filter(function (item) { return !item.active; });
+    const headline = chooseHeadlineSnapshot(activeItems.length ? activeItems : inactiveItems, group.fleetRow, tmsConfig, now);
+    if (!headline) {
+      continue;
+    }
+    const incidents = headline.incidents || [];
+    let severity = 'normal';
+    let boardStatus = 'normal';
+    let unmatchedReason = '';
+    if (!group.fleetRow) {
+      severity = 'unmatched';
+      boardStatus = 'unmatched';
+      unmatchedReason = 'Nopol TMS tidak cocok dengan unit Solofleet yang terkonfigurasi.';
+    } else if (!activeItems.length) {
+      severity = 'no-job-order';
+      boardStatus = 'no-job-order';
+    } else if (incidents.some(function (incident) { return incident.severity === 'critical'; })) {
+      severity = 'critical';
+      boardStatus = 'critical';
+    } else if (incidents.length) {
+      severity = 'warning';
+      boardStatus = 'warning';
+    }
+
+    const driver = (headline.item.driverAssign || [])[0] || null;
+    rows.push({
+      rowId: `${headline.item.day}|${groupKey}`,
+      day: headline.item.day,
+      tenantLabel: headline.item.tenantLabel || '',
+      customerName: headline.item.customerName || '',
+      unitKey: group.fleetRow ? `${group.fleetRow.accountId}::${group.fleetRow.id}` : (headline.item.normalizedPlate || groupKey),
+      unitId: group.fleetRow?.id || '',
+      unitLabel: group.fleetRow?.label || headline.item.plateRaw || headline.item.unitLabel || '',
+      normalizedPlate: headline.item.normalizedPlate || '',
+      severity,
+      boardStatus,
+      jobOrderId: headline.item.jobOrderId,
+      jobOrderCount: group.items.length,
+      originName: headline.item.originName || '',
+      destinationName: headline.item.destinationName || '',
+      tempMin: headline.item.tempMin,
+      tempMax: headline.item.tempMax,
+      etaOrigin: headline.item.etaOrigin,
+      etaDestination: headline.item.etaDestination,
+      driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || '',
+      incidentCodes: summarizeIncidentCodes(incidents),
+      incidentSummary: incidents.map(function (incident) { return incident.label; }).join(', '),
+      unmatchedReason,
+      metadata: {
+        incidents,
+        fleetRow: group.fleetRow || null,
+        headlineJobOrder: headline.item,
+        jobOrders: group.items,
+      },
+    });
+  }
+
+  rows.sort(function (left, right) {
+    return severityRank(right.severity) - severityRank(left.severity)
+      || String(left.unitLabel || '').localeCompare(String(right.unitLabel || ''));
+  });
+  return rows;
+}
+
+async function replaceTmsJobSnapshots(day, jobSnapshots) {
+  if (!getPostgresConfig().enabled) {
+    return 0;
+  }
+  await postgresQuery('delete from tms_job_order_snapshots where day = $1', [day]);
+  if (!jobSnapshots.length) {
+    return 0;
+  }
+  return postgresUpsertRows(
+    'tms_job_order_snapshots',
+    jobSnapshots.map(function (snapshot) {
+      return {
+        job_order_id: snapshot.jobOrderId,
+        day: snapshot.day,
+        tenant_label: snapshot.tenantLabel,
+        customer_name: snapshot.customerName,
+        normalized_plate: snapshot.normalizedPlate,
+        plate_raw: snapshot.plateRaw,
+        unit_label: snapshot.unitLabel,
+        job_order_status: snapshot.jobOrderStatus,
+        workflow_state: snapshot.workflowState,
+        origin_name: snapshot.originName,
+        destination_name: snapshot.destinationName,
+        temp_min: snapshot.tempMin,
+        temp_max: snapshot.tempMax,
+        eta_origin: snapshot.etaOrigin ? new Date(snapshot.etaOrigin).toISOString() : null,
+        eta_destination: snapshot.etaDestination ? new Date(snapshot.etaDestination).toISOString() : null,
+        active: snapshot.active,
+        task_list: snapshot.taskList,
+        workflow_lines: snapshot.workflowLines,
+        driver_assign: snapshot.driverAssign,
+        raw_doc: snapshot.rawDoc,
+        updated_at: new Date().toISOString(),
+      };
+    }),
+    ['job_order_id', 'day', 'tenant_label', 'customer_name', 'normalized_plate', 'plate_raw', 'unit_label', 'job_order_status', 'workflow_state', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'active', 'task_list', 'workflow_lines', 'driver_assign', 'raw_doc', 'updated_at'],
+    ['job_order_id'],
+    { touchUpdatedAt: false },
+  );
+}
+
+async function replaceTmsMonitorRows(day, rows) {
+  if (!getPostgresConfig().enabled) {
+    return 0;
+  }
+  await postgresQuery('delete from tms_monitor_rows where day = $1', [day]);
+  if (!rows.length) {
+    return 0;
+  }
+  return postgresUpsertRows(
+    'tms_monitor_rows',
+    rows.map(function (row) {
+      return {
+        row_id: row.rowId,
+        day: row.day,
+        tenant_label: row.tenantLabel,
+        customer_name: row.customerName,
+        unit_key: row.unitKey,
+        unit_id: row.unitId,
+        unit_label: row.unitLabel,
+        normalized_plate: row.normalizedPlate,
+        severity: row.severity,
+        board_status: row.boardStatus,
+        job_order_id: row.jobOrderId,
+        job_order_count: row.jobOrderCount,
+        origin_name: row.originName,
+        destination_name: row.destinationName,
+        temp_min: row.tempMin,
+        temp_max: row.tempMax,
+        eta_origin: row.etaOrigin ? new Date(row.etaOrigin).toISOString() : null,
+        eta_destination: row.etaDestination ? new Date(row.etaDestination).toISOString() : null,
+        driver_app_status: row.driverAppStatus,
+        incident_codes: row.incidentCodes,
+        incident_summary: row.incidentSummary,
+        unmatched_reason: row.unmatchedReason,
+        metadata: row.metadata || {},
+        updated_at: new Date().toISOString(),
+      };
+    }),
+    ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
+    ['row_id'],
+    { touchUpdatedAt: false },
+  );
+}
+
+async function syncTmsMonitor(options) {
+  const runtime = getTmsConfig();
+  if (!runtime.baseUrl) {
+    throw new Error('TMS belum dikonfigurasi.');
+  }
+  if (!getPostgresConfig().enabled) {
+    throw new Error('PostgreSQL wajib aktif untuk TMS monitor.');
+  }
+
+  const now = Date.now();
+  const day = formatLocalDay(now);
+  const listRows = await fetchTmsJobOrderList();
+  const docs = [];
+  for (const item of listRows) {
+    const jobOrderId = String(item.name || item.job_order_id || '').trim();
+    if (!jobOrderId) continue;
+    docs.push(await fetchTmsJobOrderDoc(jobOrderId));
+  }
+  const jobSnapshots = docs.map(function (doc) { return buildTmsJobSnapshotFromDoc(doc, runtime.tenantLabel); });
+  const fleetIndex = buildFleetPlateIndex(now);
+  const monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
+  await replaceTmsJobSnapshots(day, jobSnapshots);
+  await replaceTmsMonitorRows(day, monitorRows);
+
+  const fetchedCount = jobSnapshots.length;
+  const matchedCount = monitorRows.filter(function (row) { return row.severity !== 'unmatched'; }).length;
+  const unmatchedCount = monitorRows.filter(function (row) { return row.severity === 'unmatched'; }).length;
+  const criticalCount = monitorRows.filter(function (row) { return row.severity === 'critical'; }).length;
+  const warningCount = monitorRows.filter(function (row) { return row.severity === 'warning'; }).length;
+  const normalCount = monitorRows.filter(function (row) { return row.severity === 'normal'; }).length;
+  const noJobOrderCount = monitorRows.filter(function (row) { return row.severity === 'no-job-order'; }).length;
+  console.log(`[TMS] Sync ${day}: fetched ${fetchedCount} JO | matched ${matchedCount} | unmatched ${unmatchedCount} | critical ${criticalCount} | warning ${warningCount} | normal ${normalCount} | no-jo ${noJobOrderCount}`);
+  if (unmatchedCount > 0) {
+    const unmatchedPreview = monitorRows
+      .filter(function (row) { return row.severity === 'unmatched'; })
+      .slice(0, 5)
+      .map(function (row) { return row.unitLabel || row.normalizedPlate || row.jobOrderId || row.rowId; })
+      .join(', ');
+    console.warn(`[TMS] Unmatched preview ${day}: ${unmatchedPreview}`);
+  }
+  const logEntry = await appendTmsSyncLog({
+    status: 'success',
+    fetchedCount,
+    matchedCount,
+    unmatchedCount,
+    criticalCount,
+    warningCount,
+    normalCount,
+    noJobOrderCount,
+    message: `TMS sync fetched ${fetchedCount} JO, ${criticalCount} critical, ${warningCount} warning, ${unmatchedCount} unmatched.`,
+    details: {
+      day,
+      fetchedCount,
+      rowsSaved: monitorRows.length,
+      customers: [...new Set(jobSnapshots.map(function (item) { return item.customerName; }).filter(Boolean))],
+    },
+  });
+  scheduleNextTmsSync();
+  return { ok: true, day, fetchedCount, rowsSaved: monitorRows.length, log: logEntry };
+}
+
+function scheduleNextTmsSync() {
+  if (tmsSyncTimer) {
+    clearTimeout(tmsSyncTimer);
+    tmsSyncTimer = null;
+  }
+  const runtime = getTmsConfig();
+  if (!runtime.autoSync || !hasTmsCredentials(runtime)) {
+    return;
+  }
+  const delayMs = Math.max(5, Number(runtime.syncIntervalMinutes || DEFAULT_TMS_CONFIG.syncIntervalMinutes)) * 60 * 1000;
+  tmsSyncTimer = setTimeout(function () {
+    syncTmsMonitor().catch(function (error) {
+      appendTmsSyncLog({
+        status: 'error',
+        message: error?.message || 'TMS auto-sync gagal.',
+        details: {},
+      }).catch(function () {});
+    }).finally(scheduleNextTmsSync);
+  }, delayMs);
+}
+
+async function listTmsMonitorRows(searchParams) {
+  const day = String(searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
+  const params = [day];
+  let query = `select * from tms_monitor_rows where day = $1`;
+  const customer = String(searchParams.get('customer') || '').trim();
+  if (customer) {
+    params.push(customer);
+    query += ` and customer_name = $${params.length}`;
+  }
+  const severity = String(searchParams.get('severity') || '').trim();
+  if (severity && severity !== 'all') {
+    params.push(severity);
+    query += ` and severity = $${params.length}`;
+  }
+  query += ` order by updated_at desc`;
+  const result = await postgresQuery(query, params);
+  return result.rows.map(function (row) {
+    return {
+      rowId: row.row_id,
+      day: String(row.day || ''),
+      tenantLabel: String(row.tenant_label || ''),
+      customerName: String(row.customer_name || ''),
+      unitKey: String(row.unit_key || ''),
+      unitId: String(row.unit_id || ''),
+      unitLabel: String(row.unit_label || ''),
+      normalizedPlate: String(row.normalized_plate || ''),
+      severity: String(row.severity || 'normal'),
+      boardStatus: String(row.board_status || 'normal'),
+      jobOrderId: String(row.job_order_id || ''),
+      jobOrderCount: Number(row.job_order_count || 0),
+      originName: String(row.origin_name || ''),
+      destinationName: String(row.destination_name || ''),
+      tempMin: toNumber(row.temp_min),
+      tempMax: toNumber(row.temp_max),
+      etaOrigin: row.eta_origin ? Date.parse(row.eta_origin) : null,
+      etaDestination: row.eta_destination ? Date.parse(row.eta_destination) : null,
+      driverAppStatus: String(row.driver_app_status || ''),
+      incidentCodes: Array.isArray(row.incident_codes) ? row.incident_codes : [],
+      incidentSummary: String(row.incident_summary || ''),
+      unmatchedReason: String(row.unmatched_reason || ''),
+      metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+    };
+  });
+}
+
+function buildTmsMonitorSummary(rows, logs) {
+  const summary = {
+    total: rows.length,
+    bySeverity: {
+      critical: 0,
+      warning: 0,
+      normal: 0,
+      unmatched: 0,
+      'no-job-order': 0,
+    },
+    byIncident: {},
+    customers: [...new Set(rows.map(function (row) { return row.customerName; }).filter(Boolean))].sort(),
+    lastSync: logs[0] || null,
+  };
+  for (const row of rows) {
+    if (summary.bySeverity[row.severity] !== undefined) {
+      summary.bySeverity[row.severity] += 1;
+    }
+    for (const code of row.incidentCodes || []) {
+      summary.byIncident[code] = (summary.byIncident[code] || 0) + 1;
+    }
+  }
+  return summary;
 }
 
 function buildStatusPayload(sessionUser) {
@@ -4194,6 +5167,79 @@ async function ensurePostgresSchema() {
 
     alter table astro_route_snapshots add column if not exists wh_time_kpi text;
     alter table astro_route_snapshots add column if not exists wh_temp_kpi text;
+
+    create table if not exists tms_job_order_snapshots (
+      job_order_id text primary key,
+      day date not null,
+      tenant_label text,
+      customer_name text,
+      normalized_plate text,
+      plate_raw text,
+      unit_label text,
+      job_order_status text,
+      workflow_state text,
+      origin_name text,
+      destination_name text,
+      temp_min numeric,
+      temp_max numeric,
+      eta_origin timestamptz,
+      eta_destination timestamptz,
+      active boolean not null default true,
+      task_list jsonb not null default '[]'::jsonb,
+      workflow_lines jsonb not null default '[]'::jsonb,
+      driver_assign jsonb not null default '[]'::jsonb,
+      raw_doc jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists tms_monitor_rows (
+      row_id text primary key,
+      day date not null,
+      tenant_label text,
+      customer_name text,
+      unit_key text not null,
+      unit_id text,
+      unit_label text,
+      normalized_plate text,
+      severity text not null,
+      board_status text not null,
+      job_order_id text,
+      job_order_count integer not null default 1,
+      origin_name text,
+      destination_name text,
+      temp_min numeric,
+      temp_max numeric,
+      eta_origin timestamptz,
+      eta_destination timestamptz,
+      driver_app_status text,
+      incident_codes jsonb not null default '[]'::jsonb,
+      incident_summary text,
+      unmatched_reason text,
+      metadata jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists tms_sync_logs (
+      id text primary key,
+      synced_at timestamptz not null,
+      status text not null,
+      fetched_count integer not null default 0,
+      matched_count integer not null default 0,
+      unmatched_count integer not null default 0,
+      critical_count integer not null default 0,
+      warning_count integer not null default 0,
+      normal_count integer not null default 0,
+      no_job_order_count integer not null default 0,
+      message text,
+      details jsonb not null default '{}'::jsonb
+    );
+
+    create index if not exists idx_tms_job_order_snapshots_day on tms_job_order_snapshots(day desc);
+    create index if not exists idx_tms_job_order_snapshots_plate on tms_job_order_snapshots(normalized_plate);
+    create index if not exists idx_tms_monitor_rows_day on tms_monitor_rows(day desc);
+    create index if not exists idx_tms_monitor_rows_severity on tms_monitor_rows(severity);
+    create index if not exists idx_tms_monitor_rows_customer on tms_monitor_rows(customer_name);
+    create index if not exists idx_tms_sync_logs_synced_at on tms_sync_logs(synced_at desc);
   `);
 }
 
@@ -7342,6 +8388,179 @@ async function handleApi(req, res, url) {
     });
     return true;
   }
+
+  if (pathname === '/api/tms/config' && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      config: sanitizeConfigForClient().tms,
+    });
+    return true;
+  }
+
+  if (pathname === '/api/tms/config' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const current = getTmsConfig();
+      config = normalizeConfig({
+        ...config,
+        tms: {
+          ...current,
+          tenantLabel: body.tenantLabel ?? current.tenantLabel,
+          baseUrl: body.baseUrl ?? current.baseUrl,
+          username: body.username ?? current.username,
+          password: body.password === undefined || body.password === null || body.password === ''
+            ? current.password
+            : body.password,
+          autoSync: body.autoSync ?? current.autoSync,
+          syncIntervalMinutes: body.syncIntervalMinutes ?? current.syncIntervalMinutes,
+          geofenceRadiusMeters: body.geofenceRadiusMeters ?? current.geofenceRadiusMeters,
+          longStopMinutes: body.longStopMinutes ?? current.longStopMinutes,
+          appStagnantMinutes: body.appStagnantMinutes ?? current.appStagnantMinutes,
+        },
+      });
+      saveConfig();
+      scheduleNextTmsSync();
+      sendJson(res, 200, {
+        ok: true,
+        config: sanitizeConfigForClient().tms,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'TMS config gagal disimpan.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/auth/login' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const result = await loginToTms(body || {});
+      sendJson(res, 200, {
+        ok: true,
+        config: result,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'TMS login gagal diproses.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/auth/logout' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      config: logoutFromTms(),
+    });
+    return true;
+  }
+
+  if (pathname === '/api/tms/sync' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await syncTmsMonitor();
+      sendJson(res, 200, {
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'TMS sync gagal diproses.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/logs' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const logs = await listTmsSyncLogs(Number(url.searchParams.get('limit') || 20));
+      sendJson(res, 200, {
+        ok: true,
+        logs,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'TMS logs gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/board' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const day = String(url.searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
+      const customer = String(url.searchParams.get('customer') || '').trim() || 'all';
+      const severity = String(url.searchParams.get('severity') || '').trim() || 'all';
+      const rows = await listTmsMonitorRows(url.searchParams);
+      const logs = await listTmsSyncLogs(1);
+      console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | day ${day} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
+      sendJson(res, 200, {
+        ok: true,
+        rows,
+        summary: buildTmsMonitorSummary(rows, logs),
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Trip Monitor gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/board/detail' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const rowId = String(url.searchParams.get('rowId') || '').trim();
+      if (!rowId) {
+        throw new Error('rowId wajib diisi.');
+      }
+      const result = await postgresQuery('select row_id, day, severity, board_status, unit_id, unit_label, customer_name, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
+      if (!result.rows[0]) {
+        console.warn(`[TMS] Detail miss for row ${rowId}`);
+        throw new Error('Trip monitor detail tidak ditemukan.');
+      }
+      const row = result.rows[0];
+      console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${row.unit_id || row.unit_label || '-'} | severity ${row.severity || 'normal'}`);
+      sendJson(res, 200, {
+        ok: true,
+        detail: {
+          rowId: row.row_id,
+          day: String(row.day || ''),
+          severity: String(row.severity || 'normal'),
+          boardStatus: String(row.board_status || 'normal'),
+          unitId: String(row.unit_id || ''),
+          unitLabel: String(row.unit_label || ''),
+          customerName: String(row.customer_name || ''),
+          metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+        },
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Trip monitor detail gagal diambil.', 404);
+    }
+    return true;
+  }
+
   if (pathname === '/api/astro/config' && method === 'GET') {
     const session = await requireAdminSession(req, res);
     if (!session) {
@@ -8142,6 +9361,7 @@ if (require.main === module) {
     console.log(`Solofleet auto monitor running at http://${HOST}:${PORT}`);
     try {
       await storageInitializationPromise;
+      scheduleNextTmsSync();
       if (config && config.autoStart) {
         startPolling().catch(function (error) {
           state.runtime.lastRunMessage = error.message;
