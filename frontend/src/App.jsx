@@ -43,6 +43,36 @@ function today(offset = 0) {
   return formatInputDate(new Date(Date.now() + (offset * 24 * 60 * 60 * 1000)));
 }
 
+function normalizeInputDayValue(value, fallback = today(0)) {
+  const raw = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? formatInputDate(new Date(timestamp)) : fallback;
+}
+
+function deriveTripMonitorHistoryRange(detail) {
+  const fallbackDay = normalizeInputDayValue(detail?.day || '', today(0));
+  const jobOrders = detail?.metadata?.jobOrders || [];
+  const timestamps = [];
+  for (const job of jobOrders) {
+    const etaOrigin = toTimestampMs(job?.etaOrigin);
+    const etaDestination = toTimestampMs(job?.etaDestination);
+    if (etaOrigin) timestamps.push(etaOrigin);
+    if (etaDestination) timestamps.push(etaDestination);
+  }
+  if (!timestamps.length) {
+    return { startDate: fallbackDay, endDate: fallbackDay };
+  }
+  return {
+    startDate: formatInputDate(new Date(Math.min(...timestamps))),
+    endDate: formatInputDate(new Date(Math.max(...timestamps))),
+  };
+}
+
+function formatTripMonitorRangeLabel(range) {
+  if (!range?.startDate || !range?.endDate) return '-';
+  return `${range.startDate} to ${range.endDate}`;
+}
 function splitCsvText(value) {
   return String(value || "")
     .split(/[;,\n]/)
@@ -644,6 +674,9 @@ export default function App() {
   const [tripMonitorFilters, setTripMonitorFilters] = useState({ day: today(0), customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
   const [tripMonitorDetail, setTripMonitorDetail] = useState(null);
   const [tripMonitorDetailBusy, setTripMonitorDetailBusy] = useState(false);
+  const [tripMonitorDetailHistory, setTripMonitorDetailHistory] = useState(null);
+  const [tripMonitorDetailHistoryBusy, setTripMonitorDetailHistoryBusy] = useState(false);
+  const [tripMonitorDetailRange, setTripMonitorDetailRange] = useState({ startDate: '', endDate: '' });
   const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
@@ -1515,12 +1548,53 @@ export default function App() {
     }
   };
 
+  const closeTripMonitorDetail = () => {
+    setTripMonitorDetail(null);
+    setTripMonitorDetailHistory(null);
+    setTripMonitorDetailRange({ startDate: '', endDate: '' });
+    setTripMonitorDetailBusy(false);
+    setTripMonitorDetailHistoryBusy(false);
+  };
+
+  const loadTripMonitorDetailHistory = async (detail) => {
+    const fleetRow = resolveTripMonitorFleetRow(detail);
+    const range = deriveTripMonitorHistoryRange(detail);
+    startTransition(() => {
+      setTripMonitorDetailRange(range);
+      setTripMonitorDetailHistory(null);
+    });
+    if (!fleetRow?.id) {
+      startTransition(() => {
+        setTripMonitorDetailHistory({ unit: { id: detail?.unitId || '' }, records: [], incidents: [], geofenceEvents: [] });
+      });
+      return;
+    }
+    setTripMonitorDetailHistoryBusy(true);
+    try {
+      const query = new URLSearchParams({ accountId: fleetRow.accountId || 'primary', unitId: fleetRow.id, startDate: range.startDate, endDate: range.endDate, source: 'remote' });
+      const payload = await api(`/api/unit-history?${query.toString()}`);
+      startTransition(() => setTripMonitorDetailHistory(payload));
+    } catch (error) {
+      startTransition(() => {
+        setTripMonitorDetailHistory({ unit: { id: fleetRow.id }, records: [], incidents: [], geofenceEvents: [] });
+        setBanner({ tone: 'error', message: error.message || 'Historical Trip Monitor gagal diambil.' });
+      });
+    } finally {
+      setTripMonitorDetailHistoryBusy(false);
+    }
+  };
+
   const openTripMonitorDetail = async (rowId) => {
     if (!rowId) return;
     setTripMonitorDetailBusy(true);
+    setTripMonitorDetailHistory(null);
     try {
       const payload = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId }).toString()}`);
-      startTransition(() => setTripMonitorDetail(payload.detail || null));
+      const detail = payload.detail || null;
+      startTransition(() => setTripMonitorDetail(detail));
+      if (detail) {
+        await loadTripMonitorDetailHistory(detail);
+      }
     } catch (error) {
       setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
     } finally {
@@ -2253,7 +2327,7 @@ export default function App() {
       setBanner({ tone: 'error', message: 'Unit ini belum match ke Solofleet, jadi detail investigasi belum bisa dibuka.' });
       return;
     }
-    setTripMonitorDetail(null);
+    closeTripMonitorDetail();
     if (target === 'fleet') {
       toggleFleetGraph(fleetRow);
       return;
@@ -2266,10 +2340,12 @@ export default function App() {
       setActivePanel('map');
       return;
     }
+    const nextRange = deriveTripMonitorHistoryRange(row);
+    setHistoricalRangeDraft(nextRange);
     setSelectedUnitAccountId(fleetRow.accountId || 'primary');
     setSelectedUnitId(fleetRow.id);
     setActivePanel('historical');
-    loadHistoricalDetail(fleetRow.accountId || 'primary', fleetRow.id, historicalRangeDraft, false).catch(() => {});
+    loadHistoricalDetail(fleetRow.accountId || 'primary', fleetRow.id, nextRange, false).catch(() => {});
   };
   const selectHistoricalUnit = (value) => {
     const [accountId, unitId] = String(value || '').split('::');
@@ -4074,8 +4150,18 @@ export default function App() {
         
       </main>
       
-      {tripMonitorDetail ? <div className="auth-modal-backdrop" onClick={() => setTripMonitorDetail(null)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{tripMonitorDetail.unitId || tripMonitorDetail.unitLabel || '-'}</h2><p>{tripMonitorDetail.customerName || '-'} | {tripMonitorDetail.severity ? tmsSeverityLabel(tripMonitorDetail.severity) : '-'}</p></div><div className="inline-buttons">{resolveTripMonitorFleetRow(tripMonitorDetail)?.id ? <><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'fleet')}>Open fleet graphic</Button><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'map')}>Open map</Button><Button variant="bordered" onPress={() => openTripMonitorInvestigation(tripMonitorDetail, 'historical')}>Open historical</Button></> : null}<Button variant="bordered" onPress={() => setTripMonitorDetail(null)}>Close</Button></div></CardHeader><CardContent>{tripMonitorDetailBusy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(tripMonitorDetail.severity)}</strong></div><div className="mini-metric"><span>Board status</span><strong>{tripMonitorDetail.boardStatus || '-'}</strong></div><div className="mini-metric"><span>Day</span><strong>{tripMonitorDetail.day || '-'}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{tripMonitorDetail.metadata?.jobOrders?.length || 0}</strong></div></div><DataTable columns={['Incident', 'Severity', 'Detail']} emptyMessage="Belum ada incident untuk row ini." rows={(tripMonitorDetail.metadata?.incidents || []).map((incident) => [tmsIncidentLabel(incident.code), <Chip color={incident.severity === 'critical' ? 'danger' : 'warning'}>{incident.severity || 'warning'}</Chip>, incident.detail || '-'])} /><DataTable columns={['JO', 'Origin', 'Destination', 'ETA load', 'ETA destination', 'Status']} emptyMessage="Belum ada job order di row ini." rows={(tripMonitorDetail.metadata?.jobOrders || []).map((job) => [job.jobOrderId || '-', job.originName || '-', job.destinationName || '-', formatEtaText(job.etaOrigin), formatEtaText(job.etaDestination), job.jobOrderStatus || job.workflowState || '-'])} /><DataTable columns={['Field', 'Value']} emptyMessage="Belum ada detail fleet terkait." rows={tripMonitorDetail.metadata?.fleetRow ? [['Account', tripMonitorDetail.metadata.fleetRow.accountLabel || tripMonitorDetail.metadata.fleetRow.accountId || '-'], ['Location', tripMonitorDetail.metadata.fleetRow.locationSummary || '-'], ['Speed', fmtNum(tripMonitorDetail.metadata.fleetRow.speed, 0)], ['Temp 1', fmtNum(tripMonitorDetail.metadata.fleetRow.liveTemp1)], ['Temp 2', fmtNum(tripMonitorDetail.metadata.fleetRow.liveTemp2)], ['GPS', tripMonitorDetail.metadata.fleetRow.errGps || 'OK'], ['Sensor', tripMonitorDetail.metadata.fleetRow.errSensor || 'OK']] : []} /></div>}</CardContent></Card></div> : null}
-      {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
+      {tripMonitorDetail ? <TripMonitorDetailModal
+          detail={tripMonitorDetail}
+          busy={tripMonitorDetailBusy}
+          historyDetail={tripMonitorDetailHistory}
+          historyBusy={tripMonitorDetailHistoryBusy}
+          historyRange={tripMonitorDetailRange}
+          onClose={closeTripMonitorDetail}
+          onOpenFleet={() => openTripMonitorInvestigation(tripMonitorDetail, 'fleet')}
+          onOpenMap={() => openTripMonitorInvestigation(tripMonitorDetail, 'map')}
+          onOpenHistorical={() => openTripMonitorInvestigation(tripMonitorDetail, 'historical')}
+        /> : null}
+        {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
       {expandedFleetRow ? <div className="fleet-detail-modal-backdrop" onClick={() => setExpandedFleetRowKey('')}>
         <Card className="fleet-detail-modal-card" onClick={(event) => event.stopPropagation()}>
@@ -4565,7 +4651,7 @@ function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueF
   })}</div>;
 }
 
-function TemperatureChart({ records, busy, title, description, compact = false }) {
+function TemperatureChart({ records, busy, title, description, compact = false, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
@@ -4591,12 +4677,17 @@ function TemperatureChart({ records, busy, title, description, compact = false }
   const width = 860;
   const height = compact ? 240 : 320;
   const padding = { top: 20, right: 20, bottom: 34, left: 44 };
-  const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined);
-  const rawMin = Math.min(...temps);
-  const rawMax = Math.max(...temps);
-  const pad = Math.max(1, (rawMax - rawMin) * 0.18 || 1);
-  const minY = rawMin - pad;
-  const maxY = rawMax + pad;
+  const thresholdValues = [thresholdMin, thresholdMax].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+    const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
+    const rawMin = Math.min(...temps);
+    const rawMax = Math.max(...temps);
+    const pad = Math.max(1, (rawMax - rawMin) * 0.18 || 1);
+    const minY = rawMin - pad;
+    const maxY = rawMax + pad;
+    const thresholdGuides = [
+      Number.isFinite(Number(thresholdMin)) ? { key: 'min', value: Number(thresholdMin), color: '#38BDF8', label: `${thresholdLabel} min` } : null,
+      Number.isFinite(Number(thresholdMax)) ? { key: 'max', value: Number(thresholdMax), color: '#F43F5E', label: `${thresholdLabel} max` } : null,
+    ].filter(Boolean);
   const timeStart = series[0].timestamp;
   const timeEnd = series[series.length - 1].timestamp;
   const xFor = (timestamp) => timeStart === timeEnd ? padding.left : padding.left + ((timestamp - timeStart) / (timeEnd - timeStart)) * (width - padding.left - padding.right);
@@ -4709,11 +4800,12 @@ function TemperatureChart({ records, busy, title, description, compact = false }
       </div>
       <div className="chart-tools">
         <div className="chart-legend">
-          <span><i className="legend-dot legend-dot-temp1" /> Temp 1</span>
-          <span><i className="legend-dot legend-dot-temp2" /> Temp 2</span>
-          <span className="chart-refresh-note">Drag chart untuk box zoom</span>
-          <span className="chart-refresh-note">Auto refresh {autoRefreshSeconds}s</span>
-        </div>
+            <span><i className="legend-dot legend-dot-temp1" /> Temp 1</span>
+            <span><i className="legend-dot legend-dot-temp2" /> Temp 2</span>
+            {thresholdGuides.map((guide) => <span key={guide.key}><i className="legend-dot legend-dot-threshold" style={{ background: guide.color }} /> {guide.label}</span>)}
+            <span className="chart-refresh-note">Drag chart untuk box zoom</span>
+            <span className="chart-refresh-note">Auto refresh {autoRefreshSeconds}s</span>
+          </div>
         <div className="chart-zoom-controls">
           <Button variant="light" onPress={zoomIn} disabled={!canZoomIn}>Zoom in</Button>
           <Button variant="light" onPress={zoomOut} disabled={!canZoomOut}>Zoom out</Button>
@@ -4735,9 +4827,13 @@ function TemperatureChart({ records, busy, title, description, compact = false }
         </defs>
         <rect x="0" y="0" width={width} height={height} rx="12" fill="rgba(14,20,32,0.6)" />
         {guideValues.map((value, index) => {
-          const y = yFor(value);
-          return <g key={`guide-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="6 8" /><text x="8" y={y + 4} fontSize="12" fill="rgba(255, 255, 255, 0.4)">{Number(value).toFixed(1)}</text></g>;
-        })}
+            const y = yFor(value);
+            return <g key={`guide-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="6 8" /><text x="8" y={y + 4} fontSize="12" fill="rgba(255, 255, 255, 0.4)">{Number(value).toFixed(1)}</text></g>;
+          })}
+          {thresholdGuides.map((guide) => {
+            const y = yFor(guide.value);
+            return <g key={`threshold-${guide.key}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1.5" strokeDasharray="10 6" /><text x={width - padding.right} y={y - 6} textAnchor="end" fontSize="11" fill={guide.color}>{guide.label} {fmtNum(guide.value, 1)}</text></g>;
+          })}
         {timeGuides.map((value, index) => {
           const x = xFor(value);
           return <g key={`time-${index}`}><line x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} stroke="rgba(255, 255, 255, 0.04)" /><text x={x} y={height - 10} fontSize="12" textAnchor={index === 0 ? 'start' : index === timeGuides.length - 1 ? 'end' : 'middle'} fill="rgba(255, 255, 255, 0.4)">{fmtClock(value)}</text></g>;
@@ -4796,6 +4892,19 @@ function TripMonitorUnitCard({ row, onOpen }) {
     {row.unmatchedReason ? <div className="trip-monitor-card-note">{row.unmatchedReason}</div> : null}
   </button>;
 }
+function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
+  if (!detail) return null;
+  const fleetRow = detail?.metadata?.fleetRow || null;
+  const jobOrders = detail?.metadata?.jobOrders || [];
+  const incidents = detail?.metadata?.incidents || [];
+  const headlineJob = detail?.metadata?.headlineJobOrder || jobOrders[0] || null;
+  const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
+  const historyRows = [...(historyDetail?.records || [])].reverse();
+  const historyLabel = formatTripMonitorRangeLabel(historyRange);
+  const appStatus = detail?.driverAppStatus || [((headlineJob?.driverAssign || [])[0] || {}).assignment_status, ((headlineJob?.driverAssign || [])[0] || {}).driver_status, ((headlineJob?.driverAssign || [])[0] || {}).job_offer_status].filter(Boolean).join(' | ') || '-';
+  return <div className="auth-modal-backdrop" onClick={onClose}><Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{detail.unitId || detail.unitLabel || '-'}</h2><p>{detail.customerName || '-'} | {routeSummary}</p></div><div className="inline-buttons">{fleetRow?.id ? <><Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button><Button variant="bordered" onPress={onOpenMap}>Open map</Button><Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button></> : null}<Button variant="bordered" onPress={onClose}>Close</Button></div></CardHeader><CardContent>{busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(detail.severity)}</strong></div><div className="mini-metric"><span>Range</span><strong>{historyLabel}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{jobOrders.length}</strong></div><div className="mini-metric"><span>Incidents</span><strong>{incidents.length}</strong></div><div className="mini-metric"><span>App status</span><strong>{appStatus || '-'}</strong></div><div className="mini-metric"><span>Temp range</span><strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong></div></div>{incidents.length ? <div className="trip-monitor-detail-incidents">{incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}</div> : null}<div className="split-panels trip-monitor-detail-panels"><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Map</h3><p>Posisi unit dan track historical dalam range JO TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}</CardContent></Card><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Graphic</h3><p>Historical suhu unit dengan garis batas min/max dari TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet dalam range ${historyLabel}.`} compact thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}</CardContent></Card></div><Card className="panel-card trip-monitor-detail-history"><CardHeader className="panel-card-header"><div><h3>Historical</h3><p>Historical Solofleet berdasarkan range JO TMS, 20 row per halaman.</p></div></CardHeader><CardContent>{fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range TMS." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}</CardContent></Card></div>}</CardContent></Card></div>;
+}
+
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -4874,6 +4983,17 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

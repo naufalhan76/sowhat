@@ -4776,3 +4776,56 @@ textarea:focus {
     min-height: 74px;
   }
 }
+
+.trip-monitor-detail-modal {
+  width: min(1320px, calc(100vw - 40px));
+}
+
+.trip-monitor-detail-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trip-monitor-detail-summary .mini-metric {
+  padding: 8px 10px;
+}
+
+.trip-monitor-detail-summary .mini-metric strong {
+  font-size: 15px;
+}
+
+.trip-monitor-detail-incidents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -2px;
+}
+
+.trip-monitor-detail-panels {
+  align-items: stretch;
+}
+
+.trip-monitor-detail-panel .sf-card-content,
+.trip-monitor-detail-history .sf-card-content {
+  display: block;
+}
+
+.trip-monitor-detail-panel {
+  min-height: 420px;
+}
+
+.trip-monitor-detail-history {
+  margin-top: 2px;
+}
+
+@media (max-width: 1100px) {
+  .trip-monitor-detail-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .trip-monitor-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
