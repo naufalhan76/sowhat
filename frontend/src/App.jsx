@@ -671,7 +671,7 @@ export default function App() {
   const [tmsLogsBusy, setTmsLogsBusy] = useState(false);
   const [tripMonitorBoard, setTripMonitorBoard] = useState({ rows: [], summary: null });
   const [tripMonitorBusy, setTripMonitorBusy] = useState(false);
-  const [tripMonitorFilters, setTripMonitorFilters] = useState({ day: today(0), customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
+  const [tripMonitorFilters, setTripMonitorFilters] = useState({ customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
   const [tripMonitorDetail, setTripMonitorDetail] = useState(null);
   const [tripMonitorDetailBusy, setTripMonitorDetailBusy] = useState(false);
   const [tripMonitorDetailHistory, setTripMonitorDetailHistory] = useState(null);
@@ -846,6 +846,7 @@ export default function App() {
     .slice(0, 6), [overviewAstroKpi]);
   const tmsConfig = status?.config?.tms || null;
   const tripMonitorRows = tripMonitorBoard?.rows || [];
+  const tripMonitorIncludedStatusesLabel = 'On Progress, Fully Pickup, Partial Delivered, Fully Delivered';
   const tripMonitorSummary = tripMonitorBoard?.summary || {
     total: 0,
     bySeverity: { critical: 0, warning: 0, normal: 0, unmatched: 0, 'no-job-order': 0 },
@@ -941,7 +942,7 @@ export default function App() {
       loadTripMonitorBoard(true).catch(() => {});
     }, 60000);
     return () => clearInterval(refreshTimer);
-  }, [activePanel, tripMonitorFilters.day, webSessionUser?.id, tripMonitorFilters.customer, tripMonitorFilters.severity]);
+  }, [activePanel, webSessionUser?.id, tripMonitorFilters.customer, tripMonitorFilters.severity]);
 
   useEffect(() => {
     if (activePanel !== 'config' || webSessionUser?.role !== 'admin') {
@@ -1441,19 +1442,12 @@ export default function App() {
   const loadTripMonitorBoard = async (quiet = false) => {
     if (!quiet) setTripMonitorBusy(true);
     try {
-      const normalizedDay = /^\d{4}-\d{2}-\d{2}$/.test(String(tripMonitorFilters.day || '').trim())
-        ? String(tripMonitorFilters.day || '').trim()
-        : today(0);
-      const query = new URLSearchParams({ day: normalizedDay });
+      const query = new URLSearchParams();
       if (tripMonitorFilters.customer && tripMonitorFilters.customer !== 'all') query.set('customer', tripMonitorFilters.customer);
       if (tripMonitorFilters.severity && tripMonitorFilters.severity !== 'all') query.set('severity', tripMonitorFilters.severity);
       const payload = await api(`/api/tms/board?${query.toString()}`);
       startTransition(() => {
         setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
-        const effectiveDay = payload.summary?.effectiveDay || '';
-        if (/^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDay)) && effectiveDay !== tripMonitorFilters.day) {
-          setTripMonitorFilters((current) => current.day === effectiveDay ? current : ({ ...current, day: effectiveDay }));
-        }
       });
       return payload;
     } catch (error) {
@@ -3092,10 +3086,6 @@ export default function App() {
                   </div>
                   <div className="trip-monitor-toolbar-grid">
                     <label className="historical-field">
-                      <span>Day</span>
-                      <input type="date" value={tripMonitorFilters.day} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, day: event.target.value }))} />
-                    </label>
-                    <label className="historical-field">
                       <span>Customer</span>
                       <select value={tripMonitorFilters.customer} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, customer: event.target.value }))}>
                         {tripMonitorCustomerOptions.map((option) => <option key={`customer-${option}`} value={option}>{option === 'all' ? 'All customers' : option}</option>)}
@@ -3117,7 +3107,7 @@ export default function App() {
                     </label>
                   </div>
                 </div>
-                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Requested: {tripMonitorSummary.requestedDay || tripMonitorFilters.day || '-'} | Showing: {tripMonitorSummary.effectiveDay || tripMonitorFilters.day || '-'} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
+                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
                 <div className="trip-monitor-flat-board">
                   {tripMonitorVisibleRows.length ? tripMonitorVisibleRows.map((row) => <TripMonitorUnitCard
                     key={row.rowId}
@@ -4983,6 +4973,11 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
+
+
+
 
 
 

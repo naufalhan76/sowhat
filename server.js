@@ -3814,10 +3814,34 @@ async function tmsRequest(pathname, options, allowRetry = true) {
   }
 }
 
-async function fetchTmsJobOrderCount() {
+const TMS_MONITOR_LOOKBACK_DAYS = 15;
+const TMS_INCLUDED_JOB_ORDER_STATUSES = ['On Progress', 'Fully Pickup', 'Partial Delivered', 'Fully Delivered'];
+const TMS_INCLUDED_JOB_ORDER_STATUS_KEYS = new Set(TMS_INCLUDED_JOB_ORDER_STATUSES.map(function (status) {
+  return String(status || '').trim().toLowerCase();
+}));
+
+function buildTmsMonitorWindow(now) {
+  const endMs = Number(now || Date.now());
+  const startMs = endMs - ((TMS_MONITOR_LOOKBACK_DAYS - 1) * 24 * 60 * 60 * 1000);
+  return {
+    startDay: formatLocalDay(startMs),
+    endDay: formatLocalDay(endMs),
+    lookbackDays: TMS_MONITOR_LOOKBACK_DAYS,
+  };
+}
+
+function buildTmsJobOrderFilters(window) {
+  return [
+    ['Job Order', 'job_order_status', 'in', TMS_INCLUDED_JOB_ORDER_STATUSES],
+    ['Job Order', 'start_actual_time_load', '>=', `${window.startDay} 00:00:00`],
+    ['Job Order', 'start_actual_time_load', '<=', `${window.endDay} 23:59:59`],
+  ];
+}
+
+async function fetchTmsJobOrderCount(window) {
   const body = new URLSearchParams({
     doctype: 'Job Order',
-    filters: JSON.stringify([['Job Order', 'start_actual_time_load', 'Timespan', 'today']]),
+    filters: JSON.stringify(buildTmsJobOrderFilters(window)),
     fields: JSON.stringify([]),
     distinct: 'false',
     limit: '1001',
@@ -3829,7 +3853,7 @@ async function fetchTmsJobOrderCount() {
   return parseFrappeCountPayload(payload);
 }
 
-async function fetchTmsJobOrderListPage(start, pageLength) {
+async function fetchTmsJobOrderListPage(start, pageLength, window) {
   const body = new URLSearchParams({
     doctype: 'Job Order',
     fields: JSON.stringify([
@@ -3842,7 +3866,7 @@ async function fetchTmsJobOrderListPage(start, pageLength) {
       '`tabJob Order`.`customer`',
       '`tabJob Order`.`modified`',
     ]),
-    filters: JSON.stringify([['Job Order', 'start_actual_time_load', 'Timespan', 'today']]),
+    filters: JSON.stringify(buildTmsJobOrderFilters(window)),
     order_by: '`tabJob Order`.`modified` DESC',
     start: String(start || 0),
     page_length: String(pageLength || 100),
@@ -3857,12 +3881,12 @@ async function fetchTmsJobOrderListPage(start, pageLength) {
   return parseFrappeListRows(payload);
 }
 
-async function fetchTmsJobOrderList() {
-  const total = await fetchTmsJobOrderCount();
+async function fetchTmsJobOrderList(window) {
+  const total = await fetchTmsJobOrderCount(window);
   const pageLength = 100;
   const rows = [];
   for (let start = 0; start < Math.max(total, pageLength); start += pageLength) {
-    const page = await fetchTmsJobOrderListPage(start, pageLength);
+    const page = await fetchTmsJobOrderListPage(start, pageLength, window);
     rows.push(...page);
     if (page.length < pageLength) break;
   }
@@ -3890,30 +3914,9 @@ function getTmsTaskArrays(doc) {
   return { taskList, workflowLines, driverAssign };
 }
 
-const TMS_TERMINAL_STATUSES = new Set([
-  'closed',
-  'completed',
-  'cancelled',
-  'canceled',
-  'delivered',
-  'finished',
-  'done',
-  'void',
-]);
-
 function isTmsJobActive(doc) {
   const status = String(doc?.job_order_status || '').trim().toLowerCase();
-  if (status && TMS_TERMINAL_STATUSES.has(status)) {
-    return false;
-  }
-  const { workflowLines, taskList } = getTmsTaskArrays(doc);
-  const finalTask = [...taskList].reverse().find(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; }) || taskList[taskList.length - 1] || null;
-  if (!finalTask) return true;
-  const finalTaskName = String(finalTask.task_address || '').trim();
-  return !workflowLines.some(function (line) {
-    return String(line.task_address || '').trim() === finalTaskName
-      && /selesai bongkar|completed unload|finished unload/i.test(String(line.status_description || ''));
-  });
+  return status ? TMS_INCLUDED_JOB_ORDER_STATUS_KEYS.has(status) : false;
 }
 
 function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
@@ -4252,6 +4255,87 @@ async function replaceTmsMonitorRows(day, rows) {
   );
 }
 
+async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
+  if (!getPostgresConfig().enabled) {
+    return { snapshotsSaved: 0, rowsSaved: 0 };
+  }
+  await postgresQuery('delete from tms_job_order_snapshots where day >= $1 and day <= $2', [window.startDay, window.endDay]);
+  await postgresQuery('delete from tms_monitor_rows where day >= $1 and day <= $2', [window.startDay, window.endDay]);
+
+  let snapshotsSaved = 0;
+  let rowsSaved = 0;
+  if (jobSnapshots.length) {
+    snapshotsSaved = await postgresUpsertRows(
+      'tms_job_order_snapshots',
+      jobSnapshots.map(function (snapshot) {
+        return {
+          job_order_id: snapshot.jobOrderId,
+          day: snapshot.day,
+          tenant_label: snapshot.tenantLabel,
+          customer_name: snapshot.customerName,
+          normalized_plate: snapshot.normalizedPlate,
+          plate_raw: snapshot.plateRaw,
+          unit_label: snapshot.unitLabel,
+          job_order_status: snapshot.jobOrderStatus,
+          workflow_state: snapshot.workflowState,
+          origin_name: snapshot.originName,
+          destination_name: snapshot.destinationName,
+          temp_min: snapshot.tempMin,
+          temp_max: snapshot.tempMax,
+          eta_origin: snapshot.etaOrigin ? new Date(snapshot.etaOrigin).toISOString() : null,
+          eta_destination: snapshot.etaDestination ? new Date(snapshot.etaDestination).toISOString() : null,
+          active: snapshot.active,
+          task_list: snapshot.taskList,
+          workflow_lines: snapshot.workflowLines,
+          driver_assign: snapshot.driverAssign,
+          raw_doc: snapshot.rawDoc,
+          updated_at: new Date().toISOString(),
+        };
+      }),
+      ['job_order_id', 'day', 'tenant_label', 'customer_name', 'normalized_plate', 'plate_raw', 'unit_label', 'job_order_status', 'workflow_state', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'active', 'task_list', 'workflow_lines', 'driver_assign', 'raw_doc', 'updated_at'],
+      ['job_order_id'],
+      { touchUpdatedAt: false },
+    );
+  }
+  if (rows.length) {
+    rowsSaved = await postgresUpsertRows(
+      'tms_monitor_rows',
+      rows.map(function (row) {
+        return {
+          row_id: row.rowId,
+          day: row.day,
+          tenant_label: row.tenantLabel,
+          customer_name: row.customerName,
+          unit_key: row.unitKey,
+          unit_id: row.unitId,
+          unit_label: row.unitLabel,
+          normalized_plate: row.normalizedPlate,
+          severity: row.severity,
+          board_status: row.boardStatus,
+          job_order_id: row.jobOrderId,
+          job_order_count: row.jobOrderCount,
+          origin_name: row.originName,
+          destination_name: row.destinationName,
+          temp_min: row.tempMin,
+          temp_max: row.tempMax,
+          eta_origin: row.etaOrigin ? new Date(row.etaOrigin).toISOString() : null,
+          eta_destination: row.etaDestination ? new Date(row.etaDestination).toISOString() : null,
+          driver_app_status: row.driverAppStatus,
+          incident_codes: row.incidentCodes,
+          incident_summary: row.incidentSummary,
+          unmatched_reason: row.unmatchedReason,
+          metadata: row.metadata || {},
+          updated_at: new Date().toISOString(),
+        };
+      }),
+      ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
+      ['row_id'],
+      { touchUpdatedAt: false },
+    );
+  }
+  return { snapshotsSaved, rowsSaved };
+}
+
 async function syncTmsMonitor(options) {
   const runtime = getTmsConfig();
   if (!runtime.baseUrl) {
@@ -4262,19 +4346,20 @@ async function syncTmsMonitor(options) {
   }
 
   const now = Date.now();
-  const day = formatLocalDay(now);
-  const listRows = await fetchTmsJobOrderList();
+  const window = buildTmsMonitorWindow(now);
+  const listRows = await fetchTmsJobOrderList(window);
   const docs = [];
   for (const item of listRows) {
     const jobOrderId = String(item.name || item.job_order_id || '').trim();
     if (!jobOrderId) continue;
     docs.push(await fetchTmsJobOrderDoc(jobOrderId));
   }
-  const jobSnapshots = docs.map(function (doc) { return buildTmsJobSnapshotFromDoc(doc, runtime.tenantLabel); });
+  const jobSnapshots = docs.map(function (doc) { return buildTmsJobSnapshotFromDoc(doc, runtime.tenantLabel); }).filter(function (snapshot) {
+    return snapshot.day >= window.startDay && snapshot.day <= window.endDay;
+  });
   const fleetIndex = buildFleetPlateIndex(now);
   const monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
-  await replaceTmsJobSnapshots(day, jobSnapshots);
-  await replaceTmsMonitorRows(day, monitorRows);
+  const saveResult = await replaceTmsSnapshotWindow(window, jobSnapshots, monitorRows);
 
   const fetchedCount = jobSnapshots.length;
   const matchedCount = monitorRows.filter(function (row) { return row.severity !== 'unmatched'; }).length;
@@ -4283,14 +4368,14 @@ async function syncTmsMonitor(options) {
   const warningCount = monitorRows.filter(function (row) { return row.severity === 'warning'; }).length;
   const normalCount = monitorRows.filter(function (row) { return row.severity === 'normal'; }).length;
   const noJobOrderCount = monitorRows.filter(function (row) { return row.severity === 'no-job-order'; }).length;
-  console.log(`[TMS] Sync ${day}: fetched ${fetchedCount} JO | matched ${matchedCount} | unmatched ${unmatchedCount} | critical ${criticalCount} | warning ${warningCount} | normal ${normalCount} | no-jo ${noJobOrderCount}`);
+  console.log(`[TMS] Sync ${window.startDay}..${window.endDay}: fetched ${fetchedCount} JO | matched ${matchedCount} | unmatched ${unmatchedCount} | critical ${criticalCount} | warning ${warningCount} | normal ${normalCount} | no-jo ${noJobOrderCount}`);
   if (unmatchedCount > 0) {
     const unmatchedPreview = monitorRows
       .filter(function (row) { return row.severity === 'unmatched'; })
       .slice(0, 5)
       .map(function (row) { return row.unitLabel || row.normalizedPlate || row.jobOrderId || row.rowId; })
       .join(', ');
-    console.warn(`[TMS] Unmatched preview ${day}: ${unmatchedPreview}`);
+    console.warn(`[TMS] Unmatched preview ${window.endDay}: ${unmatchedPreview}`);
   }
   const logEntry = await appendTmsSyncLog({
     status: 'success',
@@ -4301,16 +4386,20 @@ async function syncTmsMonitor(options) {
     warningCount,
     normalCount,
     noJobOrderCount,
-    message: `TMS sync fetched ${fetchedCount} JO, ${criticalCount} critical, ${warningCount} warning, ${unmatchedCount} unmatched.`,
+    message: `TMS sync fetched ${fetchedCount} JO dalam window ${window.startDay} - ${window.endDay}.`,
     details: {
-      day,
+      day: window.endDay,
+      windowStart: window.startDay,
+      windowEnd: window.endDay,
       fetchedCount,
-      rowsSaved: monitorRows.length,
+      snapshotsSaved: saveResult.snapshotsSaved || 0,
+      rowsSaved: saveResult.rowsSaved || 0,
       customers: [...new Set(jobSnapshots.map(function (item) { return item.customerName; }).filter(Boolean))],
+      statuses: TMS_INCLUDED_JOB_ORDER_STATUSES,
     },
   });
   scheduleNextTmsSync();
-  return { ok: true, day, fetchedCount, rowsSaved: monitorRows.length, log: logEntry };
+  return { ok: true, day: window.endDay, windowStart: window.startDay, windowEnd: window.endDay, fetchedCount, rowsSaved: saveResult.rowsSaved || 0, log: logEntry };
 }
 
 function scheduleNextTmsSync() {
@@ -4347,10 +4436,10 @@ async function findLatestTmsMonitorDay() {
   return result.rows[0] ? String(result.rows[0].day || '') : '';
 }
 
-async function listTmsMonitorRows(searchParams, overrideDay) {
-  const day = String(overrideDay || searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
-  const params = [day];
-  let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata, updated_at from tms_monitor_rows where day = $1`;
+async function listTmsMonitorRows(searchParams) {
+  const window = buildTmsMonitorWindow(Date.now());
+  const params = [window.startDay, window.endDay];
+  let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata, updated_at from tms_monitor_rows where day >= $1 and day <= $2`;
   const customer = String(searchParams.get('customer') || '').trim();
   if (customer) {
     params.push(customer);
@@ -4361,7 +4450,7 @@ async function listTmsMonitorRows(searchParams, overrideDay) {
     params.push(severity);
     query += ` and severity = $${params.length}`;
   }
-  query += ` order by updated_at desc`;
+  query += ` order by day desc, updated_at desc`;
   const result = await postgresQuery(query, params);
   return result.rows.map(function (row) {
     return {
@@ -4405,8 +4494,8 @@ function buildTmsMonitorSummary(rows, logs, meta) {
     byIncident: {},
     customers: [...new Set(rows.map(function (row) { return row.customerName; }).filter(Boolean))].sort(),
     lastSync: logs[0] || null,
-    requestedDay: String(meta?.requestedDay || ''),
-    effectiveDay: String(meta?.effectiveDay || meta?.requestedDay || ''),
+    windowStart: String(meta?.windowStart || ''),
+    windowEnd: String(meta?.windowEnd || ''),
     autoSync: Boolean(meta?.autoSync),
     syncIntervalMinutes: Number(meta?.syncIntervalMinutes || 0),
   };
@@ -8644,27 +8733,19 @@ async function handleApi(req, res, url) {
       return true;
     }
     try {
-      const requestedDay = String(url.searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
       const customer = String(url.searchParams.get('customer') || '').trim() || 'all';
       const severity = String(url.searchParams.get('severity') || '').trim() || 'all';
-      let effectiveDay = requestedDay;
-      let rows = await listTmsMonitorRows(url.searchParams, effectiveDay);
-      if (!rows.length) {
-        const latestDay = await findLatestTmsMonitorDay();
-        if (latestDay && latestDay !== requestedDay) {
-          effectiveDay = latestDay;
-          rows = await listTmsMonitorRows(url.searchParams, effectiveDay);
-        }
-      }
+      const window = buildTmsMonitorWindow(Date.now());
+      const rows = await listTmsMonitorRows(url.searchParams);
       const logs = await listTmsSyncLogs(1);
       const runtime = getTmsConfig();
-      console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | requested ${requestedDay} | effective ${effectiveDay} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
+      console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | window ${window.startDay}..${window.endDay} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
       sendJson(res, 200, {
         ok: true,
         rows,
         summary: buildTmsMonitorSummary(rows, logs, {
-          requestedDay,
-          effectiveDay,
+          windowStart: window.startDay,
+          windowEnd: window.endDay,
           autoSync: runtime.autoSync,
           syncIntervalMinutes: runtime.syncIntervalMinutes,
         }),
@@ -9528,6 +9609,10 @@ if (require.main === module) {
     }
   });
 }
+
+
+
+
 
 
 
