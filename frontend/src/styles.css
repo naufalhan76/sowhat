@@ -4503,3 +4503,148 @@ textarea:focus {
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }
+
+.trip-monitor-toolbar {
+  display: grid;
+  gap: 16px;
+}
+
+.trip-monitor-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.trip-monitor-filter-pill {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.trip-monitor-filter-pill span {
+  display: inline-flex;
+  min-width: 24px;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+
+.trip-monitor-filter-pill.is-active {
+  border-color: rgba(249, 115, 22, 0.35);
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.trip-monitor-filter-pill-critical,
+.trip-monitor-card-critical {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(180deg, rgba(61, 16, 22, 0.95) 0%, rgba(33, 12, 18, 0.95) 100%);
+}
+
+.trip-monitor-filter-pill-warning,
+.trip-monitor-card-warning {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: linear-gradient(180deg, rgba(55, 34, 11, 0.95) 0%, rgba(31, 21, 10, 0.95) 100%);
+}
+
+.trip-monitor-toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.trip-monitor-flat-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.trip-monitor-card {
+  min-height: 196px;
+}
+
+.trip-monitor-severity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.trip-monitor-severity-badge-critical,
+.trip-monitor-severity-badge-warning {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+}
+
+.trip-monitor-severity-badge-normal {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #bbf7d0;
+}
+
+.trip-monitor-severity-badge-unmatched {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.32);
+  color: #bfdbfe;
+}
+
+.trip-monitor-route-line {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-main);
+}
+
+.trip-monitor-eta-line {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.trip-monitor-chip-grid {
+  min-height: 30px;
+}
+
+.trip-monitor-chip-success {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.26);
+  color: #bbf7d0;
+}
+
+.trip-monitor-empty-flat {
+  min-height: 180px;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1200px) {
+  .trip-monitor-toolbar-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .trip-monitor-toolbar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-monitor-flat-board {
+    grid-template-columns: 1fr;
+  }
+}

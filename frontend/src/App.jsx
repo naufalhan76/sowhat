@@ -641,7 +641,7 @@ export default function App() {
   const [tmsLogsBusy, setTmsLogsBusy] = useState(false);
   const [tripMonitorBoard, setTripMonitorBoard] = useState({ rows: [], summary: null });
   const [tripMonitorBusy, setTripMonitorBusy] = useState(false);
-  const [tripMonitorFilters, setTripMonitorFilters] = useState({ day: today(0), customer: 'all', severity: 'all', incidentCode: 'all', appStatus: 'all', search: '' });
+  const [tripMonitorFilters, setTripMonitorFilters] = useState({ day: today(0), customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
   const [tripMonitorDetail, setTripMonitorDetail] = useState(null);
   const [tripMonitorDetailBusy, setTripMonitorDetailBusy] = useState(false);
   const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
@@ -829,7 +829,7 @@ export default function App() {
       if (tripMonitorFilters.customer !== 'all' && row.customerName !== tripMonitorFilters.customer) return false;
       if (tripMonitorFilters.severity !== 'all' && row.severity !== tripMonitorFilters.severity) return false;
       if (tripMonitorFilters.incidentCode !== 'all' && !(row.incidentCodes || []).includes(tripMonitorFilters.incidentCode)) return false;
-      if (appNeedle && !String(row.driverAppStatus || '').toLowerCase().includes(appNeedle)) return false;
+      if (appNeedle && appNeedle !== 'all' && !String(row.driverAppStatus || '').toLowerCase().includes(appNeedle)) return false;
       if (q) {
         const haystack = [row.unitId, row.unitLabel, row.jobOrderId, row.originName, row.destinationName, row.customerName, row.driverAppStatus, row.incidentSummary].join(' ').toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -837,6 +837,20 @@ export default function App() {
       return true;
     });
   }, [tripMonitorRows, tripMonitorFilters]);
+  const tripMonitorVisibleRows = useMemo(() => filteredTripMonitorRows
+    .filter((row) => row.severity !== 'no-job-order')
+    .slice()
+    .sort((left, right) => {
+      const severityOrder = { critical: 4, warning: 3, unmatched: 2, normal: 1, 'no-job-order': 0 };
+      const severityGap = (severityOrder[right.severity] || 0) - (severityOrder[left.severity] || 0);
+      if (severityGap) return severityGap;
+      const incidentGap = (right.incidentCodes?.length || 0) - (left.incidentCodes?.length || 0);
+      if (incidentGap) return incidentGap;
+      const leftEta = left.etaDestination || left.etaOrigin || Number.MAX_SAFE_INTEGER;
+      const rightEta = right.etaDestination || right.etaOrigin || Number.MAX_SAFE_INTEGER;
+      if (leftEta !== rightEta) return leftEta - rightEta;
+      return String(left.unitLabel || left.unitId || '').localeCompare(String(right.unitLabel || right.unitId || ''));
+    }), [filteredTripMonitorRows]);
   useEffect(() => {
     if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) {
       return undefined;
@@ -890,8 +904,11 @@ export default function App() {
       return undefined;
     }
     loadTripMonitorBoard(true).catch(() => {});
-    return undefined;
-  }, [activePanel, tripMonitorFilters.day, webSessionUser?.id]);
+    const refreshTimer = setInterval(() => {
+      loadTripMonitorBoard(true).catch(() => {});
+    }, 60000);
+    return () => clearInterval(refreshTimer);
+  }, [activePanel, tripMonitorFilters.day, webSessionUser?.id, tripMonitorFilters.customer, tripMonitorFilters.severity]);
 
   useEffect(() => {
     if (activePanel !== 'config' || webSessionUser?.role !== 'admin') {
@@ -1397,6 +1414,10 @@ export default function App() {
       const payload = await api(`/api/tms/board?${query.toString()}`);
       startTransition(() => {
         setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
+        const effectiveDay = payload.summary?.effectiveDay || '';
+        if (effectiveDay && effectiveDay !== tripMonitorFilters.day) {
+          setTripMonitorFilters((current) => current.day === effectiveDay ? current : ({ ...current, day: effectiveDay }));
+        }
       });
     } catch (error) {
       if (!quiet) setBanner({ tone: 'error', message: error.message || 'Trip Monitor gagal dimuat.' });
@@ -2969,79 +2990,56 @@ export default function App() {
               <CardHeader className="panel-card-header">
                 <div>
                   <h2>Trip Monitor</h2>
-                  <p>Kanban monitoring incident-based untuk JO aktif harian dari TMS.</p>
+                  <p>Board exception-based untuk unit yang masih punya JO aktif di TMS.</p>
                 </div>
                 <div className="inline-buttons">
                   <Button variant="bordered" onPress={() => loadTripMonitorBoard(false)}>{tripMonitorBusy ? <><Spinner size="sm" /> Refreshing</> : 'Refresh board'}</Button>
-                  {isAdmin ? <Button variant="bordered" onPress={() => loadTmsLogs(false)}>{tmsLogsBusy ? <><Spinner size="sm" /> Logs</> : 'Refresh logs'}</Button> : null}
                   {isAdmin ? <Button color="primary" onPress={triggerTmsSync}>Sync TMS</Button> : null}
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="overview-kpi-grid">
-                  {TMS_BOARD_COLUMNS.map((column) => <div key={column.key} className={`overview-kpi-card ${tmsSeverityTone(column.key)}`}><span>{column.label}</span><strong>{tripMonitorSummary.bySeverity?.[column.key] || 0}</strong><small>{tmsSeverityLabel(column.key)} unit</small></div>)}
-                </div>
-                <div className="historical-toolbar astro-toolbar">
-                  <label className="historical-field">
-                    <span>Day</span>
-                    <input type="date" value={tripMonitorFilters.day} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, day: event.target.value }))} />
-                  </label>
-                  <label className="historical-field">
-                    <span>Customer</span>
-                    <select value={tripMonitorFilters.customer} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, customer: event.target.value }))}>
-                      {tripMonitorCustomerOptions.map((option) => <option key={`customer-${option}`} value={option}>{option === 'all' ? 'All customers' : option}</option>)}
-                    </select>
-                  </label>
-                  <label className="historical-field">
-                    <span>Severity</span>
-                    <select value={tripMonitorFilters.severity} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, severity: event.target.value }))}>
-                      <option value="all">All severity</option>
-                      {Object.keys(TMS_SEVERITY_META).map((key) => <option key={key} value={key}>{tmsSeverityLabel(key)}</option>)}
-                    </select>
-                  </label>
-                  <label className="historical-field">
-                    <span>Incident</span>
-                    <select value={tripMonitorFilters.incidentCode} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, incidentCode: event.target.value }))}>
-                      <option value="all">All incidents</option>
-                      {tripMonitorIncidentOptions.filter((option) => option !== 'all').map((option) => <option key={option} value={option}>{tmsIncidentLabel(option)}</option>)}
-                    </select>
-                  </label>
-                  <label className="historical-field">
-                    <span>App status</span>
-                    <input type="text" value={tripMonitorFilters.appStatus} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, appStatus: event.target.value }))} placeholder="Search app status..." />
-                  </label>
-                  <label className="historical-field historical-search-field">
-                    <span>Search</span>
-                    <div className="search-box historical-search-box">
-                      <Search size={16} className="search-icon" />
-                      <input type="search" value={tripMonitorFilters.search} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Cari nopol, JO, origin, destination..." />
-                    </div>
-                  </label>
-                </div>
-                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Last sync: {tripMonitorSummary.lastSync?.createdAt ? fmtDate(tripMonitorSummary.lastSync.createdAt) : 'Belum pernah'} | Rows: {tripMonitorRows.length}</div>
-                <div className="trip-monitor-board">
-                  {TMS_BOARD_COLUMNS.map((column) => {
-                    const rows = filteredTripMonitorRows.filter((row) => row.severity === column.key);
-                    return <div key={`column-${column.key}`} className={`trip-monitor-column trip-monitor-column-${column.key}`}>
-                      <div className="trip-monitor-column-head">
-                        <div>
-                          <strong>{column.label}</strong>
-                          <div className="subtle-line">{rows.length} unit</div>
-                        </div>
-                        <Chip color={tmsSeverityTone(column.key)}>{rows.length}</Chip>
+                <div className="trip-monitor-toolbar">
+                  <div className="trip-monitor-filter-tabs">
+                    <button type="button" className={`trip-monitor-filter-pill ${tripMonitorFilters.severity === 'all' ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: 'all' }))}>All <span>{tripMonitorSummary.total || 0}</span></button>
+                    {TMS_BOARD_COLUMNS.map((column) => <button type="button" key={column.key} className={`trip-monitor-filter-pill trip-monitor-filter-pill-${column.key} ${tripMonitorFilters.severity === column.key ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: column.key }))}>{column.label} <span>{tripMonitorSummary.bySeverity?.[column.key] || 0}</span></button>)}
+                  </div>
+                  <div className="trip-monitor-toolbar-grid">
+                    <label className="historical-field">
+                      <span>Day</span>
+                      <input type="date" value={tripMonitorFilters.day} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, day: event.target.value }))} />
+                    </label>
+                    <label className="historical-field">
+                      <span>Customer</span>
+                      <select value={tripMonitorFilters.customer} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, customer: event.target.value }))}>
+                        {tripMonitorCustomerOptions.map((option) => <option key={`customer-${option}`} value={option}>{option === 'all' ? 'All customers' : option}</option>)}
+                      </select>
+                    </label>
+                    <label className="historical-field">
+                      <span>Incident</span>
+                      <select value={tripMonitorFilters.incidentCode} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, incidentCode: event.target.value }))}>
+                        <option value="all">All incidents</option>
+                        {tripMonitorIncidentOptions.filter((option) => option !== 'all').map((option) => <option key={option} value={option}>{tmsIncidentLabel(option)}</option>)}
+                      </select>
+                    </label>
+                    <label className="historical-field historical-search-field">
+                      <span>Search</span>
+                      <div className="search-box historical-search-box">
+                        <Search size={16} className="search-icon" />
+                        <input type="search" value={tripMonitorFilters.search} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Cari nopol, JO, origin, destination..." />
                       </div>
-                      <div className="trip-monitor-column-body">
-                        {rows.length ? rows.map((row) => <TripMonitorUnitCard
-                          key={row.rowId}
-                          row={row}
-                          onOpen={() => openTripMonitorDetail(row.rowId)}
-                          onOpenHistorical={() => openTripMonitorInvestigation(row, 'historical')}
-                          onOpenMap={() => openTripMonitorInvestigation(row, 'map')}
-                          onOpenFleet={() => openTripMonitorInvestigation(row, 'fleet')}
-                        />) : <div className="empty-state trip-monitor-empty">Belum ada unit di kolom ini.</div>}
-                      </div>
-                    </div>;
-                  })}
+                    </label>
+                  </div>
+                </div>
+                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Requested: {tripMonitorSummary.requestedDay || tripMonitorFilters.day || '-'} | Showing: {tripMonitorSummary.effectiveDay || tripMonitorFilters.day || '-'} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
+                <div className="trip-monitor-flat-board">
+                  {tripMonitorVisibleRows.length ? tripMonitorVisibleRows.map((row) => <TripMonitorUnitCard
+                    key={row.rowId}
+                    row={row}
+                    onOpen={() => openTripMonitorDetail(row.rowId)}
+                    onOpenHistorical={() => openTripMonitorInvestigation(row, 'historical')}
+                    onOpenMap={() => openTripMonitorInvestigation(row, 'map')}
+                    onOpenFleet={() => openTripMonitorInvestigation(row, 'fleet')}
+                  />) : <div className="empty-state trip-monitor-empty trip-monitor-empty-flat">Belum ada unit dengan JO aktif di filter ini.</div>}
                 </div>
               </CardContent>
             </Card>
@@ -4780,27 +4778,23 @@ function TripMonitorUnitCard({ row, onOpen, onOpenHistorical, onOpenMap, onOpenF
         <button type="button" className="trip-monitor-unit-link" onClick={onOpenHistorical}>
           <strong>{row.unitLabel || row.unitId || row.normalizedPlate || '-'}</strong>
         </button>
-        <div className="subtle-line">{row.unitId || row.normalizedPlate || '-'}</div>
+        <div className="subtle-line">{row.jobOrderId || '-'} | {row.customerName || '-'}</div>
       </div>
-      <Chip color={tmsSeverityTone(row.severity)}>{tmsSeverityLabel(row.severity)}</Chip>
+      {(row.incidentCodes || []).length ? <span className={`trip-monitor-severity-badge trip-monitor-severity-badge-${row.severity || 'normal'}`}>{(row.incidentCodes || []).length}</span> : null}
     </div>
     <div className="trip-monitor-card-body">
-      <div className="trip-monitor-meta"><span>JO</span><strong>{row.jobOrderId || '-'}</strong></div>
-      <div className="trip-monitor-meta"><span>Origin</span><strong>{row.originName || '-'}</strong></div>
-      <div className="trip-monitor-meta"><span>Destination</span><strong>{row.destinationName || '-'}</strong></div>
-      <div className="trip-monitor-meta trip-monitor-meta-inline"><span>Temp</span><strong>{row.tempMin ?? '-'} to {row.tempMax ?? '-'}</strong></div>
-      <div className="trip-monitor-meta"><span>ETA load</span><strong>{formatEtaText(row.etaOrigin)}</strong></div>
-      <div className="trip-monitor-meta"><span>ETA destination</span><strong>{formatEtaText(row.etaDestination)}</strong></div>
-      <div className="trip-monitor-meta"><span>Driver app</span><strong>{row.driverAppStatus || '-'}</strong></div>
+      <div className="trip-monitor-route-line">{row.originName || '-'} {' -> '} {row.destinationName || '-'}</div>
+      <div className="trip-monitor-eta-line">ETA muat {formatEtaText(row.etaOrigin)} | ETA tujuan {formatEtaText(row.etaDestination)}</div>
+      <div className="trip-monitor-eta-line">Temp {row.tempMin ?? '-'} to {row.tempMax ?? '-'} | {row.driverAppStatus || '-'}</div>
       {row.unmatchedReason ? <div className="trip-monitor-alert">{row.unmatchedReason}</div> : null}
       <div className="trip-monitor-chip-grid">
-        {(row.incidentCodes || []).length ? row.incidentCodes.map((code) => <span key={`${row.rowId}-${code}`} className={`trip-monitor-chip trip-monitor-chip-${TMS_INCIDENT_META[code]?.tone || 'default'}`}>{tmsIncidentIcon(code)}<span>{tmsIncidentLabel(code)}</span></span>) : <span className="trip-monitor-chip trip-monitor-chip-default">No incident</span>}
+        {(row.incidentCodes || []).length ? row.incidentCodes.map((code) => <span key={`${row.rowId}-${code}`} className={`trip-monitor-chip trip-monitor-chip-${TMS_INCIDENT_META[code]?.tone || 'default'}`}>{tmsIncidentIcon(code)}</span>) : <span className="trip-monitor-chip trip-monitor-chip-success">OK</span>}
       </div>
     </div>
     <div className="trip-monitor-card-footer">
-      <button type="button" className="trip-monitor-card-button" onClick={onOpen}>Detail</button>
       <button type="button" className="trip-monitor-card-button" onClick={onOpenFleet}>Graphic</button>
       <button type="button" className="trip-monitor-card-button" onClick={onOpenMap}>Map</button>
+      <button type="button" className="trip-monitor-card-button" onClick={onOpen}>Detail</button>
     </div>
   </div>;
 }
@@ -4883,6 +4877,8 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     setPage(1);
   }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
+
+
 
 
 

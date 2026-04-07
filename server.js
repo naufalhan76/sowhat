@@ -118,6 +118,7 @@ let pollInFlight = false;
 let remoteResetInFlight = false;
 let astroSyncTimer = null;
 let tmsSyncTimer = null;
+let isFirstTmsSyncSchedule = true;
 const ASTRO_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const ASTRO_SNAPSHOT_LOG_LIMIT = 100;
 const astroSnapshotLogs = [];
@@ -4294,7 +4295,9 @@ function scheduleNextTmsSync() {
   if (!runtime.autoSync || !hasTmsCredentials(runtime)) {
     return;
   }
-  const delayMs = Math.max(5, Number(runtime.syncIntervalMinutes || DEFAULT_TMS_CONFIG.syncIntervalMinutes)) * 60 * 1000;
+  const intervalMs = Math.max(5, Number(runtime.syncIntervalMinutes || DEFAULT_TMS_CONFIG.syncIntervalMinutes)) * 60 * 1000;
+  const delayMs = isFirstTmsSyncSchedule ? Math.min(intervalMs, 15000) : intervalMs;
+  isFirstTmsSyncSchedule = false;
   tmsSyncTimer = setTimeout(function () {
     syncTmsMonitor().catch(function (error) {
       appendTmsSyncLog({
@@ -4306,8 +4309,19 @@ function scheduleNextTmsSync() {
   }, delayMs);
 }
 
-async function listTmsMonitorRows(searchParams) {
-  const day = String(searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
+async function findLatestTmsMonitorDay() {
+  const result = await postgresQuery(
+    `select day
+     from tms_monitor_rows
+     order by day desc
+     limit 1`,
+    [],
+  );
+  return result.rows[0] ? String(result.rows[0].day || '') : '';
+}
+
+async function listTmsMonitorRows(searchParams, overrideDay) {
+  const day = String(overrideDay || searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
   const params = [day];
   let query = `select * from tms_monitor_rows where day = $1`;
   const customer = String(searchParams.get('customer') || '').trim();
@@ -4351,7 +4365,7 @@ async function listTmsMonitorRows(searchParams) {
   });
 }
 
-function buildTmsMonitorSummary(rows, logs) {
+function buildTmsMonitorSummary(rows, logs, meta) {
   const summary = {
     total: rows.length,
     bySeverity: {
@@ -4364,6 +4378,10 @@ function buildTmsMonitorSummary(rows, logs) {
     byIncident: {},
     customers: [...new Set(rows.map(function (row) { return row.customerName; }).filter(Boolean))].sort(),
     lastSync: logs[0] || null,
+    requestedDay: String(meta?.requestedDay || ''),
+    effectiveDay: String(meta?.effectiveDay || meta?.requestedDay || ''),
+    autoSync: Boolean(meta?.autoSync),
+    syncIntervalMinutes: Number(meta?.syncIntervalMinutes || 0),
   };
   for (const row of rows) {
     if (summary.bySeverity[row.severity] !== undefined) {
@@ -8599,16 +8617,30 @@ async function handleApi(req, res, url) {
       return true;
     }
     try {
-      const day = String(url.searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
+      const requestedDay = String(url.searchParams.get('day') || formatLocalDay(Date.now())).trim() || formatLocalDay(Date.now());
       const customer = String(url.searchParams.get('customer') || '').trim() || 'all';
       const severity = String(url.searchParams.get('severity') || '').trim() || 'all';
-      const rows = await listTmsMonitorRows(url.searchParams);
+      let effectiveDay = requestedDay;
+      let rows = await listTmsMonitorRows(url.searchParams, effectiveDay);
+      if (!rows.length) {
+        const latestDay = await findLatestTmsMonitorDay();
+        if (latestDay && latestDay !== requestedDay) {
+          effectiveDay = latestDay;
+          rows = await listTmsMonitorRows(url.searchParams, effectiveDay);
+        }
+      }
       const logs = await listTmsSyncLogs(1);
-      console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | day ${day} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
+      const runtime = getTmsConfig();
+      console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | requested ${requestedDay} | effective ${effectiveDay} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
       sendJson(res, 200, {
         ok: true,
         rows,
-        summary: buildTmsMonitorSummary(rows, logs),
+        summary: buildTmsMonitorSummary(rows, logs, {
+          requestedDay,
+          effectiveDay,
+          autoSync: runtime.autoSync,
+          syncIntervalMinutes: runtime.syncIntervalMinutes,
+        }),
       });
     } catch (error) {
       sendApiError(res, error, 'Trip Monitor gagal diambil.');
