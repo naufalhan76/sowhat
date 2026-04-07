@@ -128,6 +128,10 @@ const apiMonitorLog = [];
 const WEB_AUTH_COOKIE_NAME = 'solofleet_web_session';
 const WEB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 let postgresPool = null;
+let saveConfigInFlight = null;
+let saveConfigPending = false;
+let saveStateInFlight = null;
+let saveStatePending = false;
 const SOLOFLEET_UTC_OFFSET_MINUTES = Number(process.env.SOLOFLEET_UTC_OFFSET_MINUTES || 420);
 const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || (15 * 60 * 1000));
 const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 10);
@@ -143,6 +147,32 @@ const UNIT_CATEGORY_LABELS = {
   'dedicated-havi': 'Dedicated HAVI',
   uncategorized: 'Uncategorized',
 };
+function fleetRowHasSensorError(row) {
+  return Boolean(row && row.hasLiveSensorFault);
+}
+
+function fleetRowIsCriticalError(row) {
+  return row && row.liveSensorFaultType === 'temp1+temp2';
+}
+
+function fleetRowHasSetpointIssue(row) {
+  return Boolean(row && row.outsideSetpoint);
+}
+
+function fleetRowHasGpsLate(row) {
+  return row && row.minutesSinceUpdate !== null && row.minutesSinceUpdate > 30;
+}
+
+function rowPriority(row) {
+  if (fleetRowIsCriticalError(row)) return 6;
+  if (fleetRowHasSensorError(row)) return 5;
+  if (fleetRowHasSetpointIssue(row)) return 4;
+  if (fleetRowHasGpsLate(row)) return 3;
+  if (row && row.errGps) return 2;
+  if (row && row.isMoving) return 1;
+  return 0;
+}
+
 const remoteResetRuntime = {
   nextRunAt: null,
   lastRunStartedAt: null,
@@ -728,27 +758,40 @@ function saveLocalRemoteResetLogs(rows) {
 }
 
 async function saveConfig() {
-  if (getPostgresConfig().enabled) {
-    try {
-      await postgresUpsertJsonSetting('app_settings', 'config_data', config);
-      return;
-    } catch (error) {
-      console.error('Failed to save config to PostgreSQL:', error.message);
+  saveConfigPending = true;
+  if (saveConfigInFlight) {
+    return saveConfigInFlight;
+  }
+  saveConfigInFlight = (async function flushConfigSaveQueue() {
+    while (saveConfigPending) {
+      saveConfigPending = false;
+      const configSnapshot = JSON.parse(JSON.stringify(config || {}));
+      if (getPostgresConfig().enabled) {
+        try {
+          await postgresUpsertJsonSetting('app_settings', 'config_data', configSnapshot);
+          continue;
+        } catch (error) {
+          console.error('Failed to save config to PostgreSQL:', error.message);
+        }
+      }
+      if (!getSupabaseWebAuthConfig().enabled) {
+        saveJsonFile(CONFIG_FILE, configSnapshot);
+        continue;
+      }
+      try {
+        await supabaseRestRequest('POST', 'app_settings', {
+          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+          body: [{ id: 'default', config_data: configSnapshot, updated_at: new Date().toISOString() }],
+        });
+      } catch (error) {
+        console.error('Failed to save config to Supabase:', error.message);
+        saveJsonFile(CONFIG_FILE, configSnapshot);
+      }
     }
-  }
-  if (!getSupabaseWebAuthConfig().enabled) {
-    saveJsonFile(CONFIG_FILE, config);
-    return;
-  }
-  try {
-    await supabaseRestRequest('POST', 'app_settings', {
-      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-      body: [{ id: 'default', config_data: config, updated_at: new Date().toISOString() }],
-    });
-  } catch (error) {
-    console.error('Failed to save config to Supabase:', error.message);
-    saveJsonFile(CONFIG_FILE, config);
-  }
+  })().finally(function () {
+    saveConfigInFlight = null;
+  });
+  return saveConfigInFlight;
 }
 
 function getPostgresConfig() {
@@ -1586,28 +1629,40 @@ function serializeStateForDisk() {
 }
 
 async function saveState() {
-  const payload = serializeStateForDisk();
-  if (getPostgresConfig().enabled) {
-    try {
-      await postgresUpsertJsonSetting('app_state', 'state_data', payload);
-      return;
-    } catch (error) {
-      console.error('Failed to save state to PostgreSQL:', error.message);
+  saveStatePending = true;
+  if (saveStateInFlight) {
+    return saveStateInFlight;
+  }
+  saveStateInFlight = (async function flushStateSaveQueue() {
+    while (saveStatePending) {
+      saveStatePending = false;
+      const payload = serializeStateForDisk();
+      if (getPostgresConfig().enabled) {
+        try {
+          await postgresUpsertJsonSetting('app_state', 'state_data', payload);
+          continue;
+        } catch (error) {
+          console.error('Failed to save state to PostgreSQL:', error.message);
+        }
+      }
+      if (!getSupabaseWebAuthConfig().enabled) {
+        saveJsonFile(STATE_FILE, payload);
+        continue;
+      }
+      try {
+        await supabaseRestRequest('POST', 'app_state', {
+          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+          body: [{ id: 'default', state_data: payload, updated_at: new Date().toISOString() }],
+        });
+      } catch (error) {
+        console.error('Failed to save state to Supabase:', error.message);
+        saveJsonFile(STATE_FILE, payload);
+      }
     }
-  }
-  if (!getSupabaseWebAuthConfig().enabled) {
-    saveJsonFile(STATE_FILE, payload);
-    return;
-  }
-  try {
-    await supabaseRestRequest('POST', 'app_state', {
-      headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-      body: [{ id: 'default', state_data: payload, updated_at: new Date().toISOString() }],
-    });
-  } catch (error) {
-    console.error('Failed to save state to Supabase:', error.message);
-    saveJsonFile(STATE_FILE, payload);
-  }
+  })().finally(function () {
+    saveStateInFlight = null;
+  });
+  return saveStateInFlight;
 }
 
 function buildPrimaryAccountConfig() {
@@ -5013,7 +5068,21 @@ async function postgresQuery(queryText, params) {
   if (!pool) {
     throw new Error('PostgreSQL is not configured.');
   }
-  return pool.query(queryText, params || []);
+  const safeParams = params || [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await pool.query(queryText, safeParams);
+    } catch (error) {
+      const retryable = error && (error.code === '40P01' || error.code === '40001');
+      if (!retryable || attempt >= 2) {
+        throw error;
+      }
+      const delayMs = 75 * (attempt + 1);
+      console.warn(`[PostgreSQL] Retrying query after ${error.code} (${delayMs}ms delay)`);
+      await new Promise(function (resolve) { setTimeout(resolve, delayMs); });
+    }
+  }
+  throw new Error('PostgreSQL retry loop exited unexpectedly.');
 }
 
 async function ensurePostgresSchema() {
