@@ -43,7 +43,7 @@ const DEFAULT_TMS_CONFIG = {
   longStopMinutes: 45,
   appStagnantMinutes: 60,
 };
-const TRIP_MONITOR_LONG_STOP_MINUTES = 120;
+const TRIP_MONITOR_LONG_STOP_MINUTES = 180;
 const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
 const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
 const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 30;
@@ -261,6 +261,17 @@ function toNumber(value) {
 
   const parsed = Number(String(value).trim().replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeTemperatureRange(minValue, maxValue) {
+  const numericValues = [toNumber(minValue), toNumber(maxValue)].filter(Number.isFinite);
+  if (!numericValues.length) {
+    return { min: null, max: null };
+  }
+  return {
+    min: Math.min(...numericValues),
+    max: Math.max(...numericValues),
+  };
 }
 
 function normalizeUnitKey(value) {
@@ -4131,6 +4142,10 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
   const normalizedPlate = normalizePlateKey(plateRaw);
   const plateCandidates = collectPlateCandidates(plateRaw);
   const startTimestamp = toTimestampMaybe(doc?.start_actual_time_load || loadTask?.eta || Date.now());
+  const normalizedTempRange = normalizeTemperatureRange(
+    doc?.custom_minimum_temperature,
+    doc?.custom_maximum_temperature,
+  );
   return {
     jobOrderId: String(doc?.name || '').trim(),
     day: formatLocalDay(startTimestamp || Date.now()),
@@ -4144,8 +4159,8 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
     workflowState: String(doc?.workflow_state || '').trim(),
     originName: String(loadTask?.task_address || doc?.homebase_location || '').trim(),
     destinationName: String(destinationTask?.task_address || doc?.finish_location || '').trim(),
-    tempMin: toNumber(doc?.custom_minimum_temperature),
-    tempMax: toNumber(doc?.custom_maximum_temperature),
+    tempMin: normalizedTempRange.min,
+    tempMax: normalizedTempRange.max,
     etaOrigin: toTimestampMaybe(loadTask?.eta || doc?.start_actual_time_load),
     etaDestination: toTimestampMaybe(destinationTask?.eta || doc?.finish_actual_time_unload),
     active: isTmsJobActive(doc),
@@ -4215,6 +4230,7 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const incidents = [];
   const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
   const { taskList, workflowLines } = snapshot;
+  const normalizedTempRange = normalizeTemperatureRange(snapshot?.tempMin, snapshot?.tempMax);
   const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
   const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
   const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
@@ -4242,7 +4258,7 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const bothTempAboveMax = detectTripMonitorTempAboveMax(
     unitState,
     fleetRow,
-    snapshot.tempMax,
+    normalizedTempRange.max,
     now,
     { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
   );
@@ -4251,14 +4267,14 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
       code: 'temp-above-max',
       label: 'Temp above max',
       severity: 'critical',
-      detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(snapshot.tempMax, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
+      detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
     });
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
     incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
   }
   if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && !destinationDoneLine) {
-    incidents.push({ code: 'late-destination', label: 'Late to destination', severity: destinationEtaLateByMinutes >= 120 ? 'critical' : 'warning', detail: `ETA tujuan lewat ${destinationEtaLateByMinutes} menit` });
+    incidents.push({ code: 'late-destination', label: 'Late to destination', severity: 'warning', detail: `ETA tujuan lewat ${destinationEtaLateByMinutes} menit` });
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine && originDistance !== null && originDistance > radius) {
     incidents.push({ code: 'geofence-origin', label: 'Missed load geofence', severity: 'warning', detail: `Jarak ${Math.round(originDistance)} m dari tempat muat` });
@@ -4336,11 +4352,14 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
   const fleetRow = fleetContext?.row || null;
 
   if (!jobOrders.length) {
+    const normalizedRowTempRange = normalizeTemperatureRange(row?.tempMin, row?.tempMax);
     return {
       ...row,
       unitKey: fleetRow ? `${fleetRow.accountId}::${fleetRow.id}` : row.unitKey,
       unitId: fleetRow?.id || row.unitId,
       unitLabel: fleetRow?.alias || fleetRow?.label || row.unitLabel,
+      tempMin: normalizedRowTempRange.min,
+      tempMax: normalizedRowTempRange.max,
       metadata: {
         ...metadata,
         fleetRow: fleetRow || metadata.fleetRow || null,
@@ -4362,6 +4381,7 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
   }
 
   const incidents = headline.incidents || [];
+  const normalizedTempRange = normalizeTemperatureRange(headline.item.tempMin, headline.item.tempMax);
   let severity = 'normal';
   let boardStatus = 'normal';
   let unmatchedReason = '';
@@ -4392,8 +4412,8 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
     jobOrderCount: jobOrders.length || row.jobOrderCount,
     originName: headline.item.originName || row.originName,
     destinationName: headline.item.destinationName || row.destinationName,
-    tempMin: headline.item.tempMin ?? row.tempMin,
-    tempMax: headline.item.tempMax ?? row.tempMax,
+    tempMin: normalizedTempRange.min,
+    tempMax: normalizedTempRange.max,
     etaOrigin: headline.item.etaOrigin ?? row.etaOrigin,
     etaDestination: headline.item.etaDestination ?? row.etaDestination,
     driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || row.driverAppStatus,

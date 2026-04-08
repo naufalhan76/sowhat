@@ -82,6 +82,19 @@ function pickFirstText(...values) {
   return '';
 }
 
+function normalizeTemperatureRange(minValue, maxValue) {
+  const numericValues = [minValue, maxValue]
+    .map((value) => value === null || value === undefined || value === '' ? null : Number(value))
+    .filter((value) => Number.isFinite(value));
+  if (!numericValues.length) {
+    return { min: null, max: null };
+  }
+  return {
+    min: Math.min(...numericValues),
+    max: Math.max(...numericValues),
+  };
+}
+
 function normalizeTmsDriverAssign(driverAssign) {
   if (!Array.isArray(driverAssign)) return [];
   return [...driverAssign]
@@ -4763,6 +4776,7 @@ function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueF
 
 function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
+  const normalizedThresholdRange = normalizeTemperatureRange(thresholdMin, thresholdMax);
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
     .map((record) => ({ ...record, timestamp: toTimestampMs(record.timestamp) || null }))
@@ -4789,7 +4803,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
     ? Number(chartHeight)
     : compact ? 240 : 320;
   const padding = { top: 20, right: 20, bottom: 34, left: 44 };
-  const thresholdValues = [thresholdMin, thresholdMax].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+  const thresholdValues = [normalizedThresholdRange.min, normalizedThresholdRange.max].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
     const rawMin = Math.min(...temps);
     const rawMax = Math.max(...temps);
@@ -4797,8 +4811,8 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
     const minY = rawMin - pad;
     const maxY = rawMax + pad;
     const thresholdGuides = [
-      Number.isFinite(Number(thresholdMin)) ? { key: 'min', value: Number(thresholdMin), color: '#38BDF8', label: `${thresholdLabel} min` } : null,
-      Number.isFinite(Number(thresholdMax)) ? { key: 'max', value: Number(thresholdMax), color: '#F43F5E', label: `${thresholdLabel} max` } : null,
+      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: '#38BDF8', label: `${thresholdLabel} min` } : null,
+      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: '#F43F5E', label: `${thresholdLabel} max` } : null,
     ].filter(Boolean);
   const timeStart = series[0].timestamp;
   const timeEnd = series[series.length - 1].timestamp;
@@ -5015,6 +5029,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const historyRows = [...(historyDetail?.records || [])].reverse();
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
   const displayUnitLabel = pickFirstText(fleetRow?.alias, detail.unitLabel, fleetRow?.label, detail.unitId) || '-';
+  const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const jobDrivers = headlineDrivers.length
     ? headlineDrivers
@@ -5067,7 +5082,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             </div>
             <div className="mini-metric">
               <span>Temp range</span>
-              <strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong>
+              <strong>{headlineJob ? `${fmtNum(normalizedJobTempRange.min)} to ${fmtNum(normalizedJobTempRange.max)}` : '-'}</strong>
             </div>
           </div>
           {incidents.length ? <div className="trip-monitor-detail-incidents">
@@ -5093,7 +5108,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
                 </div>
               </CardHeader>
               <CardContent>
-                {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={360} thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}
+                {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={360} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}
               </CardContent>
             </Card>
           </div>
