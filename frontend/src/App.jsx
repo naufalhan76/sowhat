@@ -804,6 +804,7 @@ export default function App() {
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
+  const tripMonitorBoardRequestRef = useRef(0);
   const fleetRows = status?.fleet?.rows || [];
   const availableAccounts = status?.config?.accounts || [];
   const connectedAccounts = useMemo(() => availableAccounts.filter((account) => account.hasSessionCookie), [availableAccounts]);
@@ -978,13 +979,11 @@ export default function App() {
     lastSync: null,
   };
   const tripMonitorCustomerOptions = useMemo(() => ['all', ...(tripMonitorSummary.customers || [])], [tripMonitorSummary.customers]);
-  const tripMonitorIncidentOptions = useMemo(() => ['all', ...Object.keys(tripMonitorSummary.byIncident || {}).sort()], [tripMonitorSummary.byIncident]);
-  const filteredTripMonitorRows = useMemo(() => {
+  const tripMonitorBaseRows = useMemo(() => {
     const q = String(tripMonitorFilters.search || '').trim().toLowerCase();
     const appNeedle = String(tripMonitorFilters.appStatus || '').trim().toLowerCase();
     return tripMonitorRows.filter((row) => {
       if (tripMonitorFilters.customer !== 'all' && row.customerName !== tripMonitorFilters.customer) return false;
-      if (tripMonitorFilters.severity !== 'all' && row.severity !== tripMonitorFilters.severity) return false;
       if (tripMonitorFilters.incidentCode !== 'all' && !(row.incidentCodes || []).includes(tripMonitorFilters.incidentCode)) return false;
       if (appNeedle && appNeedle !== 'all' && !String(row.driverAppStatus || '').toLowerCase().includes(appNeedle)) return false;
       if (q) {
@@ -993,9 +992,23 @@ export default function App() {
       }
       return true;
     });
-  }, [tripMonitorRows, tripMonitorFilters]);
+  }, [tripMonitorRows, tripMonitorFilters.customer, tripMonitorFilters.incidentCode, tripMonitorFilters.appStatus, tripMonitorFilters.search]);
+  const tripMonitorIncidentOptions = useMemo(() => ['all', ...Array.from(new Set(tripMonitorBaseRows.flatMap((row) => row.incidentCodes || []))).sort()], [tripMonitorBaseRows]);
+  const tripMonitorSeverityCounts = useMemo(() => {
+    const counts = { total: tripMonitorBaseRows.length, bySeverity: { critical: 0, warning: 0, normal: 0, unmatched: 0, 'no-job-order': 0 } };
+    tripMonitorBaseRows.forEach((row) => {
+      const severity = String(row?.severity || '').trim();
+      if (counts.bySeverity[severity] !== undefined) {
+        counts.bySeverity[severity] += 1;
+      }
+    });
+    return counts;
+  }, [tripMonitorBaseRows]);
+  const filteredTripMonitorRows = useMemo(() => tripMonitorBaseRows.filter((row) => {
+    if (tripMonitorFilters.severity !== 'all' && row.severity !== tripMonitorFilters.severity) return false;
+    return true;
+  }), [tripMonitorBaseRows, tripMonitorFilters.severity]);
   const tripMonitorVisibleRows = useMemo(() => filteredTripMonitorRows
-    .filter((row) => row.severity !== 'no-job-order')
     .slice()
     .sort((left, right) => {
       const severityOrder = { critical: 4, warning: 3, unmatched: 2, normal: 1, 'no-job-order': 0 };
@@ -1065,7 +1078,7 @@ export default function App() {
       loadTripMonitorBoard(true).catch(() => {});
     }, 60000);
     return () => clearInterval(refreshTimer);
-  }, [activePanel, webSessionUser?.id, tripMonitorFilters.customer, tripMonitorFilters.severity]);
+  }, [activePanel, webSessionUser?.id]);
 
   useEffect(() => {
     if (activePanel !== 'config' || webSessionUser?.role !== 'admin') {
@@ -1568,21 +1581,28 @@ export default function App() {
   };
 
   const loadTripMonitorBoard = async (quiet = false) => {
+    const requestId = tripMonitorBoardRequestRef.current + 1;
+    tripMonitorBoardRequestRef.current = requestId;
     if (!quiet) setTripMonitorBusy(true);
     try {
-      const query = new URLSearchParams();
-      if (tripMonitorFilters.customer && tripMonitorFilters.customer !== 'all') query.set('customer', tripMonitorFilters.customer);
-      if (tripMonitorFilters.severity && tripMonitorFilters.severity !== 'all') query.set('severity', tripMonitorFilters.severity);
-      const payload = await api(`/api/tms/board?${query.toString()}`);
+      const payload = await api('/api/tms/board');
+      if (tripMonitorBoardRequestRef.current !== requestId) {
+        return payload;
+      }
       startTransition(() => {
         setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
       });
       return payload;
     } catch (error) {
+      if (tripMonitorBoardRequestRef.current !== requestId) {
+        throw error;
+      }
       if (!quiet) setBanner({ tone: 'error', message: error.message || 'Trip Monitor gagal dimuat.' });
       throw error;
     } finally {
-      setTripMonitorBusy(false);
+      if (tripMonitorBoardRequestRef.current === requestId) {
+        setTripMonitorBusy(false);
+      }
     }
   };
 
@@ -3214,8 +3234,8 @@ export default function App() {
               <CardContent>
                 <div className="trip-monitor-toolbar">
                   <div className="trip-monitor-filter-tabs">
-                    <button type="button" className={`trip-monitor-filter-pill ${tripMonitorFilters.severity === 'all' ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: 'all' }))}>All <span>{tripMonitorSummary.total || 0}</span></button>
-                    {TMS_BOARD_COLUMNS.map((column) => <button type="button" key={column.key} className={`trip-monitor-filter-pill trip-monitor-filter-pill-${column.key} ${tripMonitorFilters.severity === column.key ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: column.key }))}>{column.label} <span>{tripMonitorSummary.bySeverity?.[column.key] || 0}</span></button>)}
+                    <button type="button" className={`trip-monitor-filter-pill ${tripMonitorFilters.severity === 'all' ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: 'all' }))}>All <span>{tripMonitorSeverityCounts.total || 0}</span></button>
+                    {TMS_BOARD_COLUMNS.map((column) => <button type="button" key={column.key} className={`trip-monitor-filter-pill trip-monitor-filter-pill-${column.key} ${tripMonitorFilters.severity === column.key ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: column.key }))}>{column.label} <span>{tripMonitorSeverityCounts.bySeverity?.[column.key] || 0}</span></button>)}
                   </div>
                   <div className="trip-monitor-toolbar-grid">
                     <label className="historical-field">
