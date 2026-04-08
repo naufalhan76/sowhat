@@ -3337,6 +3337,10 @@ function normalizePlateKey(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function plateTextHasCameraSuffix(value) {
+  return /\bCAMERA\b/i.test(String(value || '').trim());
+}
+
 function collectPlateCandidates() {
   const candidates = new Set();
   const texts = Array.prototype.slice.call(arguments);
@@ -3358,6 +3362,21 @@ function collectPlateCandidates() {
     }
   }
   return [...candidates];
+}
+
+function fleetRowIsCameraUnit(row) {
+  if (!row || typeof row !== 'object') return false;
+  return [row.label, row.alias, row.vehicle].some(plateTextHasCameraSuffix);
+}
+
+function shouldPreferFleetPlateRow(candidateRow, currentRow) {
+  if (!currentRow) return true;
+  const candidateIsCamera = fleetRowIsCameraUnit(candidateRow);
+  const currentIsCamera = fleetRowIsCameraUnit(currentRow);
+  if (candidateIsCamera !== currentIsCamera) {
+    return !candidateIsCamera;
+  }
+  return rowPriority(candidateRow) > rowPriority(currentRow);
 }
 
 function extractTmsCsrfToken(html) {
@@ -3977,7 +3996,7 @@ function buildFleetPlateIndex(now) {
   for (const row of allRows) {
     const keys = collectPlateCandidates(row.label, row.alias, row.vehicle, row.id);
     for (const key of keys) {
-      if (!byPlate.has(key) || rowPriority(row) > rowPriority(byPlate.get(key))) {
+      if (shouldPreferFleetPlateRow(row, byPlate.get(key))) {
         byPlate.set(key, row);
       }
     }
