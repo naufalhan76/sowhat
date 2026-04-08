@@ -4587,11 +4587,16 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.trip-monitor-severity-badge-critical,
-.trip-monitor-severity-badge-warning {
+.trip-monitor-severity-badge-critical {
   background: rgba(239, 68, 68, 0.18);
   border-color: rgba(239, 68, 68, 0.35);
   color: #fecaca;
+}
+
+.trip-monitor-severity-badge-warning {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.34);
+  color: #fde68a;
 }
 
 .trip-monitor-severity-badge-normal {
@@ -4756,15 +4761,31 @@ textarea:focus {
   flex-shrink: 0;
 }
 
-.trip-monitor-card-warning,
 .trip-monitor-card-critical {
   border-color: rgba(239, 68, 68, 0.4);
   background: linear-gradient(180deg, rgba(61, 16, 22, 0.96) 0%, rgba(33, 12, 18, 0.96) 100%);
 }
 
-.trip-monitor-card-warning .trip-monitor-card-subline,
+.trip-monitor-card-warning {
+  border-color: rgba(245, 158, 11, 0.38);
+  background: linear-gradient(180deg, rgba(56, 37, 10, 0.96) 0%, rgba(34, 24, 9, 0.96) 100%);
+}
+
+.trip-monitor-card-normal {
+  border-color: rgba(34, 197, 94, 0.32);
+  background: linear-gradient(180deg, rgba(11, 42, 25, 0.96) 0%, rgba(9, 28, 18, 0.96) 100%);
+}
+
 .trip-monitor-card-critical .trip-monitor-card-subline {
   color: rgba(254, 202, 202, 0.82);
+}
+
+.trip-monitor-card-warning .trip-monitor-card-subline {
+  color: rgba(253, 230, 138, 0.84);
+}
+
+.trip-monitor-card-normal .trip-monitor-card-subline {
+  color: rgba(187, 247, 208, 0.82);
 }
 
 @media (max-width: 720px) {
