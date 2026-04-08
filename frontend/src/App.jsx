@@ -82,26 +82,106 @@ function pickFirstText(...values) {
   return '';
 }
 
+function normalizeTmsDriverAssign(driverAssign) {
+  if (!Array.isArray(driverAssign)) return [];
+  return [...driverAssign]
+    .filter(Boolean)
+    .sort((left, right) => Number(left?.idx ?? left?.index ?? 0) - Number(right?.idx ?? right?.index ?? 0));
+}
+
+function collectNestedDriverTexts(value, bucket, visited, depth = 0) {
+  if (!value || depth > 4) return;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (text) bucket.names.push(text);
+    return;
+  }
+  if (typeof value !== 'object') return;
+  if (visited.has(value)) return;
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectNestedDriverTexts(item, bucket, visited, depth + 1));
+    return;
+  }
+
+  const nameCandidates = [
+    value.driver_name,
+    value.driverName,
+    value.employee_name,
+    value.employeeName,
+    value.full_name,
+    value.fullName,
+    value.user_full_name,
+    value.userFullName,
+    value.driver_label,
+    value.driverLabel,
+    value.employee_label,
+    value.employeeLabel,
+    value.employee_full_name,
+    value.employeeFullName,
+    value.nama,
+    value.nama_driver,
+    value.driver,
+    value.employee,
+    value.name,
+    value.label,
+    value.title,
+  ];
+  const idCandidates = [
+    value.driver_id,
+    value.driverId,
+    value.employee_id,
+    value.employeeId,
+    value.crew_id,
+    value.crewId,
+    value.user_id,
+    value.userId,
+    value.name,
+  ];
+
+  nameCandidates.forEach((candidate) => {
+    const text = String(candidate || '').trim();
+    if (text) bucket.names.push(text);
+  });
+  idCandidates.forEach((candidate) => {
+    const text = String(candidate || '').trim();
+    if (text) bucket.ids.push(text);
+  });
+
+  Object.entries(value).forEach(([key, nested]) => {
+    if (nested === null || nested === undefined) return;
+    const normalizedKey = String(key || '').trim().toLowerCase();
+    if ([
+      'idx',
+      'index',
+      'doctype',
+      'owner',
+      'modified_by',
+      'creation',
+      'modified',
+      'parent',
+      'parentfield',
+      'parenttype',
+      'assignment_status',
+      'driver_status',
+      'job_offer_status',
+      'status',
+    ].includes(normalizedKey)) {
+      return;
+    }
+    if (typeof nested === 'object') {
+      collectNestedDriverTexts(nested, bucket, visited, depth + 1);
+    }
+  });
+}
+
 function extractTmsDriverName(driver) {
-  if (!driver || typeof driver !== 'object') return '-';
-  return pickFirstText(
-    driver.driver_name,
-    driver.driverName,
-    driver.employee_name,
-    driver.employeeName,
-    driver.full_name,
-    driver.fullName,
-    driver.user_full_name,
-    driver.userFullName,
-    driver.nama_driver,
-    driver.driver,
-    driver.name,
-    driver.employee,
-    driver.driver_id,
-    driver.driverId,
-    driver.employee_id,
-    driver.employeeId,
-  ) || '-';
+  if (!driver) return '-';
+  if (typeof driver === 'string') return driver.trim() || '-';
+  const bucket = { names: [], ids: [] };
+  collectNestedDriverTexts(driver, bucket, new Set());
+  return pickFirstText(...bucket.names, ...bucket.ids) || '-';
 }
 
 function splitCsvText(value) {
@@ -4934,12 +5014,14 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
   const historyRows = [...(historyDetail?.records || [])].reverse();
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
-  const jobDrivers = Array.isArray(headlineJob?.driverAssign) && headlineJob.driverAssign.length
-    ? headlineJob.driverAssign
-    : jobOrders.flatMap((job) => Array.isArray(job?.driverAssign) ? job.driverAssign : []);
+  const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
+  const jobDrivers = headlineDrivers.length
+    ? headlineDrivers
+    : jobOrders.flatMap((job) => normalizeTmsDriverAssign(job?.driverAssign));
   const driver1Name = extractTmsDriverName(jobDrivers[0]);
   const driver2Name = extractTmsDriverName(jobDrivers[1]);
-  const appStatus = detail?.driverAppStatus || [((headlineJob?.driverAssign || [])[0] || {}).assignment_status, ((headlineJob?.driverAssign || [])[0] || {}).driver_status, ((headlineJob?.driverAssign || [])[0] || {}).job_offer_status].filter(Boolean).join(' | ') || '-';
+  const leadDriver = jobDrivers[0] || null;
+  const appStatus = detail?.driverAppStatus || [leadDriver?.assignment_status, leadDriver?.driver_status, leadDriver?.job_offer_status].filter(Boolean).join(' | ') || '-';
 
   return <div className="auth-modal-backdrop" onClick={onClose}>
     <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>

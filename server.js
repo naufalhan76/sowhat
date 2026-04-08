@@ -3032,6 +3032,9 @@ function detectLiveSensorFaultType(unitState, snapshot, now, options) {
       if (record.timestamp >= currentMs) continue;
 
       const v = toNumber(record[sensorKey]);
+      if (v === null) {
+        continue;
+      }
       if (v !== 0) {
         break;
       }
@@ -3918,6 +3921,7 @@ function getTmsTaskArrays(doc) {
   const driverAssign = Array.isArray(doc?.driver_assign) ? [...doc.driver_assign] : [];
   taskList.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
   workflowLines.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
+  driverAssign.sort(function (left, right) { return Number((left && (left.idx ?? left.index)) || 0) - Number((right && (right.idx ?? right.index)) || 0); });
   return { taskList, workflowLines, driverAssign };
 }
 
