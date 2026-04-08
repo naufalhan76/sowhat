@@ -4576,6 +4576,8 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const containerRef = useRef(null);
+  const mapInteractionRef = useRef(false);
+  const lastFitKeyRef = useRef('');
   const [showRoute, setShowRoute] = useState(true);
   const leaflet = useLeafletModule(true);
   const stopMarkers = useMemo(() => sanitizeTripMonitorStops(stops), [stops]);
@@ -4610,6 +4612,11 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
       locationSummary: row?.locationSummary || '',
     };
   }, [row?.latitude, row?.longitude, row?.lastUpdatedAt, row?.locationSummary]);
+  const mapFitKey = useMemo(() => [
+    row?.accountId || 'primary',
+    row?.id || '',
+    rangeLabel || '',
+  ].join('::'), [row?.accountId, row?.id, rangeLabel]);
   const buildPopupHtml = (title, point) => [
     `<strong>${title}</strong>`,
     point?.timestamp ? fmtDate(point.timestamp) : '-',
@@ -4643,16 +4650,26 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
     const layer = leaflet.layerGroup().addTo(map);
+    const markUserInteracted = () => {
+      mapInteractionRef.current = true;
+    };
+    ['dragstart', 'zoomstart', 'movestart', 'touchstart'].forEach((eventName) => map.on(eventName, markUserInteracted));
     mapRef.current = map;
     layerRef.current = layer;
     window.setTimeout(() => map.invalidateSize(), 80);
     return () => {
+      ['dragstart', 'zoomstart', 'movestart', 'touchstart'].forEach((eventName) => map.off(eventName, markUserInteracted));
       layer.clearLayers();
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
     };
   }, [leaflet, row?.latitude, row?.longitude]);
+
+  useEffect(() => {
+    mapInteractionRef.current = false;
+    lastFitKeyRef.current = '';
+  }, [mapFitKey]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -4729,15 +4746,18 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
       }).bindPopup(buildStopPopupHtml(stop)).addTo(layer);
     });
 
-    if (bounds.length === 1) {
-      map.setView(bounds[0], 14);
-    } else if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
-    } else if (currentPoint) {
-      map.setView([currentPoint.latitude, currentPoint.longitude], 15);
+    if (!mapInteractionRef.current && lastFitKeyRef.current !== mapFitKey) {
+      if (bounds.length === 1) {
+        map.setView(bounds[0], 14);
+      } else if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+      } else if (currentPoint) {
+        map.setView([currentPoint.latitude, currentPoint.longitude], 15);
+      }
+      lastFitKeyRef.current = mapFitKey;
     }
     window.setTimeout(() => map.invalidateSize(), 50);
-  }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers]);
+  }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers, mapFitKey]);
 
   const routePointCount = trackPoints.length;
   const hasMapData = routePointCount > 0 || Boolean(currentPoint) || stopMarkers.length > 0;
