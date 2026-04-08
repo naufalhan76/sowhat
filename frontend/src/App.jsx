@@ -1309,6 +1309,11 @@ export default function App() {
   }, [expandedFleetRowKey, prioritizedFleet]);
 
   useEffect(() => {
+    if (!tripMonitorDetail?.rowId) return;
+    loadTripMonitorDetailHistory(tripMonitorDetail, range).catch(() => {});
+  }, [tripMonitorDetail?.rowId, range.startDate, range.endDate]);
+
+  useEffect(() => {
     setSelectedAstroLocationIds((current) => {
       const next = current.filter((id) => astroLocations.some((location) => location.id === id));
       if (next.length === current.length && next.every((id, index) => id === current[index])) {
@@ -1550,11 +1555,16 @@ export default function App() {
     setTripMonitorDetailHistoryBusy(false);
   };
 
-  const loadTripMonitorDetailHistory = async (detail) => {
+  const loadTripMonitorDetailHistory = async (detail, rangeOverride = null) => {
     const fleetRow = resolveTripMonitorFleetRow(detail);
-    const range = deriveTripMonitorHistoryRange(detail);
+    const fallbackRange = deriveTripMonitorHistoryRange(detail);
+    const requestedRange = rangeOverride || range || fallbackRange;
+    const resolvedRange = {
+      startDate: normalizeInputDayValue(requestedRange?.startDate || '', fallbackRange.startDate),
+      endDate: normalizeInputDayValue(requestedRange?.endDate || '', fallbackRange.endDate),
+    };
     startTransition(() => {
-      setTripMonitorDetailRange(range);
+      setTripMonitorDetailRange(resolvedRange);
       setTripMonitorDetailHistory(null);
     });
     if (!fleetRow?.id) {
@@ -1565,7 +1575,7 @@ export default function App() {
     }
     setTripMonitorDetailHistoryBusy(true);
     try {
-      const query = new URLSearchParams({ accountId: fleetRow.accountId || 'primary', unitId: fleetRow.id, startDate: range.startDate, endDate: range.endDate, source: 'remote' });
+      const query = new URLSearchParams({ accountId: fleetRow.accountId || 'primary', unitId: fleetRow.id, startDate: resolvedRange.startDate, endDate: resolvedRange.endDate, source: 'remote' });
       const payload = await api(`/api/unit-history?${query.toString()}`);
       startTransition(() => setTripMonitorDetailHistory(payload));
     } catch (error) {
@@ -1586,9 +1596,6 @@ export default function App() {
       const payload = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId }).toString()}`);
       const detail = payload.detail || null;
       startTransition(() => setTripMonitorDetail(detail));
-      if (detail) {
-        await loadTripMonitorDetailHistory(detail);
-      }
     } catch (error) {
       setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
     } finally {
@@ -2334,7 +2341,10 @@ export default function App() {
       setActivePanel('map');
       return;
     }
-    const nextRange = deriveTripMonitorHistoryRange(row);
+    const nextRange = {
+      startDate: normalizeInputDayValue(range.startDate),
+      endDate: normalizeInputDayValue(range.endDate),
+    };
     setHistoricalRangeDraft(nextRange);
     setSelectedUnitAccountId(fleetRow.accountId || 'primary');
     setSelectedUnitId(fleetRow.id);
@@ -3107,7 +3117,7 @@ export default function App() {
                     </label>
                   </div>
                 </div>
-                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | Window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
+                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | TMS window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Topbar range: {range.startDate || '-'} to {range.endDate || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
                 <div className="trip-monitor-flat-board">
                   {tripMonitorVisibleRows.length ? tripMonitorVisibleRows.map((row) => <TripMonitorUnitCard
                     key={row.rowId}
@@ -4892,7 +4902,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const historyRows = [...(historyDetail?.records || [])].reverse();
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
   const appStatus = detail?.driverAppStatus || [((headlineJob?.driverAssign || [])[0] || {}).assignment_status, ((headlineJob?.driverAssign || [])[0] || {}).driver_status, ((headlineJob?.driverAssign || [])[0] || {}).job_offer_status].filter(Boolean).join(' | ') || '-';
-  return <div className="auth-modal-backdrop" onClick={onClose}><Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{detail.unitId || detail.unitLabel || '-'}</h2><p>{detail.customerName || '-'} | {routeSummary}</p></div><div className="inline-buttons">{fleetRow?.id ? <><Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button><Button variant="bordered" onPress={onOpenMap}>Open map</Button><Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button></> : null}<Button variant="bordered" onPress={onClose}>Close</Button></div></CardHeader><CardContent>{busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(detail.severity)}</strong></div><div className="mini-metric"><span>Range</span><strong>{historyLabel}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{jobOrders.length}</strong></div><div className="mini-metric"><span>Incidents</span><strong>{incidents.length}</strong></div><div className="mini-metric"><span>App status</span><strong>{appStatus || '-'}</strong></div><div className="mini-metric"><span>Temp range</span><strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong></div></div>{incidents.length ? <div className="trip-monitor-detail-incidents">{incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}</div> : null}<div className="split-panels trip-monitor-detail-panels"><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Map</h3><p>Posisi unit dan track historical dalam range JO TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}</CardContent></Card><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Graphic</h3><p>Historical suhu unit dengan garis batas min/max dari TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet dalam range ${historyLabel}.`} compact thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}</CardContent></Card></div><Card className="panel-card trip-monitor-detail-history"><CardHeader className="panel-card-header"><div><h3>Historical</h3><p>Historical Solofleet berdasarkan range JO TMS, 20 row per halaman.</p></div></CardHeader><CardContent>{fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range TMS." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}</CardContent></Card></div>}</CardContent></Card></div>;
+  return <div className="auth-modal-backdrop" onClick={onClose}><Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{detail.unitId || detail.unitLabel || '-'}</h2><p>{detail.customerName || '-'} | {routeSummary}</p></div><div className="inline-buttons">{fleetRow?.id ? <><Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button><Button variant="bordered" onPress={onOpenMap}>Open map</Button><Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button></> : null}<Button variant="bordered" onPress={onClose}>Close</Button></div></CardHeader><CardContent>{busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(detail.severity)}</strong></div><div className="mini-metric"><span>Topbar range</span><strong>{historyLabel}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{jobOrders.length}</strong></div><div className="mini-metric"><span>Incidents</span><strong>{incidents.length}</strong></div><div className="mini-metric"><span>App status</span><strong>{appStatus || '-'}</strong></div><div className="mini-metric"><span>Temp range</span><strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong></div></div>{incidents.length ? <div className="trip-monitor-detail-incidents">{incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}</div> : null}<div className="split-panels trip-monitor-detail-panels"><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Map</h3><p>Posisi unit dan track historical mengikuti range aktif di topbar.</p></div></CardHeader><CardContent>{fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}</CardContent></Card><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Graphic</h3><p>Historical suhu unit dengan garis batas min/max dari TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}</CardContent></Card></div><Card className="panel-card trip-monitor-detail-history"><CardHeader className="panel-card-header"><div><h3>Historical</h3><p>Historical Solofleet berdasarkan range aktif di topbar, 20 row per halaman.</p></div></CardHeader><CardContent>{fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}</CardContent></Card></div>}</CardContent></Card></div>;
 }
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
