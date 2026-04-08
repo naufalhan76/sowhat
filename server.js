@@ -43,6 +43,11 @@ const DEFAULT_TMS_CONFIG = {
   longStopMinutes: 45,
   appStagnantMinutes: 60,
 };
+const TRIP_MONITOR_LONG_STOP_MINUTES = 120;
+const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
+const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
+const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 30;
+const TRIP_MONITOR_TEMP_TOLERANCE = 0.3;
 
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -623,6 +628,12 @@ function normalizeRecord(record) {
     speed: toNumber(record.speed),
     temp1: toNumber(record.temp1),
     temp2: toNumber(record.temp2),
+    latitude: toNumber(record.latitude),
+    longitude: toNumber(record.longitude),
+    locationSummary: String(record.locationSummary || ''),
+    zoneName: String(record.zoneName || ''),
+    powerSupply: toNumber(record.powerSupply),
+    errSensor: String(record.errSensor || ''),
   };
 }
 
@@ -1834,6 +1845,11 @@ function syncFleetSnapshotRecords(accountConfig, accountState, now) {
       speed: snapshot.speed,
       temp1: snapshot.temp1,
       temp2: snapshot.temp2,
+      latitude: snapshot.latitude ?? null,
+      longitude: snapshot.longitude ?? null,
+      locationSummary: snapshot.locationSummary || '',
+      zoneName: snapshot.zoneName || '',
+      powerSupply: snapshot.powerSupply ?? null,
       errSensor: snapshot.errSensor || '',
     }], resolvedNow);
     unitState.analysis = buildAnalysisFromRecords(unitState);
@@ -3066,6 +3082,163 @@ function detectLiveSensorFaultType(unitState, snapshot, now, options) {
   return null;
 }
 
+function buildRealtimeRecordSeries(unitState, snapshot, now) {
+  const currentMs = snapshot?.lastUpdatedMs || now;
+  const records = Array.isArray(unitState?.records)
+    ? unitState.records
+      .filter(function (record) {
+        return record && Number.isFinite(Number(record.timestamp || 0)) && Number(record.timestamp) <= currentMs;
+      })
+      .map(function (record) { return ({ ...record }); })
+    : [];
+
+  if (snapshot && Number.isFinite(currentMs)) {
+    const synthetic = {
+      timestamp: currentMs,
+      vehicle: snapshot.unitId || unitState?.vehicle || unitState?.label || unitState?.unitId || 'Unknown Unit',
+      speed: snapshot.speed ?? null,
+      temp1: snapshot.temp1 ?? null,
+      temp2: snapshot.temp2 ?? null,
+      latitude: snapshot.latitude ?? null,
+      longitude: snapshot.longitude ?? null,
+      locationSummary: snapshot.locationSummary || '',
+      zoneName: snapshot.zoneName || '',
+      powerSupply: snapshot.powerSupply ?? null,
+      errSensor: snapshot.errSensor || '',
+    };
+    const existingIndex = records.findIndex(function (record) { return record.timestamp === currentMs; });
+    if (existingIndex >= 0) {
+      records[existingIndex] = { ...records[existingIndex], ...synthetic };
+    } else {
+      records.push(synthetic);
+    }
+  }
+
+  records.sort(function (left, right) { return left.timestamp - right.timestamp; });
+  return { currentMs, records };
+}
+
+function isIdleRealtimeRecord(record) {
+  const speed = toNumber(record?.speed);
+  return speed === null ? true : speed <= TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH;
+}
+
+function isSameRealtimeStopLocation(record, reference, radiusMeters = TRIP_MONITOR_LONG_STOP_RADIUS_METERS) {
+  const leftLat = toNumber(record?.latitude);
+  const leftLng = toNumber(record?.longitude);
+  const rightLat = toNumber(reference?.latitude);
+  const rightLng = toNumber(reference?.longitude);
+  if ([leftLat, leftLng, rightLat, rightLng].every(Number.isFinite)) {
+    return distanceMeters(leftLat, leftLng, rightLat, rightLng) <= radiusMeters;
+  }
+
+  const leftLabel = String(record?.zoneName || record?.locationSummary || '').trim().toLowerCase();
+  const rightLabel = String(reference?.zoneName || reference?.locationSummary || '').trim().toLowerCase();
+  if (leftLabel && rightLabel) {
+    return leftLabel === rightLabel;
+  }
+
+  return true;
+}
+
+function detectTripMonitorTempAboveMax(unitState, snapshot, tempMax, now, options) {
+  const resolvedMax = toNumber(tempMax);
+  if (resolvedMax === null || !snapshot) return null;
+
+  const requiredDurationMinutes = Math.max(1, Number(options?.requiredDurationMinutes || TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES));
+  const requiredDurationMs = requiredDurationMinutes * 60 * 1000;
+  const minimumSamples = Math.max(2, Number(options?.minimumSamples || 2));
+  const tolerance = Number(options?.tolerance ?? TRIP_MONITOR_TEMP_TOLERANCE);
+  const { currentMs, records } = buildRealtimeRecordSeries(unitState, snapshot, now);
+  if (!records.length) return null;
+
+  const isAboveMax = function (record) {
+    const temp1 = toNumber(record?.temp1);
+    const temp2 = toNumber(record?.temp2);
+    if (temp1 === null || temp2 === null) return null;
+    return temp1 > resolvedMax + tolerance && temp2 > resolvedMax + tolerance;
+  };
+
+  if (isAboveMax(records[records.length - 1]) !== true) {
+    return null;
+  }
+
+  const cutoff = currentMs - requiredDurationMs;
+  let sampleCount = 1;
+  let earliestStreakTime = currentMs;
+
+  for (let i = records.length - 2; i >= 0; i--) {
+    const record = records[i];
+    const state = isAboveMax(record);
+    if (state === null) {
+      continue;
+    }
+    if (!state) {
+      break;
+    }
+    sampleCount += 1;
+    earliestStreakTime = record.timestamp;
+    if (earliestStreakTime <= cutoff) {
+      break;
+    }
+  }
+
+  const durationMs = currentMs - earliestStreakTime;
+  if (durationMs < requiredDurationMs || sampleCount < minimumSamples) {
+    return null;
+  }
+
+  return {
+    startTimestamp: earliestStreakTime,
+    endTimestamp: currentMs,
+    durationMinutes: Number((durationMs / 60000).toFixed(1)),
+    thresholdMax: resolvedMax,
+  };
+}
+
+function detectRealtimeLongStop(unitState, snapshot, now, options) {
+  if (!snapshot) return null;
+  const { currentMs, records } = buildRealtimeRecordSeries(unitState, snapshot, now);
+  if (!records.length) return null;
+
+  const latestRecord = records[records.length - 1];
+  if (!isIdleRealtimeRecord(latestRecord)) {
+    return null;
+  }
+
+  const requiredDurationMinutes = Math.max(1, Number(options?.requiredDurationMinutes || TRIP_MONITOR_LONG_STOP_MINUTES));
+  const requiredDurationMs = requiredDurationMinutes * 60 * 1000;
+  const cutoff = currentMs - requiredDurationMs;
+  let earliestStreakTime = currentMs;
+
+  for (let i = records.length - 2; i >= 0; i--) {
+    const record = records[i];
+    if (!isIdleRealtimeRecord(record)) {
+      break;
+    }
+    if (!isSameRealtimeStopLocation(record, latestRecord, Number(options?.radiusMeters || TRIP_MONITOR_LONG_STOP_RADIUS_METERS))) {
+      break;
+    }
+    earliestStreakTime = record.timestamp;
+    if (earliestStreakTime <= cutoff) {
+      break;
+    }
+  }
+
+  const durationMs = currentMs - earliestStreakTime;
+  if (durationMs < requiredDurationMs) {
+    return null;
+  }
+
+  return {
+    startTimestamp: earliestStreakTime,
+    endTimestamp: currentMs,
+    durationMinutes: Number((durationMs / 60000).toFixed(1)),
+    locationSummary: latestRecord.locationSummary || snapshot.locationSummary || '',
+    zoneName: latestRecord.zoneName || snapshot.zoneName || '',
+  };
+}
+
 function sensorFaultLabel(type) {
   if (type === 'temp1+temp2') {
     return 'Temp1 + Temp2 Error';
@@ -3985,23 +4158,33 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
 
 function buildFleetPlateIndex(now) {
   const allRows = [];
+  const allContexts = [];
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
     syncFleetSnapshotRecords(accountConfig, accountState, now);
     const liveAlerts = buildLiveAlerts(accountConfig, accountState, now);
     const rows = annotateFleetRowsWithPods(accountConfig, buildFleetRows(accountConfig, accountState, now, liveAlerts));
     allRows.push(...rows);
+    rows.forEach(function (row) {
+      allContexts.push({
+        row,
+        unitState: accountState.units[row.id] || normalizeUnitState(row.id, { label: row.label, vehicle: row.alias || row.label }),
+      });
+    });
   }
   const byPlate = new Map();
-  for (const row of allRows) {
+  const byRowKey = new Map();
+  for (const context of allContexts) {
+    const row = context.row;
+    byRowKey.set(row.rowKey, context);
     const keys = collectPlateCandidates(row.label, row.alias, row.vehicle, row.id);
     for (const key of keys) {
-      if (shouldPreferFleetPlateRow(row, byPlate.get(key))) {
-        byPlate.set(key, row);
+      if (shouldPreferFleetPlateRow(row, byPlate.get(key)?.row || null)) {
+        byPlate.set(key, context);
       }
     }
   }
-  return { allRows, byPlate };
+  return { allRows, allContexts, byPlate, byRowKey };
 }
 
 function findWorkflowStatus(workflowLines, taskName, pattern) {
@@ -4028,12 +4211,10 @@ function distanceMetersBetween(leftLat, leftLng, rightLat, rightLng) {
   return earth * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
 }
 
-function evaluateTmsIncidents(snapshot, fleetRow, tmsConfig, now) {
+function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const incidents = [];
   const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
-  const longStopMinutes = Number(tmsConfig?.longStopMinutes || DEFAULT_TMS_CONFIG.longStopMinutes);
-  const stagnantMinutes = Number(tmsConfig?.appStagnantMinutes || DEFAULT_TMS_CONFIG.appStagnantMinutes);
-  const { taskList, workflowLines, driverAssign } = snapshot;
+  const { taskList, workflowLines } = snapshot;
   const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
   const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
   const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
@@ -4043,7 +4224,6 @@ function evaluateTmsIncidents(snapshot, fleetRow, tmsConfig, now) {
   const latestWorkflow = [...workflowLines].sort(function (left, right) {
     return (toTimestampMaybe(right.checked_time) || 0) - (toTimestampMaybe(left.checked_time) || 0);
   })[0] || null;
-  const driver = driverAssign[0] || null;
   const liveLat = fleetRow?.latitude ?? null;
   const liveLng = fleetRow?.longitude ?? null;
   const originDistance = distanceMetersBetween(liveLat, liveLng, loadTask?.latitude, loadTask?.longitude);
@@ -4052,13 +4232,27 @@ function evaluateTmsIncidents(snapshot, fleetRow, tmsConfig, now) {
   const destinationEta = snapshot.etaDestination;
   const destinationEtaLateByMinutes = destinationEta && now > destinationEta ? Math.round((now - destinationEta) / 60000) : 0;
   const originEtaLateByMinutes = originEta && now > originEta ? Math.round((now - originEta) / 60000) : 0;
-  const latestWorkflowAgeMinutes = latestWorkflow?.checked_time ? Math.round((now - toTimestampMaybe(latestWorkflow.checked_time)) / 60000) : null;
 
   if (fleetRow?.errGps) {
     incidents.push({ code: 'gps-error', label: 'GPS error', severity: 'critical', detail: String(fleetRow.errGps || 'GPS error') });
   }
   if (fleetRow?.hasLiveSensorFault) {
     incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
+  }
+  const bothTempAboveMax = detectTripMonitorTempAboveMax(
+    unitState,
+    fleetRow,
+    snapshot.tempMax,
+    now,
+    { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
+  );
+  if (bothTempAboveMax) {
+    incidents.push({
+      code: 'temp-above-max',
+      label: 'Temp above max',
+      severity: 'critical',
+      detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(snapshot.tempMax, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
+    });
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
     incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
@@ -4072,30 +4266,31 @@ function evaluateTmsIncidents(snapshot, fleetRow, tmsConfig, now) {
   if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && destinationDistance !== null && destinationDistance > radius) {
     incidents.push({ code: 'geofence-destination', label: 'Missed destination geofence', severity: 'warning', detail: `Jarak ${Math.round(destinationDistance)} m dari tujuan` });
   }
+  const realtimeLongStop = snapshot.active
+    ? detectRealtimeLongStop(unitState, fleetRow, now, {
+      requiredDurationMinutes: TRIP_MONITOR_LONG_STOP_MINUTES,
+      radiusMeters: TRIP_MONITOR_LONG_STOP_RADIUS_METERS,
+    })
+    : null;
   if (
-    snapshot.active
-    && fleetRow?.hasLiveSnapshot
-    && !fleetRow?.isMoving
-    && latestWorkflowAgeMinutes !== null
-    && latestWorkflowAgeMinutes >= longStopMinutes
+    realtimeLongStop
     && (originDistance === null || originDistance > radius)
     && (destinationDistance === null || destinationDistance > radius)
   ) {
-    incidents.push({ code: 'long-stop', label: 'Long stop', severity: 'warning', detail: `Berhenti >= ${latestWorkflowAgeMinutes} menit` });
-  }
-  if (snapshot.active && latestWorkflowAgeMinutes !== null && latestWorkflowAgeMinutes >= stagnantMinutes) {
-    incidents.push({ code: 'app-stagnant', label: 'App stagnan', severity: 'warning', detail: `Tidak ada update workflow ${latestWorkflowAgeMinutes} menit` });
-  }
-  if (snapshot.active && driver && /not ready/i.test(String(driver.driver_status || ''))) {
-    incidents.push({ code: 'driver-not-ready', label: 'Driver not ready', severity: 'warning', detail: 'Driver app masih Not Ready' });
+    incidents.push({
+      code: 'long-stop',
+      label: 'Long stop',
+      severity: 'warning',
+      detail: `Diam di titik yang sama >= ${formatTripMonitorMetric(realtimeLongStop.durationMinutes, 1)} menit`,
+    });
   }
 
   return incidents;
 }
 
-function chooseHeadlineSnapshot(items, fleetRow, tmsConfig, now) {
+function chooseHeadlineSnapshot(items, fleetRow, unitState, tmsConfig, now) {
   const scored = items.map(function (item) {
-    const incidents = evaluateTmsIncidents(item, fleetRow, tmsConfig, now);
+    const incidents = evaluateTmsIncidents(item, fleetRow, unitState, tmsConfig, now);
     const severityScore = incidents.some(function (incident) { return incident.severity === 'critical'; }) ? 2 : incidents.length ? 1 : 0;
     const etaScore = -(item.etaDestination || item.etaOrigin || 0);
     return { item, incidents, severityScore, etaScore };
@@ -4103,6 +4298,116 @@ function chooseHeadlineSnapshot(items, fleetRow, tmsConfig, now) {
     return right.severityScore - left.severityScore || right.etaScore - left.etaScore;
   });
   return scored[0] || null;
+}
+
+function formatTripMonitorMetric(value, decimals = 0) {
+  const resolved = Number(value);
+  if (!Number.isFinite(resolved)) {
+    return '-';
+  }
+  return resolved.toFixed(decimals);
+}
+
+function resolveFleetContextForTripMonitor(source, fleetIndex) {
+  if (!source || !fleetIndex) return null;
+  const plateCandidates = Array.isArray(source.plateCandidates) && source.plateCandidates.length
+    ? source.plateCandidates
+    : collectPlateCandidates(
+      source.plateRaw,
+      source.unitLabel,
+      source.unitId,
+      source.normalizedPlate,
+    );
+  return plateCandidates.map(function (candidate) {
+    return fleetIndex.byPlate.get(candidate);
+  }).find(Boolean) || (source.normalizedPlate ? fleetIndex.byPlate.get(source.normalizedPlate) : null) || null;
+}
+
+function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
+  const jobOrders = Array.isArray(metadata.jobOrders) ? metadata.jobOrders.filter(Boolean) : [];
+  const referenceSnapshot = metadata.headlineJobOrder || jobOrders[0] || {
+    plateRaw: row?.unitLabel || '',
+    normalizedPlate: row?.normalizedPlate || '',
+    plateCandidates: collectPlateCandidates(row?.unitLabel, row?.normalizedPlate),
+    active: row?.severity !== 'no-job-order',
+  };
+  const fleetContext = resolveFleetContextForTripMonitor(referenceSnapshot, fleetIndex);
+  const fleetRow = fleetContext?.row || null;
+
+  if (!jobOrders.length) {
+    return {
+      ...row,
+      unitKey: fleetRow ? `${fleetRow.accountId}::${fleetRow.id}` : row.unitKey,
+      unitId: fleetRow?.id || row.unitId,
+      unitLabel: fleetRow?.alias || fleetRow?.label || row.unitLabel,
+      metadata: {
+        ...metadata,
+        fleetRow: fleetRow || metadata.fleetRow || null,
+      },
+    };
+  }
+
+  const activeItems = jobOrders.filter(function (item) { return item.active; });
+  const inactiveItems = jobOrders.filter(function (item) { return !item.active; });
+  const headline = chooseHeadlineSnapshot(
+    activeItems.length ? activeItems : inactiveItems,
+    fleetRow,
+    fleetContext?.unitState || null,
+    tmsConfig,
+    now,
+  );
+  if (!headline) {
+    return row;
+  }
+
+  const incidents = headline.incidents || [];
+  let severity = 'normal';
+  let boardStatus = 'normal';
+  let unmatchedReason = '';
+  if (!fleetRow) {
+    severity = 'unmatched';
+    boardStatus = 'unmatched';
+    unmatchedReason = 'Nopol TMS tidak cocok dengan unit Solofleet yang terkonfigurasi.';
+  } else if (!activeItems.length) {
+    severity = 'no-job-order';
+    boardStatus = 'no-job-order';
+  } else if (incidents.some(function (incident) { return incident.severity === 'critical'; })) {
+    severity = 'critical';
+    boardStatus = 'critical';
+  } else if (incidents.length) {
+    severity = 'warning';
+    boardStatus = 'warning';
+  }
+
+  const driver = (headline.item.driverAssign || [])[0] || null;
+  return {
+    ...row,
+    unitKey: fleetRow ? `${fleetRow.accountId}::${fleetRow.id}` : (headline.item.normalizedPlate || row.unitKey),
+    unitId: fleetRow?.id || row.unitId,
+    unitLabel: fleetRow?.alias || fleetRow?.label || headline.item.plateRaw || headline.item.unitLabel || row.unitLabel,
+    severity,
+    boardStatus,
+    jobOrderId: headline.item.jobOrderId || row.jobOrderId,
+    jobOrderCount: jobOrders.length || row.jobOrderCount,
+    originName: headline.item.originName || row.originName,
+    destinationName: headline.item.destinationName || row.destinationName,
+    tempMin: headline.item.tempMin ?? row.tempMin,
+    tempMax: headline.item.tempMax ?? row.tempMax,
+    etaOrigin: headline.item.etaOrigin ?? row.etaOrigin,
+    etaDestination: headline.item.etaDestination ?? row.etaDestination,
+    driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || row.driverAppStatus,
+    incidentCodes: summarizeIncidentCodes(incidents),
+    incidentSummary: incidents.map(function (incident) { return incident.label; }).join(', '),
+    unmatchedReason,
+    metadata: {
+      ...metadata,
+      incidents,
+      fleetRow: fleetRow || null,
+      headlineJobOrder: headline.item,
+      jobOrders,
+    },
+  };
 }
 
 function summarizeIncidentCodes(incidents) {
@@ -4123,12 +4428,13 @@ function severityRank(value) {
 function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
   const groups = new Map();
   for (const snapshot of jobSnapshots) {
-    const fleetRow = (snapshot.plateCandidates || []).map(function (candidate) {
+    const fleetContext = (snapshot.plateCandidates || []).map(function (candidate) {
       return fleetIndex.byPlate.get(candidate);
     }).find(Boolean) || (snapshot.normalizedPlate ? fleetIndex.byPlate.get(snapshot.normalizedPlate) : null);
+    const fleetRow = fleetContext?.row || null;
     const groupKey = fleetRow ? `matched::${fleetRow.accountId}::${fleetRow.id}` : `unmatched::${snapshot.normalizedPlate || snapshot.jobOrderId}`;
     if (!groups.has(groupKey)) {
-      groups.set(groupKey, { fleetRow, items: [] });
+      groups.set(groupKey, { fleetContext, items: [] });
     }
     groups.get(groupKey).items.push(snapshot);
   }
@@ -4137,7 +4443,13 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
   for (const [groupKey, group] of groups.entries()) {
     const activeItems = group.items.filter(function (item) { return item.active; });
     const inactiveItems = group.items.filter(function (item) { return !item.active; });
-    const headline = chooseHeadlineSnapshot(activeItems.length ? activeItems : inactiveItems, group.fleetRow, tmsConfig, now);
+    const headline = chooseHeadlineSnapshot(
+      activeItems.length ? activeItems : inactiveItems,
+      group.fleetContext?.row || null,
+      group.fleetContext?.unitState || null,
+      tmsConfig,
+      now,
+    );
     if (!headline) {
       continue;
     }
@@ -4145,7 +4457,7 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
     let severity = 'normal';
     let boardStatus = 'normal';
     let unmatchedReason = '';
-    if (!group.fleetRow) {
+    if (!group.fleetContext?.row) {
       severity = 'unmatched';
       boardStatus = 'unmatched';
       unmatchedReason = 'Nopol TMS tidak cocok dengan unit Solofleet yang terkonfigurasi.';
@@ -4166,9 +4478,9 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
       day: headline.item.day,
       tenantLabel: headline.item.tenantLabel || '',
       customerName: headline.item.customerName || '',
-      unitKey: group.fleetRow ? `${group.fleetRow.accountId}::${group.fleetRow.id}` : (headline.item.normalizedPlate || groupKey),
-      unitId: group.fleetRow?.id || '',
-      unitLabel: group.fleetRow?.label || headline.item.plateRaw || headline.item.unitLabel || '',
+      unitKey: group.fleetContext?.row ? `${group.fleetContext.row.accountId}::${group.fleetContext.row.id}` : (headline.item.normalizedPlate || groupKey),
+      unitId: group.fleetContext?.row?.id || '',
+      unitLabel: group.fleetContext?.row?.alias || group.fleetContext?.row?.label || headline.item.plateRaw || headline.item.unitLabel || '',
       normalizedPlate: headline.item.normalizedPlate || '',
       severity,
       boardStatus,
@@ -4186,7 +4498,7 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
       unmatchedReason,
       metadata: {
         incidents,
-        fleetRow: group.fleetRow || null,
+        fleetRow: group.fleetContext?.row || null,
         headlineJobOrder: headline.item,
         jobOrders: group.items,
       },
@@ -4468,6 +4780,9 @@ async function findLatestTmsMonitorDay() {
 
 async function listTmsMonitorRows(searchParams) {
   const window = buildTmsMonitorWindow(Date.now());
+  const now = Date.now();
+  const fleetIndex = buildFleetPlateIndex(now);
+  const tmsRuntime = getTmsConfig();
   const params = [window.startDay, window.endDay];
   let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata, updated_at from tms_monitor_rows where day >= $1 and day <= $2`;
   const customer = String(searchParams.get('customer') || '').trim();
@@ -4483,7 +4798,7 @@ async function listTmsMonitorRows(searchParams) {
   query += ` order by day desc, updated_at desc`;
   const result = await postgresQuery(query, params);
   return result.rows.map(function (row) {
-    return {
+    return refreshTripMonitorStoredRow({
       rowId: row.row_id,
       day: String(row.day || ''),
       tenantLabel: String(row.tenant_label || ''),
@@ -4507,7 +4822,7 @@ async function listTmsMonitorRows(searchParams) {
       incidentSummary: String(row.incident_summary || ''),
       unmatchedReason: String(row.unmatched_reason || ''),
       metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
-    };
+    }, fleetIndex, tmsRuntime, now);
   });
 }
 
@@ -8837,24 +9152,49 @@ async function handleApi(req, res, url) {
       if (!rowId) {
         throw new Error('rowId wajib diisi.');
       }
-      const result = await postgresQuery('select row_id, day, severity, board_status, unit_id, unit_label, customer_name, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
+      const result = await postgresQuery('select row_id, day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
       if (!result.rows[0]) {
         console.warn(`[TMS] Detail miss for row ${rowId}`);
         throw new Error('Trip monitor detail tidak ditemukan.');
       }
-      const row = result.rows[0];
-      console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${row.unit_id || row.unit_label || '-'} | severity ${row.severity || 'normal'}`);
+      const now = Date.now();
+      const refreshed = refreshTripMonitorStoredRow({
+        rowId: result.rows[0].row_id,
+        day: String(result.rows[0].day || ''),
+        tenantLabel: String(result.rows[0].tenant_label || ''),
+        customerName: String(result.rows[0].customer_name || ''),
+        unitKey: String(result.rows[0].unit_key || ''),
+        unitId: String(result.rows[0].unit_id || ''),
+        unitLabel: String(result.rows[0].unit_label || ''),
+        normalizedPlate: String(result.rows[0].normalized_plate || ''),
+        severity: String(result.rows[0].severity || 'normal'),
+        boardStatus: String(result.rows[0].board_status || 'normal'),
+        jobOrderId: String(result.rows[0].job_order_id || ''),
+        jobOrderCount: Number(result.rows[0].job_order_count || 0),
+        originName: String(result.rows[0].origin_name || ''),
+        destinationName: String(result.rows[0].destination_name || ''),
+        tempMin: toNumber(result.rows[0].temp_min),
+        tempMax: toNumber(result.rows[0].temp_max),
+        etaOrigin: result.rows[0].eta_origin ? Date.parse(result.rows[0].eta_origin) : null,
+        etaDestination: result.rows[0].eta_destination ? Date.parse(result.rows[0].eta_destination) : null,
+        driverAppStatus: String(result.rows[0].driver_app_status || ''),
+        incidentCodes: Array.isArray(result.rows[0].incident_codes) ? result.rows[0].incident_codes : [],
+        incidentSummary: String(result.rows[0].incident_summary || ''),
+        unmatchedReason: String(result.rows[0].unmatched_reason || ''),
+        metadata: result.rows[0].metadata && typeof result.rows[0].metadata === 'object' ? result.rows[0].metadata : {},
+      }, buildFleetPlateIndex(now), getTmsConfig(), now);
+      console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
       sendJson(res, 200, {
         ok: true,
         detail: {
-          rowId: row.row_id,
-          day: String(row.day || ''),
-          severity: String(row.severity || 'normal'),
-          boardStatus: String(row.board_status || 'normal'),
-          unitId: String(row.unit_id || ''),
-          unitLabel: String(row.unit_label || ''),
-          customerName: String(row.customer_name || ''),
-          metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+          rowId: refreshed.rowId,
+          day: refreshed.day,
+          severity: refreshed.severity,
+          boardStatus: refreshed.boardStatus,
+          unitId: refreshed.unitId,
+          unitLabel: refreshed.unitLabel,
+          customerName: refreshed.customerName,
+          metadata: refreshed.metadata || {},
         },
       });
     } catch (error) {

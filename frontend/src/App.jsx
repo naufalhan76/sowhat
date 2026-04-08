@@ -262,13 +262,12 @@ const TMS_BOARD_COLUMNS = [
 const TMS_INCIDENT_META = {
   'gps-error': { label: 'GPS error', tone: 'danger' },
   'temp-error': { label: 'Temp error', tone: 'danger' },
+  'temp-above-max': { label: 'Temp above max', tone: 'danger' },
   'late-origin': { label: 'Late load', tone: 'warning' },
   'late-destination': { label: 'Late destination', tone: 'warning' },
   'geofence-origin': { label: 'Miss load geofence', tone: 'info' },
   'geofence-destination': { label: 'Miss destination geofence', tone: 'info' },
   'long-stop': { label: 'Long stop', tone: 'warning' },
-  'app-stagnant': { label: 'App stagnan', tone: 'warning' },
-  'driver-not-ready': { label: 'Driver not ready', tone: 'default' },
 };
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 const GEOFENCE_LOCATION_LABELS = {
@@ -4977,6 +4976,7 @@ function tmsIncidentIcon(code) {
     case 'gps-error':
       return <Route size={13} />;
     case 'temp-error':
+    case 'temp-above-max':
       return <Thermometer size={13} />;
     case 'long-stop':
       return <Clock3 size={13} />;
@@ -5014,6 +5014,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
   const historyRows = [...(historyDetail?.records || [])].reverse();
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
+  const displayUnitLabel = pickFirstText(fleetRow?.alias, detail.unitLabel, fleetRow?.label, detail.unitId) || '-';
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const jobDrivers = headlineDrivers.length
     ? headlineDrivers
@@ -5028,7 +5029,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
       <CardHeader className="panel-card-header">
         <div>
           <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
-          <h2>{detail.unitId || detail.unitLabel || '-'}</h2>
+          <h2>{displayUnitLabel}</h2>
           <p>{detail.customerName || '-'} | {routeSummary}</p>
         </div>
         <div className="inline-buttons">
