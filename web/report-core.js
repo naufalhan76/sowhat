@@ -286,10 +286,11 @@
 
     const durationMs = active.endTimestamp - active.startTimestamp;
     let requiredMinDurationMs = minDurationMs;
+    const minTempFaultSamples = 2;
 
     if (active.type === 'temp1' || active.type === 'temp2' || active.type === 'temp1+temp2') {
       requiredMinDurationMs = Math.max(requiredMinDurationMs, 30 * 60 * 1000);
-      if (active.sampleCount < 8) {
+      if (active.sampleCount < minTempFaultSamples) {
         return null;
       }
     }

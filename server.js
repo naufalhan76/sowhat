@@ -1896,7 +1896,10 @@ function buildCurrentFleetSensorAlerts(accountConfig, accountState, now) {
     }
 
     const unitState = accountState.units[unit.id] || normalizeUnitState(unit.id, { label: unit.label });
-    const type = detectLiveSensorFaultType(unitState, snapshot, now);
+    const type = detectLiveSensorFaultType(unitState, snapshot, now, {
+      requiredDurationMinutes: 30,
+      minimumSamples: 2,
+    });
     if (!type) {
       continue;
     }
@@ -3004,17 +3007,18 @@ async function runRemoteResetCycle(trigger) {
   return remoteResetRuntime.lastRunSummary;
 }
 
-function detectLiveSensorFaultType(unitState, snapshot, now) {
+function detectLiveSensorFaultType(unitState, snapshot, now, options) {
   if (!snapshot) return null;
+  const requiredDurationMinutes = Math.max(1, Number(options?.requiredDurationMinutes || 30));
+  const requiredDurationMs = requiredDurationMinutes * 60 * 1000;
+  const minimumSamples = Math.max(2, Number(options?.minimumSamples || 2));
 
   function checkSensor(sensorKey) {
     if (toNumber(snapshot[sensorKey]) !== 0) return false;
 
-    // We must find a continuous streak of 0.0 stretching back at least 30 mins
-    // And we must have at least 8 records in that streak
+    // We need a continuous streak of 0.0 for the configured window.
     const currentMs = snapshot.lastUpdatedMs || now;
-    const searchMs = 30 * 60 * 1000;
-    const cutoff = currentMs - searchMs;
+    const cutoff = currentMs - requiredDurationMs;
     const records = unitState?.records || [];
 
     if (records.length === 0) return false;
@@ -3041,7 +3045,7 @@ function detectLiveSensorFaultType(unitState, snapshot, now) {
     }
 
     const duration = currentMs - earliestStreakTime;
-    return duration >= searchMs && sampleCount >= 8;
+    return duration >= requiredDurationMs && sampleCount >= minimumSamples;
   }
 
   const sensor1Fault = checkSensor('temp1');
@@ -3083,7 +3087,10 @@ function buildFleetRows(accountConfig, accountState, now, liveAlerts) {
     const recentAlerts = liveAlerts.filter(function (incident) {
       return incident.unitId === unit.id;
     });
-    const liveSensorFaultType = detectLiveSensorFaultType(unitState, vehicleSnapshot, now);
+    const liveSensorFaultType = detectLiveSensorFaultType(unitState, vehicleSnapshot, now, {
+      requiredDurationMinutes: 5,
+      minimumSamples: 2,
+    });
     const customerProfile = findCustomerProfileForUnit(accountConfig, unit.id);
     const setpoint = evaluateSetpointStatus(
       customerProfile,
@@ -4889,7 +4896,8 @@ async function buildReportPayload(searchParams) {
   try {
     const supabaseRows = await loadDailyTempSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
     if (supabaseRows.length) {
-      snapshotAnalytics = buildSnapshotReportAggregatesFromCompactRows(supabaseRows);
+      const mergedCompactRows = mergeCompactTempErrorRows(supabaseRows, snapshotAnalytics.tempErrorIncidents);
+      snapshotAnalytics = buildSnapshotReportAggregatesFromCompactRows(mergedCompactRows);
       snapshotRows = snapshotAnalytics.tempErrorIncidents;
     }
     const supabasPodRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
@@ -6202,6 +6210,46 @@ function buildSnapshotReportAggregates(snapshotRows) {
     compileByDay,
     dailyTotals,
   };
+}
+
+function compactTempErrorRowKey(row) {
+  return [
+    String(row?.day || '').trim(),
+    String(row?.accountId || 'primary').trim(),
+    String(row?.unitId || row?.vehicle || '').trim(),
+  ].join('|');
+}
+
+function pickPreferredCompactTempErrorRow(currentRow, nextRow) {
+  if (!currentRow) return nextRow;
+  if (!nextRow) return currentRow;
+  const currentEnd = Number(currentRow.lastEndTimestamp || currentRow.firstStartTimestamp || currentRow.errorTimestamp || 0);
+  const nextEnd = Number(nextRow.lastEndTimestamp || nextRow.firstStartTimestamp || nextRow.errorTimestamp || 0);
+  if (nextEnd !== currentEnd) return nextEnd > currentEnd ? nextRow : currentRow;
+  const currentIncidents = Number(currentRow.incidents || 0);
+  const nextIncidents = Number(nextRow.incidents || 0);
+  if (nextIncidents !== currentIncidents) return nextIncidents > currentIncidents ? nextRow : currentRow;
+  const currentDuration = Number(currentRow.totalMinutes || currentRow.durationMinutes || 0);
+  const nextDuration = Number(nextRow.totalMinutes || nextRow.durationMinutes || 0);
+  if (nextDuration !== currentDuration) return nextDuration > currentDuration ? nextRow : currentRow;
+  const currentSeverity = (Number(currentRow.bothIncidents || 0) > 0 ? 3 : 0) + (Number(currentRow.temp2Incidents || 0) > 0 ? 1 : 0) + (Number(currentRow.temp1Incidents || 0) > 0 ? 1 : 0);
+  const nextSeverity = (Number(nextRow.bothIncidents || 0) > 0 ? 3 : 0) + (Number(nextRow.temp2Incidents || 0) > 0 ? 1 : 0) + (Number(nextRow.temp1Incidents || 0) > 0 ? 1 : 0);
+  if (nextSeverity !== currentSeverity) return nextSeverity > currentSeverity ? nextRow : currentRow;
+  return nextRow;
+}
+
+function mergeCompactTempErrorRows(primaryRows, secondaryRows) {
+  const merged = new Map();
+  for (const row of primaryRows || []) {
+    if (!row) continue;
+    merged.set(compactTempErrorRowKey(row), row);
+  }
+  for (const row of secondaryRows || []) {
+    if (!row) continue;
+    const key = compactTempErrorRowKey(row);
+    merged.set(key, pickPreferredCompactTempErrorRow(merged.get(key), row));
+  }
+  return [...merged.values()];
 }
 
 function resolveAstroAccountId(reference) {

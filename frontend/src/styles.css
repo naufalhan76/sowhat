@@ -4778,7 +4778,7 @@ textarea:focus {
 }
 
 .trip-monitor-detail-modal {
-  width: min(1320px, calc(100vw - 40px));
+  width: min(1460px, calc(100vw - 24px));
 }
 
 .trip-monitor-detail-summary {
@@ -4794,6 +4794,13 @@ textarea:focus {
   font-size: 15px;
 }
 
+.trip-monitor-driver-metric strong,
+.trip-monitor-driver-metric .subtle-line {
+  display: block;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .trip-monitor-detail-incidents {
   display: flex;
   flex-wrap: wrap;
@@ -4803,6 +4810,7 @@ textarea:focus {
 
 .trip-monitor-detail-panels {
   align-items: stretch;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.28fr);
 }
 
 .trip-monitor-detail-panel .sf-card-content,
@@ -4812,6 +4820,14 @@ textarea:focus {
 
 .trip-monitor-detail-panel {
   min-height: 420px;
+}
+
+.trip-monitor-detail-graphic-panel {
+  min-height: 540px;
+}
+
+.trip-monitor-detail-graphic-panel .sf-card-content {
+  height: 100%;
 }
 
 .trip-monitor-detail-history {

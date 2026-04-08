@@ -73,6 +73,37 @@ function formatTripMonitorRangeLabel(range) {
   if (!range?.startDate || !range?.endDate) return '-';
   return `${range.startDate} to ${range.endDate}`;
 }
+
+function pickFirstText(...values) {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function extractTmsDriverName(driver) {
+  if (!driver || typeof driver !== 'object') return '-';
+  return pickFirstText(
+    driver.driver_name,
+    driver.driverName,
+    driver.employee_name,
+    driver.employeeName,
+    driver.full_name,
+    driver.fullName,
+    driver.user_full_name,
+    driver.userFullName,
+    driver.nama_driver,
+    driver.driver,
+    driver.name,
+    driver.employee,
+    driver.driver_id,
+    driver.driverId,
+    driver.employee_id,
+    driver.employeeId,
+  ) || '-';
+}
+
 function splitCsvText(value) {
   return String(value || "")
     .split(/[;,\n]/)
@@ -4651,7 +4682,7 @@ function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueF
   })}</div>;
 }
 
-function TemperatureChart({ records, busy, title, description, compact = false, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
+function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
@@ -4675,7 +4706,9 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   const rangeEnd = Math.max(rangeStart, Math.min(zoomRange.end, totalPoints - 1));
   const series = fullSeries.slice(rangeStart, rangeEnd + 1);
   const width = 860;
-  const height = compact ? 240 : 320;
+  const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
+    ? Number(chartHeight)
+    : compact ? 240 : 320;
   const padding = { top: 20, right: 20, bottom: 34, left: 44 };
   const thresholdValues = [thresholdMin, thresholdMax].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
@@ -4901,8 +4934,101 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
   const historyRows = [...(historyDetail?.records || [])].reverse();
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
+  const jobDrivers = Array.isArray(headlineJob?.driverAssign) && headlineJob.driverAssign.length
+    ? headlineJob.driverAssign
+    : jobOrders.flatMap((job) => Array.isArray(job?.driverAssign) ? job.driverAssign : []);
+  const driver1Name = extractTmsDriverName(jobDrivers[0]);
+  const driver2Name = extractTmsDriverName(jobDrivers[1]);
   const appStatus = detail?.driverAppStatus || [((headlineJob?.driverAssign || [])[0] || {}).assignment_status, ((headlineJob?.driverAssign || [])[0] || {}).driver_status, ((headlineJob?.driverAssign || [])[0] || {}).job_offer_status].filter(Boolean).join(' | ') || '-';
-  return <div className="auth-modal-backdrop" onClick={onClose}><Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Trip Monitor Detail</p><h2>{detail.unitId || detail.unitLabel || '-'}</h2><p>{detail.customerName || '-'} | {routeSummary}</p></div><div className="inline-buttons">{fleetRow?.id ? <><Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button><Button variant="bordered" onPress={onOpenMap}>Open map</Button><Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button></> : null}<Button variant="bordered" onPress={onClose}>Close</Button></div></CardHeader><CardContent>{busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack"><div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary"><div className="mini-metric"><span>Severity</span><strong>{tmsSeverityLabel(detail.severity)}</strong></div><div className="mini-metric"><span>Topbar range</span><strong>{historyLabel}</strong></div><div className="mini-metric"><span>Job orders</span><strong>{jobOrders.length}</strong></div><div className="mini-metric"><span>Incidents</span><strong>{incidents.length}</strong></div><div className="mini-metric"><span>App status</span><strong>{appStatus || '-'}</strong></div><div className="mini-metric"><span>Temp range</span><strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong></div></div>{incidents.length ? <div className="trip-monitor-detail-incidents">{incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}</div> : null}<div className="split-panels trip-monitor-detail-panels"><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Map</h3><p>Posisi unit dan track historical mengikuti range aktif di topbar.</p></div></CardHeader><CardContent>{fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}</CardContent></Card><Card className="panel-card trip-monitor-detail-panel"><CardHeader className="panel-card-header"><div><h3>Graphic</h3><p>Historical suhu unit dengan garis batas min/max dari TMS.</p></div></CardHeader><CardContent>{fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}</CardContent></Card></div><Card className="panel-card trip-monitor-detail-history"><CardHeader className="panel-card-header"><div><h3>Historical</h3><p>Historical Solofleet berdasarkan range aktif di topbar, 20 row per halaman.</p></div></CardHeader><CardContent>{fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}</CardContent></Card></div>}</CardContent></Card></div>;
+
+  return <div className="auth-modal-backdrop" onClick={onClose}>
+    <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
+      <CardHeader className="panel-card-header">
+        <div>
+          <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
+          <h2>{detail.unitId || detail.unitLabel || '-'}</h2>
+          <p>{detail.customerName || '-'} | {routeSummary}</p>
+        </div>
+        <div className="inline-buttons">
+          {fleetRow?.id ? <>
+            <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
+            <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
+            <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
+          </> : null}
+          <Button variant="bordered" onPress={onClose}>Close</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack">
+          <div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary">
+            <div className="mini-metric">
+              <span>Severity</span>
+              <strong>{tmsSeverityLabel(detail.severity)}</strong>
+            </div>
+            <div className="mini-metric trip-monitor-driver-metric">
+              <span>JO drivers</span>
+              <strong>Driver 1: {driver1Name}</strong>
+              <div className="subtle-line">Driver 2: {driver2Name}</div>
+            </div>
+            <div className="mini-metric">
+              <span>Job orders</span>
+              <strong>{jobOrders.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>Incidents</span>
+              <strong>{incidents.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>App status</span>
+              <strong>{appStatus || '-'}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>Temp range</span>
+              <strong>{headlineJob ? `${fmtNum(headlineJob.tempMin)} to ${fmtNum(headlineJob.tempMax)}` : '-'}</strong>
+            </div>
+          </div>
+          {incidents.length ? <div className="trip-monitor-detail-incidents">
+            {incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}
+          </div> : null}
+          <div className="split-panels trip-monitor-detail-panels">
+            <Card className="panel-card trip-monitor-detail-panel">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h3>Map</h3>
+                  <p>Posisi unit dan track historical mengikuti range aktif di topbar.</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+              </CardContent>
+            </Card>
+            <Card className="panel-card trip-monitor-detail-panel trip-monitor-detail-graphic-panel">
+              <CardHeader className="panel-card-header">
+                <div>
+                  <h3>Graphic</h3>
+                  <p>Historical suhu unit dengan garis batas min/max dari TMS.</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={360} thresholdMin={headlineJob?.tempMin ?? null} thresholdMax={headlineJob?.tempMax ?? null} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi grafik belum bisa ditampilkan.</div>}
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="panel-card trip-monitor-detail-history">
+            <CardHeader className="panel-card-header">
+              <div>
+                <h3>Historical</h3>
+                <p>Historical Solofleet berdasarkan range aktif di topbar, 20 row per halaman.</p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
+            </CardContent>
+          </Card>
+        </div>}
+      </CardContent>
+    </Card>
+  </div>;
 }
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
