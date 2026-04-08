@@ -5067,10 +5067,10 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
             <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
           </linearGradient>
         </defs>
-        <rect x="0" y="0" width={width} height={height} rx="12" fill="rgba(14,20,32,0.6)" />
+        <rect x="0" y="0" width={width} height={height} rx="12" fill="var(--chart-panel-fill)" />
         {guideValues.map((value, index) => {
             const y = yFor(value);
-            return <g key={`guide-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="rgba(255, 255, 255, 0.08)" strokeDasharray="6 8" /><text x="8" y={y + 4} fontSize="12" fill="rgba(255, 255, 255, 0.4)">{Number(value).toFixed(1)}</text></g>;
+            return <g key={`guide-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="6 8" /><text x="8" y={y + 4} fontSize="12" fill="var(--chart-guide-text)">{Number(value).toFixed(1)}</text></g>;
           })}
           {thresholdGuides.map((guide) => {
             const y = yFor(guide.value);
@@ -5078,7 +5078,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
           })}
         {timeGuides.map((value, index) => {
           const x = xFor(value);
-          return <g key={`time-${index}`}><line x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} stroke="rgba(255, 255, 255, 0.04)" /><text x={x} y={height - 10} fontSize="12" textAnchor={index === 0 ? 'start' : index === timeGuides.length - 1 ? 'end' : 'middle'} fill="rgba(255, 255, 255, 0.4)">{fmtClock(value)}</text></g>;
+          return <g key={`time-${index}`}><line x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-time-stroke)" /><text x={x} y={height - 10} fontSize="12" textAnchor={index === 0 ? 'start' : index === timeGuides.length - 1 ? 'end' : 'middle'} fill="var(--chart-guide-text)">{fmtClock(value)}</text></g>;
         })}
         {temp1Path ? <path d={`${temp1Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp1-${chartId})`} /> : null}
         {temp1Path ? <path d={temp1Path} fill="none" stroke="#F97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
@@ -5086,9 +5086,9 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
         {temp2Path ? <path d={temp2Path} fill="none" stroke="#A855F7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
         {dragState && selectionWidth > 0 ? <rect x={selectionStart} y={padding.top} width={selectionWidth} height={height - padding.top - padding.bottom} fill="rgba(249,115,22,0.14)" stroke="rgba(249,115,22,0.62)" strokeDasharray="6 6" rx="8" /> : null}
         {hoveredPoint ? <g>
-          <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="rgba(255,255,255,0.28)" strokeDasharray="4 6" />
-          {hoveredPoint.temp1Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp1Y} r="4.5" fill="#F97316" stroke="#0b1220" strokeWidth="2" /> : null}
-          {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4.5" fill="#A855F7" stroke="#0b1220" strokeWidth="2" /> : null}
+          <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-crosshair-stroke)" strokeDasharray="4 6" />
+          {hoveredPoint.temp1Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp1Y} r="4.5" fill="#F97316" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
+          {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4.5" fill="#A855F7" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
         </g> : null}
       </svg>
       {hoveredPoint ? <div className="chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}>
