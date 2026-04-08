@@ -47,6 +47,8 @@ const TRIP_MONITOR_LONG_STOP_MINUTES = 180;
 const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
 const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
 const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 30;
+const TMS_ADDRESS_CACHE_RESOLVED_TTL_MS = 24 * 60 * 60 * 1000;
+const TMS_ADDRESS_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000;
 const TRIP_MONITOR_TEMP_TOLERANCE = 0.3;
 
 const MIME_TYPES = {
@@ -3521,6 +3523,16 @@ function normalizePlateKey(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function normalizeAddressKey(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 function plateTextHasCameraSuffix(value) {
   return /\bCAMERA\b/i.test(String(value || '').trim());
 }
@@ -4106,26 +4118,326 @@ async function fetchTmsJobOrderList(window) {
   return rows;
 }
 
-async function fetchTmsJobOrderDoc(jobOrderId) {
-  const encoded = encodeURIComponent(String(jobOrderId || '').trim());
-  const { payload } = await tmsRequest(`/api/method/frappe.desk.form.load.getdoc?doctype=Job%20Order&name=${encoded}&_=${Date.now()}`, {
+async function fetchTmsDocByName(doctype, name) {
+  const encodedType = encodeURIComponent(String(doctype || '').trim());
+  const encodedName = encodeURIComponent(String(name || '').trim());
+  const { payload } = await tmsRequest(`/api/method/frappe.desk.form.load.getdoc?doctype=${encodedType}&name=${encodedName}&_=${Date.now()}`, {
     method: 'GET',
   });
-  const doc = parseFrappeDocPayload(payload);
+  return parseFrappeDocPayload(payload);
+}
+
+async function fetchTmsJobOrderDoc(jobOrderId) {
+  const doc = await fetchTmsDocByName('Job Order', jobOrderId);
   if (!doc) {
     throw new Error(`TMS detail JO ${jobOrderId} tidak ditemukan.`);
   }
   return doc;
 }
 
+async function fetchTmsAddressDoc(addressName) {
+  return fetchTmsDocByName('Address', addressName);
+}
+
+function extractTmsAddressCoordinates(doc) {
+  if (!doc || typeof doc !== 'object') {
+    return { latitude: null, longitude: null };
+  }
+  const latitude = toNumber(
+    doc.latitude
+    ?? doc.lat
+    ?? doc.custom_latitude
+    ?? doc.custom_lat
+    ?? doc.location_latitude
+    ?? doc.custom_location_latitude
+    ?? doc.map_latitude
+    ?? doc.geo_latitude
+  );
+  const longitude = toNumber(
+    doc.longitude
+    ?? doc.lng
+    ?? doc.longtitude
+    ?? doc.custom_longitude
+    ?? doc.custom_lng
+    ?? doc.custom_longtitude
+    ?? doc.location_longitude
+    ?? doc.custom_location_longitude
+    ?? doc.map_longitude
+    ?? doc.geo_longitude
+  );
+  return { latitude, longitude };
+}
+
+function normalizeTmsAddressCacheRow(row) {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const tenantLabel = String(row.tenant_label || row.tenantLabel || '').trim();
+  const normalizedAddressKey = String(row.normalized_address_key || row.normalizedAddressKey || '').trim();
+  const addressName = String(row.address_name || row.addressName || '').trim();
+  const status = String(row.status || '').trim().toLowerCase() || 'missing';
+  if (!tenantLabel || !normalizedAddressKey) {
+    return null;
+  }
+  return {
+    tenantLabel,
+    normalizedAddressKey,
+    addressName: addressName || normalizedAddressKey,
+    latitude: toNumber(row.latitude),
+    longitude: toNumber(row.longitude),
+    sourceAddressId: String(row.source_address_id || row.sourceAddressId || '').trim(),
+    status,
+    fetchedAt: toTimestampMaybe(row.fetched_at || row.fetchedAt),
+    lastSeenAt: toTimestampMaybe(row.last_seen_at || row.lastSeenAt),
+    metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+  };
+}
+
+async function loadTmsAddressCacheEntries(tenantLabel, normalizedKeys) {
+  if (!normalizedKeys.length || !getPostgresConfig().enabled) {
+    return new Map();
+  }
+  await ensurePostgresSchema();
+  const result = await postgresQuery(
+    `select tenant_label, normalized_address_key, address_name, latitude, longitude, source_address_id, status, fetched_at, last_seen_at, metadata
+       from tms_address_cache
+      where tenant_label = $1 and normalized_address_key = any($2::text[])`,
+    [String(tenantLabel || '').trim(), normalizedKeys],
+  );
+  const map = new Map();
+  for (const row of (result.rows || [])) {
+    const normalized = normalizeTmsAddressCacheRow(row);
+    if (normalized) {
+      map.set(normalized.normalizedAddressKey, normalized);
+    }
+  }
+  return map;
+}
+
+async function upsertTmsAddressCacheEntries(entries) {
+  if (!entries.length || !getPostgresConfig().enabled) {
+    return 0;
+  }
+  return postgresUpsertRows(
+    'tms_address_cache',
+    entries.map(function (entry) {
+      return {
+        tenant_label: entry.tenantLabel,
+        normalized_address_key: entry.normalizedAddressKey,
+        address_name: entry.addressName,
+        latitude: entry.latitude,
+        longitude: entry.longitude,
+        source_address_id: entry.sourceAddressId || null,
+        status: entry.status || 'missing',
+        fetched_at: entry.fetchedAt ? new Date(entry.fetchedAt).toISOString() : new Date().toISOString(),
+        last_seen_at: entry.lastSeenAt ? new Date(entry.lastSeenAt).toISOString() : new Date().toISOString(),
+        metadata: entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {},
+        updated_at: new Date().toISOString(),
+      };
+    }),
+    ['tenant_label', 'normalized_address_key', 'address_name', 'latitude', 'longitude', 'source_address_id', 'status', 'fetched_at', 'last_seen_at', 'metadata', 'updated_at'],
+    ['tenant_label', 'normalized_address_key'],
+    { touchUpdatedAt: false },
+  );
+}
+
+function collectTmsAddressNamesFromDoc(doc) {
+  const names = new Set();
+  const taskList = Array.isArray(doc?.task_list) ? doc.task_list : [];
+  const orderList = Array.isArray(doc?.order_list) ? doc.order_list : [];
+  for (const task of taskList) {
+    const taskAddress = String(task?.task_address || '').trim();
+    if (taskAddress) {
+      names.add(taskAddress);
+    }
+  }
+  for (const order of orderList) {
+    const loadLocation = String(order?.load_location || '').trim();
+    const unloadLocation = String(order?.unload_location || '').trim();
+    if (loadLocation) {
+      names.add(loadLocation);
+    }
+    if (unloadLocation) {
+      names.add(unloadLocation);
+    }
+  }
+  return [...names];
+}
+
+async function resolveTmsAddressEntries(addressNames, tenantLabel) {
+  const uniqueNames = [...new Set((addressNames || []).map(function (name) {
+    return String(name || '').trim();
+  }).filter(Boolean))];
+  const uniqueByKey = new Map();
+  uniqueNames.forEach(function (name) {
+    const key = normalizeAddressKey(name);
+    if (key && !uniqueByKey.has(key)) {
+      uniqueByKey.set(key, name);
+    }
+  });
+  const keys = [...uniqueByKey.keys()];
+  if (!keys.length) {
+    return { byKey: new Map(), stats: { total: 0, resolved: 0, missing: 0, refreshed: 0 } };
+  }
+
+  const now = Date.now();
+  const existing = await loadTmsAddressCacheEntries(tenantLabel, keys);
+  const nextByKey = new Map();
+  const upsertRows = [];
+  const stats = { total: keys.length, resolved: 0, missing: 0, refreshed: 0 };
+
+  for (const [normalizedKey, rawName] of uniqueByKey.entries()) {
+    const cached = existing.get(normalizedKey) || null;
+    const fetchedAge = cached?.fetchedAt ? Math.max(0, now - cached.fetchedAt) : Number.POSITIVE_INFINITY;
+    const cacheFresh = cached
+      ? cached.status === 'resolved'
+        ? fetchedAge < TMS_ADDRESS_CACHE_RESOLVED_TTL_MS
+        : fetchedAge < TMS_ADDRESS_CACHE_MISSING_TTL_MS
+      : false;
+    if (cached && cacheFresh) {
+      const cachedRow = {
+        ...cached,
+        addressName: cached.addressName || rawName,
+        lastSeenAt: now,
+      };
+      nextByKey.set(normalizedKey, cachedRow);
+      upsertRows.push(cachedRow);
+      if (cachedRow.status === 'resolved' && cachedRow.latitude !== null && cachedRow.longitude !== null) {
+        stats.resolved += 1;
+      } else {
+        stats.missing += 1;
+      }
+      continue;
+    }
+
+    let nextRow = {
+      tenantLabel,
+      normalizedAddressKey: normalizedKey,
+      addressName: rawName,
+      latitude: null,
+      longitude: null,
+      sourceAddressId: '',
+      status: 'missing',
+      fetchedAt: now,
+      lastSeenAt: now,
+      metadata: {
+        rawName,
+        normalizedAddressKey: normalizedKey,
+      },
+    };
+    try {
+      const doc = await fetchTmsAddressDoc(rawName);
+      const coordinates = extractTmsAddressCoordinates(doc);
+      nextRow = {
+        ...nextRow,
+        addressName: String(doc?.name || rawName).trim() || rawName,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        sourceAddressId: String(doc?.name || '').trim(),
+        status: coordinates.latitude !== null && coordinates.longitude !== null ? 'resolved' : 'missing',
+        metadata: {
+          ...nextRow.metadata,
+          sourceAddressId: String(doc?.name || '').trim(),
+          fetchedFromDoc: Boolean(doc),
+        },
+      };
+    } catch (error) {
+      nextRow = {
+        ...nextRow,
+        metadata: {
+          ...nextRow.metadata,
+          error: String(error?.message || error || 'Address fetch failed'),
+        },
+      };
+    }
+    stats.refreshed += 1;
+    if (nextRow.status === 'resolved' && nextRow.latitude !== null && nextRow.longitude !== null) {
+      stats.resolved += 1;
+    } else {
+      stats.missing += 1;
+    }
+    nextByKey.set(normalizedKey, nextRow);
+    upsertRows.push(nextRow);
+  }
+
+  await upsertTmsAddressCacheEntries(upsertRows);
+  return { byKey: nextByKey, stats };
+}
+
+function resolveTmsAddressEntry(addressLookup, name) {
+  const key = normalizeAddressKey(name);
+  return key ? addressLookup.get(key) || null : null;
+}
+
+function buildResolvedTmsStops(taskList, orderList, addressLookup) {
+  const resolvedTaskList = [];
+  const stops = [];
+  let unloadCounter = 0;
+
+  for (const [taskIndex, task] of taskList.entries()) {
+    const taskType = String(task?.task_type || '').trim().toLowerCase() === 'unload' ? 'unload' : 'load';
+    const fallbackOrder = taskType === 'load'
+      ? orderList.find(function (item) { return String(item?.load_location || '').trim(); }) || null
+      : orderList[unloadCounter] || null;
+    const taskAddress = String(task?.task_address || (taskType === 'load' ? fallbackOrder?.load_location : fallbackOrder?.unload_location) || '').trim();
+    const addressEntry = resolveTmsAddressEntry(addressLookup, taskAddress);
+    const directLatitude = toNumber(task?.latitude);
+    const directLongitude = toNumber(task?.longitude);
+    const latitude = directLatitude ?? addressEntry?.latitude ?? null;
+    const longitude = directLongitude ?? addressEntry?.longitude ?? null;
+    const coordinateSource = directLatitude !== null && directLongitude !== null
+      ? 'task_list'
+      : latitude !== null && longitude !== null
+        ? 'address_cache'
+        : 'unresolved';
+    const stopLabel = taskType === 'load' ? 'LOAD' : `U${unloadCounter + 1}`;
+    const stopName = taskType === 'load' ? 'Load' : `Unload ${unloadCounter + 1}`;
+    const stop = {
+      idx: stops.length + 1,
+      taskIdx: Number(task?.idx || taskIndex + 1),
+      taskType,
+      label: stopLabel,
+      name: stopName,
+      taskAddress,
+      normalizedAddressKey: normalizeAddressKey(taskAddress),
+      latitude,
+      longitude,
+      coordinateSource,
+      eta: toTimestampMaybe(task?.eta),
+      etd: toTimestampMaybe(task?.etd),
+      ata: toTimestampMaybe(task?.ata),
+      atd: toTimestampMaybe(task?.atd),
+    };
+    stops.push(stop);
+    resolvedTaskList.push({
+      ...task,
+      task_address: taskAddress,
+      resolved_latitude: latitude,
+      resolved_longitude: longitude,
+      resolved_coordinate_source: coordinateSource,
+      normalized_address_key: stop.normalizedAddressKey,
+      stop_label: stopLabel,
+      stop_name: stopName,
+      stop_index: stop.idx,
+    });
+    if (taskType === 'unload') {
+      unloadCounter += 1;
+    }
+  }
+
+  return { taskList: resolvedTaskList, stops };
+}
+
 function getTmsTaskArrays(doc) {
   const taskList = Array.isArray(doc?.task_list) ? [...doc.task_list] : [];
   const workflowLines = Array.isArray(doc?.job_workflow_line) ? [...doc.job_workflow_line] : [];
   const driverAssign = Array.isArray(doc?.driver_assign) ? [...doc.driver_assign] : [];
+  const orderList = Array.isArray(doc?.order_list) ? [...doc.order_list] : [];
   taskList.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
   workflowLines.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
   driverAssign.sort(function (left, right) { return Number((left && (left.idx ?? left.index)) || 0) - Number((right && (right.idx ?? right.index)) || 0); });
-  return { taskList, workflowLines, driverAssign };
+  orderList.sort(function (left, right) { return Number(left.idx || 0) - Number(right.idx || 0); });
+  return { taskList, workflowLines, driverAssign, orderList };
 }
 
 function isTmsJobActive(doc) {
@@ -4133,11 +4445,14 @@ function isTmsJobActive(doc) {
   return status ? TMS_INCLUDED_JOB_ORDER_STATUS_KEYS.has(status) : false;
 }
 
-function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
-  const { taskList, workflowLines, driverAssign } = getTmsTaskArrays(doc);
-  const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
-  const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
-  const destinationTask = unloadTasks[unloadTasks.length - 1] || taskList[taskList.length - 1] || null;
+function buildTmsJobSnapshotFromDoc(doc, tenantLabel, addressLookup) {
+  const { taskList, workflowLines, driverAssign, orderList } = getTmsTaskArrays(doc);
+  const resolvedStops = buildResolvedTmsStops(taskList, orderList, addressLookup || new Map());
+  const resolvedTaskList = resolvedStops.taskList;
+  const stops = resolvedStops.stops;
+  const loadTask = resolvedTaskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || resolvedTaskList[0] || null;
+  const unloadTasks = resolvedTaskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
+  const destinationTask = unloadTasks[unloadTasks.length - 1] || resolvedTaskList[resolvedTaskList.length - 1] || null;
   const plateRaw = String(doc?.plat_no || '').trim();
   const normalizedPlate = normalizePlateKey(plateRaw);
   const plateCandidates = collectPlateCandidates(plateRaw);
@@ -4164,9 +4479,11 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel) {
     etaOrigin: toTimestampMaybe(loadTask?.eta || doc?.start_actual_time_load),
     etaDestination: toTimestampMaybe(destinationTask?.eta || doc?.finish_actual_time_unload),
     active: isTmsJobActive(doc),
-    taskList,
+    taskList: resolvedTaskList,
+    orderList,
     workflowLines,
     driverAssign,
+    stops,
     rawDoc: doc,
   };
 }
@@ -4209,6 +4526,183 @@ function findWorkflowStatus(workflowLines, taskName, pattern) {
   }) || null;
 }
 
+function findWorkflowStopStatus(workflowLines, stop, pattern) {
+  const normalizedTaskType = String(stop?.taskType || stop?.task_type || '').trim().toLowerCase();
+  const normalizedAddress = normalizeAddressKey(stop?.taskAddress || stop?.task_address || '');
+  return (workflowLines || []).find(function (line) {
+    const lineTaskType = String(line?.task_type || '').trim().toLowerCase();
+    const lineAddress = normalizeAddressKey(line?.task_address || '');
+    return (!normalizedTaskType || lineTaskType === normalizedTaskType)
+      && (!normalizedAddress || lineAddress === normalizedAddress)
+      && pattern.test(String(line?.status_description || ''));
+  }) || null;
+}
+
+function getTripMonitorSnapshotStops(snapshot) {
+  if (Array.isArray(snapshot?.stops) && snapshot.stops.length) {
+    return snapshot.stops.map(function (stop, index) {
+      const taskType = String(stop?.taskType || stop?.task_type || '').trim().toLowerCase() === 'unload' ? 'unload' : 'load';
+      return {
+        idx: Number(stop?.idx || index + 1),
+        taskIdx: Number(stop?.taskIdx || stop?.task_idx || stop?.idx || index + 1),
+        taskType,
+        label: String(stop?.label || (taskType === 'load' ? 'LOAD' : `U${index}`)).trim(),
+        name: String(stop?.name || (taskType === 'load' ? 'Load' : `Unload ${index}`)).trim(),
+        taskAddress: String(stop?.taskAddress || stop?.task_address || '').trim(),
+        latitude: toNumber(stop?.latitude),
+        longitude: toNumber(stop?.longitude),
+        eta: toTimestampMaybe(stop?.eta),
+        etd: toTimestampMaybe(stop?.etd),
+        ata: toTimestampMaybe(stop?.ata),
+        atd: toTimestampMaybe(stop?.atd),
+      };
+    }).sort(function (left, right) { return left.idx - right.idx; });
+  }
+  const taskList = Array.isArray(snapshot?.taskList) ? [...snapshot.taskList] : [];
+  taskList.sort(function (left, right) { return Number(left?.idx || 0) - Number(right?.idx || 0); });
+  let unloadCounter = 0;
+  return taskList.map(function (task, index) {
+    const taskType = String(task?.task_type || '').trim().toLowerCase() === 'unload' ? 'unload' : 'load';
+    if (taskType === 'unload') {
+      unloadCounter += 1;
+    }
+    return {
+      idx: index + 1,
+      taskIdx: Number(task?.idx || index + 1),
+      taskType,
+      label: taskType === 'load' ? 'LOAD' : `U${unloadCounter}`,
+      name: taskType === 'load' ? 'Load' : `Unload ${unloadCounter}`,
+      taskAddress: String(task?.task_address || '').trim(),
+      latitude: toNumber(task?.resolved_latitude ?? task?.latitude),
+      longitude: toNumber(task?.resolved_longitude ?? task?.longitude),
+      eta: toTimestampMaybe(task?.eta),
+      etd: toTimestampMaybe(task?.etd),
+      ata: toTimestampMaybe(task?.ata),
+      atd: toTimestampMaybe(task?.atd),
+    };
+  }).filter(function (stop) { return stop.taskAddress || stop.latitude !== null || stop.longitude !== null; });
+}
+
+function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
+  const stops = getTripMonitorSnapshotStops(snapshot);
+  if (!stops.length) {
+    return {
+      isActive: false,
+      phase: 'unknown',
+      reason: 'Stop TMS belum tersedia.',
+      lastCompletedStopIndex: 0,
+      finalStopDeparted: false,
+    };
+  }
+
+  const workflowLines = Array.isArray(snapshot?.workflowLines) ? snapshot.workflowLines : [];
+  const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
+  const liveLat = toNumber(fleetRow?.latitude);
+  const liveLng = toNumber(fleetRow?.longitude);
+  const progress = stops.map(function (stop, index) {
+    const arrivedLine = findWorkflowStopStatus(workflowLines, stop, /\btiba\b/i);
+    const departedLine = findWorkflowStopStatus(workflowLines, stop, /\bberangkat\b/i);
+    const arrivedAt = toTimestampMaybe(arrivedLine?.checked_time) ?? stop.ata ?? null;
+    const departedAt = toTimestampMaybe(departedLine?.checked_time) ?? stop.atd ?? null;
+    const insideRadius = stop.latitude !== null
+      && stop.longitude !== null
+      && liveLat !== null
+      && liveLng !== null
+      && distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude) !== null
+      && distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude) <= radius;
+    const observable = stop.latitude !== null
+      && stop.longitude !== null
+      || arrivedAt !== null
+      || departedAt !== null
+      || stop.eta !== null
+      || stop.etd !== null;
+    return {
+      index,
+      stop,
+      arrivedAt,
+      departedAt,
+      insideRadius,
+      observable,
+    };
+  });
+
+  const finalStop = progress[progress.length - 1] || null;
+  if (finalStop?.departedAt) {
+    return {
+      isActive: false,
+      phase: 'completed-final-unload',
+      reason: `Sudah berangkat dari ${finalStop.stop.name}.`,
+      lastCompletedStopIndex: finalStop.index + 1,
+      finalStopDeparted: true,
+    };
+  }
+
+  const loadStop = progress[0] || null;
+  if (!loadStop?.departedAt) {
+    return {
+      isActive: false,
+      phase: 'before-load-departure',
+      reason: 'Belum berangkat dari lokasi load.',
+      lastCompletedStopIndex: 0,
+      finalStopDeparted: false,
+    };
+  }
+
+  const currentObservedStop = progress.find(function (entry) {
+    return entry.insideRadius || (entry.arrivedAt !== null && entry.departedAt === null);
+  }) || null;
+  if (currentObservedStop) {
+    return {
+      isActive: false,
+      phase: 'at-unload',
+      reason: `Sedang berada di ${currentObservedStop.stop.name}.`,
+      lastCompletedStopIndex: currentObservedStop.index,
+      finalStopDeparted: false,
+    };
+  }
+
+  const lastDeparted = [...progress].reverse().find(function (entry) {
+    return entry.departedAt !== null;
+  }) || null;
+  if (!lastDeparted) {
+    return {
+      isActive: false,
+      phase: 'unknown',
+      reason: 'Belum ada workflow departure yang bisa dipastikan.',
+      lastCompletedStopIndex: 0,
+      finalStopDeparted: false,
+    };
+  }
+  if (lastDeparted.index >= progress.length - 1) {
+    return {
+      isActive: false,
+      phase: 'completed-final-unload',
+      reason: `Sudah berangkat dari ${lastDeparted.stop.name}.`,
+      lastCompletedStopIndex: lastDeparted.index + 1,
+      finalStopDeparted: true,
+    };
+  }
+
+  const nextStop = progress[lastDeparted.index + 1] || null;
+  if (!nextStop?.observable) {
+    return {
+      isActive: false,
+      phase: 'unknown',
+      reason: `Koordinat/indikator ${nextStop?.stop?.name || 'stop berikutnya'} belum cukup untuk gate temperature.`,
+      lastCompletedStopIndex: lastDeparted.index + 1,
+      finalStopDeparted: false,
+    };
+  }
+
+  return {
+    isActive: true,
+    phase: 'in-transit-to-unload',
+    reason: `Dalam perjalanan dari ${lastDeparted.stop.name} ke ${nextStop.stop.name}.`,
+    lastCompletedStopIndex: lastDeparted.index + 1,
+    finalStopDeparted: false,
+  };
+}
+
 function distanceMetersBetween(leftLat, leftLng, rightLat, rightLng) {
   const a = toNumber(leftLat);
   const b = toNumber(leftLng);
@@ -4230,6 +4724,7 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const incidents = [];
   const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
   const { taskList, workflowLines } = snapshot;
+  const temperatureGate = evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig);
   const normalizedTempRange = normalizeTemperatureRange(snapshot?.tempMin, snapshot?.tempMax);
   const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
   const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
@@ -4252,23 +4747,25 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   if (fleetRow?.errGps) {
     incidents.push({ code: 'gps-error', label: 'GPS error', severity: 'critical', detail: String(fleetRow.errGps || 'GPS error') });
   }
-  if (fleetRow?.hasLiveSensorFault) {
+  if (temperatureGate.isActive && fleetRow?.hasLiveSensorFault) {
     incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
   }
-  const bothTempAboveMax = detectTripMonitorTempAboveMax(
-    unitState,
-    fleetRow,
-    normalizedTempRange.max,
-    now,
-    { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
-  );
-  if (bothTempAboveMax) {
-    incidents.push({
-      code: 'temp-above-max',
-      label: 'Temp above max',
-      severity: 'critical',
-      detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
-    });
+  if (temperatureGate.isActive) {
+    const bothTempAboveMax = detectTripMonitorTempAboveMax(
+      unitState,
+      fleetRow,
+      normalizedTempRange.max,
+      now,
+      { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
+    );
+    if (bothTempAboveMax) {
+      incidents.push({
+        code: 'temp-above-max',
+        label: 'Temp above max',
+        severity: 'critical',
+        detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
+      });
+    }
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
     incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
@@ -4716,7 +5213,13 @@ async function syncTmsMonitor(options) {
     if (!jobOrderId) continue;
     docs.push(await fetchTmsJobOrderDoc(jobOrderId));
   }
-  const jobSnapshots = docs.map(function (doc) { return buildTmsJobSnapshotFromDoc(doc, runtime.tenantLabel); }).filter(function (snapshot) {
+  const addressNames = [...new Set(docs.flatMap(function (doc) {
+    return collectTmsAddressNamesFromDoc(doc);
+  }))];
+  const resolvedAddresses = await resolveTmsAddressEntries(addressNames, runtime.tenantLabel);
+  const jobSnapshots = docs.map(function (doc) {
+    return buildTmsJobSnapshotFromDoc(doc, runtime.tenantLabel, resolvedAddresses.byKey);
+  }).filter(function (snapshot) {
     return snapshot.day >= window.startDay && snapshot.day <= window.endDay;
   });
   const fleetIndex = buildFleetPlateIndex(now);
@@ -4730,7 +5233,7 @@ async function syncTmsMonitor(options) {
   const warningCount = monitorRows.filter(function (row) { return row.severity === 'warning'; }).length;
   const normalCount = monitorRows.filter(function (row) { return row.severity === 'normal'; }).length;
   const noJobOrderCount = monitorRows.filter(function (row) { return row.severity === 'no-job-order'; }).length;
-  console.log(`[TMS] Sync ${window.startDay}..${window.endDay}: fetched ${fetchedCount} JO | matched ${matchedCount} | unmatched ${unmatchedCount} | critical ${criticalCount} | warning ${warningCount} | normal ${normalCount} | no-jo ${noJobOrderCount}`);
+  console.log(`[TMS] Sync ${window.startDay}..${window.endDay}: fetched ${fetchedCount} JO | matched ${matchedCount} | unmatched ${unmatchedCount} | critical ${criticalCount} | warning ${warningCount} | normal ${normalCount} | no-jo ${noJobOrderCount} | addr ok ${resolvedAddresses.stats.resolved} | addr miss ${resolvedAddresses.stats.missing}`);
   if (unmatchedCount > 0) {
     const unmatchedPreview = monitorRows
       .filter(function (row) { return row.severity === 'unmatched'; })
@@ -4758,6 +5261,9 @@ async function syncTmsMonitor(options) {
       rowsSaved: saveResult.rowsSaved || 0,
       customers: [...new Set(jobSnapshots.map(function (item) { return item.customerName; }).filter(Boolean))],
       statuses: TMS_INCLUDED_JOB_ORDER_STATUSES,
+      addressResolvedCount: resolvedAddresses.stats.resolved,
+      addressMissCount: resolvedAddresses.stats.missing,
+      addressRefreshCount: resolvedAddresses.stats.refreshed,
     },
   });
   scheduleNextTmsSync();
@@ -5803,12 +6309,29 @@ async function ensurePostgresSchema() {
       details jsonb not null default '{}'::jsonb
     );
 
+    create table if not exists tms_address_cache (
+      tenant_label text not null,
+      normalized_address_key text not null,
+      address_name text not null,
+      latitude numeric,
+      longitude numeric,
+      source_address_id text,
+      status text not null default 'missing',
+      fetched_at timestamptz not null default now(),
+      last_seen_at timestamptz not null default now(),
+      metadata jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now(),
+      primary key (tenant_label, normalized_address_key)
+    );
+
     create index if not exists idx_tms_job_order_snapshots_day on tms_job_order_snapshots(day desc);
     create index if not exists idx_tms_job_order_snapshots_plate on tms_job_order_snapshots(normalized_plate);
     create index if not exists idx_tms_monitor_rows_day on tms_monitor_rows(day desc);
     create index if not exists idx_tms_monitor_rows_severity on tms_monitor_rows(severity);
     create index if not exists idx_tms_monitor_rows_customer on tms_monitor_rows(customer_name);
     create index if not exists idx_tms_sync_logs_synced_at on tms_sync_logs(synced_at desc);
+    create index if not exists idx_tms_address_cache_status on tms_address_cache(status);
+    create index if not exists idx_tms_address_cache_seen on tms_address_cache(last_seen_at desc);
   `);
 }
 

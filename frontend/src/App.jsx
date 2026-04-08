@@ -2,8 +2,8 @@
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, Navigation,
-  PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Thermometer, Truck, X, Zap, Search
+  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MoonStar, Navigation,
+  PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
   const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
@@ -93,6 +93,19 @@ function normalizeTemperatureRange(minValue, maxValue) {
     min: Math.min(...numericValues),
     max: Math.max(...numericValues),
   };
+}
+
+const THEME_STORAGE_KEY = 'mabox-theme';
+
+function readStoredTheme() {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === 'light' || storedTheme === 'dark') {
+      return storedTheme;
+    }
+  } catch {}
+  return window.matchMedia?.('(prefers-color-scheme: light)')?.matches ? 'light' : 'dark';
 }
 
 function normalizeTmsDriverAssign(driverAssign) {
@@ -486,6 +499,34 @@ const fmtDateOnly = (value) => {
 const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
 const fmtPct = (value, digits = 1) => `${fmtNum(value ?? 0, digits)}%`;
 const fmtCoord = (value) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(6);
+const sanitizeTripMonitorStops = (stops = []) => {
+  const next = [];
+  const offsets = new Map();
+  stops.forEach((stop, index) => {
+    const latitude = Number(stop?.latitude);
+    const longitude = Number(stop?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+    const key = `${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
+    const duplicateIndex = offsets.get(key) || 0;
+    offsets.set(key, duplicateIndex + 1);
+    const offsetStep = duplicateIndex * 0.00018;
+    next.push({
+      idx: Number(stop?.idx || index + 1),
+      label: String(stop?.label || `S${index + 1}`).trim() || `S${index + 1}`,
+      name: String(stop?.name || '').trim(),
+      taskType: String(stop?.taskType || stop?.task_type || '').trim().toLowerCase(),
+      taskAddress: String(stop?.taskAddress || stop?.task_address || '').trim(),
+      coordinateSource: String(stop?.coordinateSource || stop?.coordinate_source || '').trim(),
+      latitude: latitude + offsetStep,
+      longitude: longitude + offsetStep,
+      originalLatitude: latitude,
+      originalLongitude: longitude,
+    });
+  });
+  return next.slice(0, 15);
+};
 const fmtClock = (value) => {
   const parsed = parseDateValue(value);
   return parsed ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: DISPLAY_TIMEZONE }).format(parsed) : '-';
@@ -733,6 +774,7 @@ export default function App() {
   const [mapSearch, setMapSearch] = useState('');
   const [mapAccountFilter, setMapAccountFilter] = useState('all');
   const [mapRegionPages, setMapRegionPages] = useState({});
+  const [theme, setTheme] = useState(readStoredTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileTopbarExpanded, setMobileTopbarExpanded] = useState(false);
@@ -811,6 +853,14 @@ export default function App() {
   const fleetFilterAccounts = useMemo(() => availableAccounts.filter((account) => fleetRows.some((row) => (row.accountId || 'primary') === account.id)), [availableAccounts, fleetRows]);
   const currentAccount = useMemo(() => availableAccounts.find((account) => account.id === activeAccountId) || availableAccounts[0] || null, [availableAccounts, activeAccountId]);
   const overviewAccountOptions = useMemo(() => availableAccounts.map((account) => ({ value: account.id, label: account.label || account.authEmail || account.id })), [availableAccounts]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {}
+  }, [theme]);
   const overviewAccountStats = useMemo(() => {
     const overviewAccounts = status?.overview?.accounts || [];
     return overviewAccounts.find((account) => account.id === overviewAccountId)
@@ -3000,6 +3050,24 @@ export default function App() {
             </div>
           </div>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className={`theme-toggle ${theme === 'light' ? 'is-light' : 'is-dark'}`}
+              onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              aria-pressed={theme === 'light'}
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              <span className="theme-toggle-copy">
+                {theme === 'light' ? <Sun size={14} /> : <MoonStar size={14} />}
+                <span>{theme === 'light' ? 'Light mode' : 'Dark mode'}</span>
+              </span>
+              <span className="theme-toggle-switch" aria-hidden="true">
+                <span className="theme-toggle-switch-icon theme-toggle-switch-icon-sun"><Sun size={12} /></span>
+                <span className="theme-toggle-switch-icon theme-toggle-switch-icon-moon"><MoonStar size={12} /></span>
+                <span className="theme-toggle-thumb" />
+              </span>
+            </button>
             <div className="account-badge">
               <Settings size={14} />
               <span>Account</span>
@@ -4504,12 +4572,13 @@ function FleetStatusMap({ rows }) {
   </div>;
 }
 
-function UnitRouteMap({ row, records, busy, rangeLabel }) {
+function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const containerRef = useRef(null);
   const [showRoute, setShowRoute] = useState(true);
   const leaflet = useLeafletModule(true);
+  const stopMarkers = useMemo(() => sanitizeTripMonitorStops(stops), [stops]);
   const trackPoints = useMemo(() => {
     const next = [];
     let previousKey = '';
@@ -4546,6 +4615,18 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
     point?.timestamp ? fmtDate(point.timestamp) : '-',
     point?.locationSummary || 'No location',
     `${fmtCoord(point?.latitude)}, ${fmtCoord(point?.longitude)}`,
+  ].filter(Boolean).join('<br/>');
+  const escapeHtml = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const buildStopPopupHtml = (stop) => [
+    `<strong>${escapeHtml(stop?.name || stop?.label || 'Stop')}</strong>`,
+    escapeHtml(stop?.taskAddress || 'No address'),
+    stop?.coordinateSource ? `Source: ${escapeHtml(stop.coordinateSource)}` : '',
+    `${fmtCoord(stop?.originalLatitude ?? stop?.latitude)}, ${fmtCoord(stop?.originalLongitude ?? stop?.longitude)}`,
   ].filter(Boolean).join('<br/>');
 
   useEffect(() => {
@@ -4634,18 +4715,32 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', currentPoint)).addTo(layer);
     }
 
-    if (currentPoint) {
-      map.setView([currentPoint.latitude, currentPoint.longitude], 15);
-    } else if (bounds.length === 1) {
+    stopMarkers.forEach((stop) => {
+      const stopLatLng = [stop.latitude, stop.longitude];
+      const tone = stop.taskType === 'load' ? 'load' : 'unload';
+      bounds.push(stopLatLng);
+      leaflet.marker(stopLatLng, {
+        icon: leaflet.divIcon({
+          className: 'trip-stop-marker-shell',
+          html: `<div class="trip-stop-marker trip-stop-marker-${tone}">${escapeHtml(stop.label)}</div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+      }).bindPopup(buildStopPopupHtml(stop)).addTo(layer);
+    });
+
+    if (bounds.length === 1) {
       map.setView(bounds[0], 14);
     } else if (bounds.length > 1) {
       map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+    } else if (currentPoint) {
+      map.setView([currentPoint.latitude, currentPoint.longitude], 15);
     }
     window.setTimeout(() => map.invalidateSize(), 50);
-  }, [leaflet, trackPoints, currentPoint, showRoute]);
+  }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers]);
 
   const routePointCount = trackPoints.length;
-  const hasMapData = routePointCount > 0 || Boolean(currentPoint);
+  const hasMapData = routePointCount > 0 || Boolean(currentPoint) || stopMarkers.length > 0;
 
   return <div className="unit-map-shell unit-map-shell-dark">
     <div className="unit-map-head">
@@ -4658,8 +4753,9 @@ function UnitRouteMap({ row, records, busy, rangeLabel }) {
       </div>
       <div className="chip-row unit-map-chip-row">
         <Chip variant="flat">{routePointCount ? `${routePointCount} titik route` : 'Belum ada titik route'}</Chip>
+        <Chip variant="flat">{stopMarkers.length ? `${stopMarkers.length} marker stop TMS` : 'Stop TMS belum siap'}</Chip>
         <Chip variant="flat">OSM dark mode</Chip>
-        <Chip variant="flat">Start / current / end marker</Chip>
+        <Chip variant="flat">Start / load / unload / current marker</Chip>
       </div>
     </div>
     <div className="unit-map-frame">
@@ -5050,6 +5146,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const historyLabel = formatTripMonitorRangeLabel(historyRange);
   const displayUnitLabel = pickFirstText(fleetRow?.alias, detail.unitLabel, fleetRow?.label, detail.unitId) || '-';
   const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
+  const mapStops = headlineJob?.stops || [];
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const jobDrivers = headlineDrivers.length
     ? headlineDrivers
@@ -5117,7 +5214,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
                 </div>
               </CardHeader>
               <CardContent>
-                {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+                {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
               </CardContent>
             </Card>
             <Card className="panel-card trip-monitor-detail-panel trip-monitor-detail-graphic-panel">
