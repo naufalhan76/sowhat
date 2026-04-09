@@ -5204,6 +5204,44 @@ function TripMonitorShippingProgress({ shippingStatus }) {
   </div>;
 }
 
+function TripMonitorShippingProgressClean({ shippingStatus }) {
+  const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
+    ? shippingStatus.steps
+    : [
+      { key: 'otw-load', label: 'OTW LOAD', changedAt: null, locationName: '', active: true, completed: false },
+      { key: 'sampai-load', label: 'SAMPAI LOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'menuju-unload', label: 'MENUJU UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'sampai-unload', label: 'SAMPAI UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'selesai', label: 'SELESAI', changedAt: null, locationName: '', active: false, completed: false },
+    ];
+  const activeStepIndex = steps.findIndex((step) => step.active);
+  const completedStepIndex = steps.reduce((lastIndex, step, index) => (step.completed ? index : lastIndex), 0);
+  const resolvedActiveIndex = activeStepIndex >= 0 ? activeStepIndex : completedStepIndex;
+  const progressPercent = steps.length > 1 ? (Math.max(0, resolvedActiveIndex) / (steps.length - 1)) * 100 : 0;
+
+  return <div className="trip-monitor-progress-shell">
+    <div className="trip-monitor-progress-track" aria-hidden="true">
+      <div className="trip-monitor-progress-track-fill" style={{ width: `${progressPercent}%` }} />
+    </div>
+    <div className="trip-monitor-progress">
+      {steps.map((step, index) => {
+        const stepClassName = step.active ? 'is-active' : step.completed ? 'is-completed' : 'is-pending';
+        const stepNote = step.locationName || (step.active ? 'Sedang aktif' : step.completed ? 'Selesai' : 'Belum tercapai');
+        return <div key={step.key || index} className={`trip-monitor-progress-step ${stepClassName}`}>
+          <div className="trip-monitor-progress-marker" aria-hidden="true">
+            {step.completed ? '\u2713' : step.active ? <span className="trip-monitor-progress-marker-dot" /> : null}
+          </div>
+          <div className="trip-monitor-progress-copy">
+            <strong>{tmsShippingStatusLabel(step.label || step.key)}</strong>
+            <span>{formatTripMonitorStatusTime(step.changedAt)}</span>
+            <small>{stepNote}</small>
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
 function TripMonitorUnitCard({ row, onOpen }) {
   const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
   const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
@@ -5310,7 +5348,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               </div>
             </CardHeader>
             <CardContent>
-              <TripMonitorShippingProgress shippingStatus={shippingStatus} />
+              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} />
             </CardContent>
           </Card>
           <div className="split-panels trip-monitor-detail-panels">
