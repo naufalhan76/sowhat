@@ -3336,6 +3336,13 @@ export default function App() {
                         <input type="search" value={tripMonitorFilters.search} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Cari nopol, JO, origin, destination..." />
                       </div>
                     </label>
+                    <div className="historical-field trip-monitor-legend-field">
+                      <span>Incident legend</span>
+                      <TripMonitorIncidentLegend
+                        codes={tripMonitorIncidentOptions.filter((option) => option !== 'all').length ? tripMonitorIncidentOptions.filter((option) => option !== 'all') : Object.keys(TMS_INCIDENT_META)}
+                        className="trip-monitor-toolbar-legend"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | TMS window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Topbar range: {range.startDate || '-'} to {range.endDate || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
@@ -5163,10 +5170,10 @@ function TripMonitorIncidentIcons({ codes, className = '', size = 13 }) {
   </div>;
 }
 
-function TripMonitorIncidentLegend({ codes }) {
+function TripMonitorIncidentLegend({ codes, className = '' }) {
   const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
   if (!uniqueCodes.length) return null;
-  return <div className="trip-monitor-incident-legend">
+  return <div className={`trip-monitor-incident-legend${className ? ` ${className}` : ''}`}>
     {uniqueCodes.map((code) => <div key={`legend-${code}`} className="trip-monitor-incident-legend-item">
       <span className={`trip-monitor-incident-icon trip-monitor-incident-icon-${TMS_INCIDENT_META[String(code || '').toLowerCase()]?.tone || 'default'}`} aria-hidden="true">
         {tmsIncidentIcon(code, 13)}
@@ -5338,7 +5345,6 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
           </div>
           {incidentCodes.length ? <div className="trip-monitor-detail-incidents">
             <TripMonitorIncidentIcons codes={incidentCodes} className="trip-monitor-detail-incident-icons" size={14} />
-            <TripMonitorIncidentLegend codes={incidentCodes} />
           </div> : null}
           <Card className="panel-card trip-monitor-progress-panel">
             <CardHeader className="panel-card-header">

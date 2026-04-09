@@ -4861,6 +4861,24 @@ textarea:focus {
   gap: 12px;
 }
 
+.trip-monitor-legend-field {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.trip-monitor-toolbar-legend {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  min-height: 46px;
+}
+
+.trip-monitor-toolbar-legend .trip-monitor-incident-legend-item {
+  font-size: 11px;
+}
+
 .trip-monitor-flat-board {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
