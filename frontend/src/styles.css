@@ -4857,26 +4857,47 @@ textarea:focus {
 
 .trip-monitor-toolbar-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(280px, 1.1fr) minmax(360px, 1.35fr);
   gap: 12px;
+  align-items: end;
 }
 
 .trip-monitor-legend-field {
   display: grid;
   gap: 8px;
   align-content: start;
+  min-width: 0;
 }
 
 .trip-monitor-toolbar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-raised);
-  min-height: 46px;
+  min-height: 36px;
+  overflow: hidden;
 }
 
 .trip-monitor-toolbar-legend .trip-monitor-incident-legend-item {
   font-size: 11px;
+}
+
+.trip-monitor-toolbar-grid .historical-search-field {
+  min-width: 0;
+}
+
+.trip-monitor-toolbar-grid .historical-search-box {
+  position: relative;
+  display: block;
+  min-height: 36px;
+}
+
+.trip-monitor-toolbar-grid .historical-search-box .search-icon {
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .trip-monitor-flat-board {

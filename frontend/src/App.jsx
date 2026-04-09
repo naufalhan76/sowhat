@@ -295,6 +295,16 @@ const TMS_INCIDENT_META = {
   'geofence-destination': { label: 'Miss destination geofence', tone: 'info' },
   'long-stop': { label: 'Long stop', tone: 'warning' },
 };
+const TMS_INCIDENT_LEGEND_CODES = [
+  'gps-error',
+  'temp-error',
+  'temp-above-max',
+  'late-origin',
+  'late-destination',
+  'long-stop',
+  'geofence-origin',
+  'geofence-destination',
+];
 const TMS_SHIPPING_STATUS_META = {
   'otw-load': { label: 'OTW LOAD' },
   'sampai-load': { label: 'SAMPAI LOAD' },
@@ -3339,7 +3349,7 @@ export default function App() {
                     <div className="historical-field trip-monitor-legend-field">
                       <span>Incident legend</span>
                       <TripMonitorIncidentLegend
-                        codes={tripMonitorIncidentOptions.filter((option) => option !== 'all').length ? tripMonitorIncidentOptions.filter((option) => option !== 'all') : Object.keys(TMS_INCIDENT_META)}
+                        codes={TMS_INCIDENT_LEGEND_CODES}
                         className="trip-monitor-toolbar-legend"
                       />
                     </div>
