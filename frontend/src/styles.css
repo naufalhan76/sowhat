@@ -5019,12 +5019,16 @@ textarea:focus {
 }
 
 .trip-monitor-card-head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
 }
 
 .trip-monitor-card-titleblock {
+  display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .trip-monitor-card-titleblock strong {
@@ -5043,6 +5047,31 @@ textarea:focus {
   text-overflow: ellipsis;
 }
 
+.trip-monitor-card-status {
+  display: grid;
+  gap: 2px;
+}
+
+.trip-monitor-card-status-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.trip-monitor-card-status strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text-main);
+}
+
+.trip-monitor-card-status-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .trip-monitor-card-note {
   font-size: 11px;
   line-height: 1.35;
@@ -5050,6 +5079,57 @@ textarea:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.trip-monitor-incident-icons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 88px;
+}
+
+.trip-monitor-incident-empty {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.trip-monitor-incident-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-raised);
+  color: var(--text-main);
+}
+
+.trip-monitor-incident-icon-danger {
+  background: var(--danger-surface);
+  border-color: rgba(239, 68, 68, 0.26);
+  color: #ef4444;
+}
+
+.trip-monitor-incident-icon-warning {
+  background: var(--warning-surface);
+  border-color: rgba(245, 158, 11, 0.24);
+  color: #d97706;
+}
+
+.trip-monitor-incident-icon-info {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.22);
+  color: #2563eb;
+}
+
+.trip-monitor-incident-icon-default {
+  color: var(--text-main);
 }
 
 .trip-monitor-severity-badge {
@@ -5131,10 +5211,119 @@ textarea:focus {
 }
 
 .trip-monitor-detail-incidents {
+  display: grid;
+  gap: 10px;
+  margin-top: -2px;
+}
+
+.trip-monitor-detail-incident-icons {
+  max-width: none;
+  justify-content: flex-start;
+}
+
+.trip-monitor-incident-legend {
   display: flex;
   flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.trip-monitor-incident-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.trip-monitor-progress-panel .sf-card-content {
+  display: block;
+}
+
+.trip-monitor-progress {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.trip-monitor-progress-step {
+  position: relative;
+  display: grid;
   gap: 8px;
-  margin-top: -2px;
+  justify-items: start;
+}
+
+.trip-monitor-progress-connector {
+  position: absolute;
+  top: 17px;
+  left: calc(100% - 18px);
+  width: calc(100% + 12px);
+  height: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.trip-monitor-progress-connector.is-completed {
+  background: var(--accent);
+}
+
+.trip-monitor-progress-marker {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.trip-monitor-progress-step.is-completed .trip-monitor-progress-marker,
+.trip-monitor-progress-step.is-active .trip-monitor-progress-marker {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: var(--accent);
+}
+
+.trip-monitor-progress-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trip-monitor-progress-copy strong {
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--text-main);
+}
+
+.trip-monitor-progress-copy span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.trip-monitor-progress-copy small {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.trip-monitor-progress-step.is-pending .trip-monitor-progress-marker {
+  color: transparent;
+}
+
+.trip-monitor-progress-step.is-pending .trip-monitor-progress-copy strong {
+  color: var(--text-secondary);
+}
+
+.trip-monitor-progress-step.is-pending .trip-monitor-progress-copy small {
+  color: var(--text-muted);
 }
 
 .trip-monitor-detail-panels {
@@ -5167,10 +5356,22 @@ textarea:focus {
   .trip-monitor-detail-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .trip-monitor-progress {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
   .trip-monitor-detail-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trip-monitor-progress {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .trip-monitor-progress-connector {
+    display: none;
   }
 }

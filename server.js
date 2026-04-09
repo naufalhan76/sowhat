@@ -47,6 +47,7 @@ const TRIP_MONITOR_LONG_STOP_MINUTES = 180;
 const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
 const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
 const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 30;
+const TRIP_MONITOR_STATUS_RADIUS_METERS = 1000;
 const TMS_ADDRESS_CACHE_RESOLVED_TTL_MS = 24 * 60 * 60 * 1000;
 const TMS_ADDRESS_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000;
 const TRIP_MONITOR_TEMP_TOLERANCE = 0.3;
@@ -4586,9 +4587,212 @@ function getTripMonitorSnapshotStops(snapshot) {
   }).filter(function (stop) { return stop.taskAddress || stop.latitude !== null || stop.longitude !== null; });
 }
 
-function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
+function buildTripMonitorStopProgress(snapshot, fleetRow, options) {
   const stops = getTripMonitorSnapshotStops(snapshot);
-  if (!stops.length) {
+  const workflowLines = Array.isArray(snapshot?.workflowLines) ? snapshot.workflowLines : [];
+  const radius = Math.max(50, Number(options?.radiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters));
+  const now = Number(options?.now || Date.now());
+  const liveLat = toNumber(fleetRow?.latitude);
+  const liveLng = toNumber(fleetRow?.longitude);
+  return stops.map(function (stop, index) {
+    const arrivedLine = findWorkflowStopStatus(workflowLines, stop, /\btiba\b/i);
+    const departedLine = findWorkflowStopStatus(workflowLines, stop, /\bberangkat\b/i);
+    const startedLine = findWorkflowStopStatus(
+      workflowLines,
+      stop,
+      stop.taskType === 'load' ? /\bmulai muat\b/i : /\bmulai bongkar\b/i,
+    );
+    const completedLine = findWorkflowStopStatus(
+      workflowLines,
+      stop,
+      stop.taskType === 'load' ? /\bselesai muat\b/i : /\bselesai bongkar\b/i,
+    );
+    const arrivedAt = toTimestampMaybe(arrivedLine?.checked_time) ?? stop.ata ?? null;
+    const departedAt = toTimestampMaybe(departedLine?.checked_time) ?? stop.atd ?? null;
+    const startedAt = toTimestampMaybe(startedLine?.checked_time) ?? null;
+    const completedAt = toTimestampMaybe(completedLine?.checked_time) ?? null;
+    const distanceMeters = distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude);
+    const insideRadius = distanceMeters !== null && distanceMeters <= radius;
+    const inferredArrivedAt = arrivedAt ?? ((insideRadius && departedAt === null) ? now : null);
+    const arrivalSource = arrivedAt !== null
+      ? (arrivedLine ? 'workflow' : 'history')
+      : (insideRadius && departedAt === null ? 'geofence' : null);
+    const departedSource = departedAt !== null
+      ? (departedLine ? 'workflow' : 'history')
+      : null;
+    const completedSource = completedAt !== null
+      ? (completedLine ? 'workflow' : 'history')
+      : null;
+    const observable = stop.latitude !== null
+      && stop.longitude !== null
+      || arrivedAt !== null
+      || departedAt !== null
+      || startedAt !== null
+      || completedAt !== null
+      || stop.eta !== null
+      || stop.etd !== null;
+    return {
+      index,
+      stop,
+      arrivedAt,
+      arrivedSource: arrivalSource,
+      inferredArrivedAt,
+      departedAt,
+      departedSource,
+      startedAt,
+      startedSource: startedAt !== null ? (startedLine ? 'workflow' : 'history') : null,
+      completedAt,
+      completedSource,
+      distanceMeters,
+      insideRadius,
+      observable,
+      isCurrentStop: insideRadius || (inferredArrivedAt !== null && departedAt === null),
+    };
+  });
+}
+
+function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
+  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, {
+    radiusMeters: TRIP_MONITOR_STATUS_RADIUS_METERS,
+    now,
+  });
+  const stepOrder = ['otw-load', 'sampai-load', 'menuju-unload', 'sampai-unload', 'selesai'];
+  const stepMeta = {
+    'otw-load': { label: 'OTW LOAD' },
+    'sampai-load': { label: 'SAMPAI LOAD' },
+    'menuju-unload': { label: 'MENUJU UNLOAD' },
+    'sampai-unload': { label: 'SAMPAI UNLOAD' },
+    selesai: { label: 'SELESAI' },
+  };
+  if (!progress.length) {
+    return {
+      key: 'otw-load',
+      label: stepMeta['otw-load'].label,
+      changedAt: null,
+      source: 'default',
+      detail: 'Stop TMS belum tersedia.',
+      activeStopName: '',
+      steps: stepOrder.map(function (key, index) {
+        return {
+          key,
+          label: stepMeta[key].label,
+          changedAt: null,
+          source: null,
+          locationName: '',
+          completed: index === 0 ? false : false,
+          active: index === 0,
+        };
+      }),
+    };
+  }
+
+  const loadStop = progress[0] || null;
+  const unloadEntries = progress.filter(function (entry) { return entry.stop.taskType === 'unload'; });
+  const finalStop = unloadEntries[unloadEntries.length - 1] || progress[progress.length - 1] || null;
+  const finalFinishedAt = finalStop?.departedAt ?? finalStop?.completedAt ?? null;
+  const finalFinishedSource = finalStop?.departedAt !== null
+    ? finalStop?.departedSource
+    : finalStop?.completedAt !== null
+      ? finalStop?.completedSource
+      : null;
+  const currentUnload = unloadEntries.find(function (entry) {
+    return entry.isCurrentStop;
+  }) || null;
+  const lastDeparted = [...progress].reverse().find(function (entry) {
+    return entry.departedAt !== null;
+  }) || null;
+  const lastUnloadArrived = [...unloadEntries].reverse().find(function (entry) {
+    return entry.inferredArrivedAt !== null;
+  }) || null;
+  const transitTarget = lastDeparted
+    ? progress.find(function (entry) { return entry.index > lastDeparted.index; }) || null
+    : null;
+
+  let currentKey = 'otw-load';
+  let changedAt = null;
+  let source = 'default';
+  let detail = `Menuju ${loadStop?.stop?.name || 'lokasi load'}.`;
+  let activeStopName = loadStop?.stop?.name || '';
+
+  if (finalFinishedAt !== null) {
+    currentKey = 'selesai';
+    changedAt = finalFinishedAt;
+    source = finalFinishedSource || 'history';
+    detail = `Selesai di ${finalStop?.stop?.name || 'unload terakhir'}.`;
+    activeStopName = finalStop?.stop?.name || '';
+  } else if (!loadStop?.departedAt) {
+    if (loadStop?.inferredArrivedAt !== null || loadStop?.startedAt !== null || loadStop?.completedAt !== null) {
+      currentKey = 'sampai-load';
+      changedAt = loadStop?.inferredArrivedAt ?? loadStop?.startedAt ?? loadStop?.completedAt ?? null;
+      source = loadStop?.arrivedSource || loadStop?.startedSource || loadStop?.completedSource || 'geofence';
+      detail = `Sudah sampai di ${loadStop?.stop?.name || 'lokasi load'}.`;
+      activeStopName = loadStop?.stop?.name || '';
+    }
+  } else if (currentUnload) {
+    currentKey = 'sampai-unload';
+    changedAt = currentUnload.inferredArrivedAt ?? currentUnload.startedAt ?? currentUnload.completedAt ?? null;
+    source = currentUnload.arrivedSource || currentUnload.startedSource || currentUnload.completedSource || 'geofence';
+    detail = `Sudah sampai di ${currentUnload.stop?.name || 'lokasi unload'}.`;
+    activeStopName = currentUnload.stop?.name || '';
+  } else {
+    currentKey = 'menuju-unload';
+    changedAt = lastDeparted?.departedAt ?? loadStop?.departedAt ?? null;
+    source = lastDeparted?.departedSource || loadStop?.departedSource || 'history';
+    detail = `Dalam perjalanan ke ${transitTarget?.stop?.name || 'lokasi unload'}.`;
+    activeStopName = transitTarget?.stop?.name || '';
+  }
+
+  const timelineChangedAt = {
+    'otw-load': null,
+    'sampai-load': loadStop?.inferredArrivedAt ?? loadStop?.startedAt ?? loadStop?.completedAt ?? null,
+    'menuju-unload': lastDeparted?.departedAt ?? loadStop?.departedAt ?? null,
+    'sampai-unload': lastUnloadArrived?.inferredArrivedAt ?? lastUnloadArrived?.startedAt ?? lastUnloadArrived?.completedAt ?? null,
+    selesai: finalFinishedAt,
+  };
+  const timelineSource = {
+    'otw-load': null,
+    'sampai-load': loadStop?.arrivedSource || loadStop?.startedSource || loadStop?.completedSource || null,
+    'menuju-unload': lastDeparted?.departedSource || loadStop?.departedSource || null,
+    'sampai-unload': lastUnloadArrived?.arrivedSource || lastUnloadArrived?.startedSource || lastUnloadArrived?.completedSource || null,
+    selesai: finalFinishedSource,
+  };
+  const timelineLocation = {
+    'otw-load': loadStop?.stop?.name || '',
+    'sampai-load': loadStop?.stop?.name || '',
+    'menuju-unload': transitTarget?.stop?.name || lastUnloadArrived?.stop?.name || finalStop?.stop?.name || '',
+    'sampai-unload': lastUnloadArrived?.stop?.name || finalStop?.stop?.name || '',
+    selesai: finalStop?.stop?.name || '',
+  };
+  const activeIndex = Math.max(0, stepOrder.indexOf(currentKey));
+  const steps = stepOrder.map(function (key, index) {
+    return {
+      key,
+      label: stepMeta[key].label,
+      changedAt: timelineChangedAt[key],
+      source: timelineSource[key],
+      locationName: timelineLocation[key],
+      completed: index < activeIndex,
+      active: index === activeIndex,
+    };
+  });
+
+  return {
+    key: currentKey,
+    label: stepMeta[currentKey].label,
+    changedAt,
+    source,
+    detail,
+    activeStopName,
+    steps,
+  };
+}
+
+function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
+  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, {
+    radiusMeters: Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters),
+    now: Date.now(),
+  });
+  if (!progress.length) {
     return {
       isActive: false,
       phase: 'unknown',
@@ -4597,37 +4801,6 @@ function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
       finalStopDeparted: false,
     };
   }
-
-  const workflowLines = Array.isArray(snapshot?.workflowLines) ? snapshot.workflowLines : [];
-  const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
-  const liveLat = toNumber(fleetRow?.latitude);
-  const liveLng = toNumber(fleetRow?.longitude);
-  const progress = stops.map(function (stop, index) {
-    const arrivedLine = findWorkflowStopStatus(workflowLines, stop, /\btiba\b/i);
-    const departedLine = findWorkflowStopStatus(workflowLines, stop, /\bberangkat\b/i);
-    const arrivedAt = toTimestampMaybe(arrivedLine?.checked_time) ?? stop.ata ?? null;
-    const departedAt = toTimestampMaybe(departedLine?.checked_time) ?? stop.atd ?? null;
-    const insideRadius = stop.latitude !== null
-      && stop.longitude !== null
-      && liveLat !== null
-      && liveLng !== null
-      && distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude) !== null
-      && distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude) <= radius;
-    const observable = stop.latitude !== null
-      && stop.longitude !== null
-      || arrivedAt !== null
-      || departedAt !== null
-      || stop.eta !== null
-      || stop.etd !== null;
-    return {
-      index,
-      stop,
-      arrivedAt,
-      departedAt,
-      insideRadius,
-      observable,
-    };
-  });
 
   const finalStop = progress[progress.length - 1] || null;
   if (finalStop?.departedAt) {
@@ -4652,7 +4825,7 @@ function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
   }
 
   const currentObservedStop = progress.find(function (entry) {
-    return entry.insideRadius || (entry.arrivedAt !== null && entry.departedAt === null);
+    return entry.isCurrentStop;
   }) || null;
   if (currentObservedStop) {
     return {
@@ -4860,8 +5033,11 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
       unitLabel: fleetRow?.alias || fleetRow?.label || row.unitLabel,
       tempMin: normalizedRowTempRange.min,
       tempMax: normalizedRowTempRange.max,
+      shippingStatusLabel: row?.shippingStatusLabel || '',
+      shippingStatusChangedAt: row?.shippingStatusChangedAt || null,
       metadata: {
         ...metadata,
+        shippingStatus: metadata.shippingStatus || null,
         fleetRow: fleetRow || metadata.fleetRow || null,
       },
     };
@@ -4881,6 +5057,12 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
   }
 
   const incidents = headline.incidents || [];
+  const shippingStatus = buildTripMonitorShippingStatus(
+    headline.item,
+    fleetRow,
+    tmsConfig,
+    now,
+  );
   const normalizedTempRange = normalizeTemperatureRange(headline.item.tempMin, headline.item.tempMax);
   let severity = 'normal';
   let boardStatus = 'normal';
@@ -4919,10 +5101,13 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
     driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || row.driverAppStatus,
     incidentCodes: summarizeIncidentCodes(incidents),
     incidentSummary: incidents.map(function (incident) { return incident.label; }).join(', '),
+    shippingStatusLabel: shippingStatus.label,
+    shippingStatusChangedAt: shippingStatus.changedAt,
     unmatchedReason,
     metadata: {
       ...metadata,
       incidents,
+      shippingStatus,
       fleetRow: fleetRow || null,
       headlineJobOrder: headline.item,
       jobOrders,
@@ -4974,6 +5159,12 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
       continue;
     }
     const incidents = headline.incidents || [];
+    const shippingStatus = buildTripMonitorShippingStatus(
+      headline.item,
+      group.fleetContext?.row || null,
+      tmsConfig,
+      now,
+    );
     let severity = 'normal';
     let boardStatus = 'normal';
     let unmatchedReason = '';
@@ -5015,9 +5206,12 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
       driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || '',
       incidentCodes: summarizeIncidentCodes(incidents),
       incidentSummary: incidents.map(function (incident) { return incident.label; }).join(', '),
+      shippingStatusLabel: shippingStatus.label,
+      shippingStatusChangedAt: shippingStatus.changedAt,
       unmatchedReason,
       metadata: {
         incidents,
+        shippingStatus,
         fleetRow: group.fleetContext?.row || null,
         headlineJobOrder: headline.item,
         jobOrders: group.items,
@@ -9735,14 +9929,16 @@ async function handleApi(req, res, url) {
         detail: {
           rowId: refreshed.rowId,
           day: refreshed.day,
-          severity: refreshed.severity,
-          boardStatus: refreshed.boardStatus,
-          unitId: refreshed.unitId,
-          unitLabel: refreshed.unitLabel,
-          customerName: refreshed.customerName,
-          metadata: refreshed.metadata || {},
-        },
-      });
+        severity: refreshed.severity,
+        boardStatus: refreshed.boardStatus,
+        unitId: refreshed.unitId,
+        unitLabel: refreshed.unitLabel,
+        customerName: refreshed.customerName,
+        shippingStatusLabel: refreshed.shippingStatusLabel || '',
+        shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
+        metadata: refreshed.metadata || {},
+      },
+    });
     } catch (error) {
       sendApiError(res, error, 'Trip monitor detail gagal diambil.', 404);
     }

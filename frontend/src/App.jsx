@@ -295,6 +295,13 @@ const TMS_INCIDENT_META = {
   'geofence-destination': { label: 'Miss destination geofence', tone: 'info' },
   'long-stop': { label: 'Long stop', tone: 'warning' },
 };
+const TMS_SHIPPING_STATUS_META = {
+  'otw-load': { label: 'OTW LOAD' },
+  'sampai-load': { label: 'SAMPAI LOAD' },
+  'menuju-unload': { label: 'MENUJU UNLOAD' },
+  'sampai-unload': { label: 'SAMPAI UNLOAD' },
+  selesai: { label: 'SELESAI' },
+};
 const GEOFENCE_LOCATION_TYPES = ['WH', 'POD', 'POOL', 'POL', 'REST', 'PELABUHAN'];
 const GEOFENCE_LOCATION_LABELS = {
   WH: 'Warehouse',
@@ -647,6 +654,9 @@ const tmsFormFromConfig = (config) => {
 const tmsSeverityLabel = (value) => TMS_SEVERITY_META[String(value || '').toLowerCase()]?.label || 'Normal';
 const tmsSeverityTone = (value) => TMS_SEVERITY_META[String(value || '').toLowerCase()]?.tone || 'default';
 const tmsIncidentLabel = (value) => TMS_INCIDENT_META[String(value || '').toLowerCase()]?.label || value || '-';
+const tmsShippingStatusLabel = (value) => TMS_SHIPPING_STATUS_META[String(value || '').toLowerCase()]?.label || value || '-';
+const dedupeTripMonitorIncidentCodes = (codes) => [...new Set((codes || []).map((code) => String(code || '').trim()).filter(Boolean))];
+const formatTripMonitorStatusTime = (value) => value ? fmtDateCompact(value) : '-';
 const formatEtaText = (value) => value ? `${fmtDateOnly(value)} ${fmtClock(value)}` : '-';
 const csv = (name, rows) => {
   if (!rows.length) return;
@@ -5121,36 +5131,95 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   </div>;
 }
 
-function tmsIncidentIcon(code) {
+function tmsIncidentIcon(code, size = 13) {
   switch (code) {
     case 'gps-error':
-      return <Route size={13} />;
+      return <Route size={size} />;
     case 'temp-error':
     case 'temp-above-max':
-      return <Thermometer size={13} />;
+      return <Thermometer size={size} />;
     case 'long-stop':
-      return <Clock3 size={13} />;
+      return <Clock3 size={size} />;
     case 'late-origin':
     case 'late-destination':
-      return <AlertTriangle size={13} />;
+      return <AlertTriangle size={size} />;
     case 'geofence-origin':
     case 'geofence-destination':
-      return <MapPinOff size={13} />;
+      return <MapPinOff size={size} />;
     default:
-      return <PackageSearch size={13} />;
+      return <PackageSearch size={size} />;
   }
+}
+
+function TripMonitorIncidentIcons({ codes, className = '', size = 13 }) {
+  const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
+  if (!uniqueCodes.length) {
+    return <span className={`trip-monitor-incident-empty${className ? ` ${className}` : ''}`}>No incidents</span>;
+  }
+  return <div className={`trip-monitor-incident-icons${className ? ` ${className}` : ''}`}>
+    {uniqueCodes.map((code) => <span key={code} className={`trip-monitor-incident-icon trip-monitor-incident-icon-${TMS_INCIDENT_META[String(code || '').toLowerCase()]?.tone || 'default'}`} title={tmsIncidentLabel(code)} aria-label={tmsIncidentLabel(code)}>
+      {tmsIncidentIcon(code, size)}
+    </span>)}
+  </div>;
+}
+
+function TripMonitorIncidentLegend({ codes }) {
+  const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
+  if (!uniqueCodes.length) return null;
+  return <div className="trip-monitor-incident-legend">
+    {uniqueCodes.map((code) => <div key={`legend-${code}`} className="trip-monitor-incident-legend-item">
+      <span className={`trip-monitor-incident-icon trip-monitor-incident-icon-${TMS_INCIDENT_META[String(code || '').toLowerCase()]?.tone || 'default'}`} aria-hidden="true">
+        {tmsIncidentIcon(code, 13)}
+      </span>
+      <span>{tmsIncidentLabel(code)}</span>
+    </div>)}
+  </div>;
+}
+
+function TripMonitorShippingProgress({ shippingStatus }) {
+  const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
+    ? shippingStatus.steps
+    : [
+      { key: 'otw-load', label: 'OTW LOAD', changedAt: null, locationName: '', active: true, completed: false },
+      { key: 'sampai-load', label: 'SAMPAI LOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'menuju-unload', label: 'MENUJU UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'sampai-unload', label: 'SAMPAI UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
+      { key: 'selesai', label: 'SELESAI', changedAt: null, locationName: '', active: false, completed: false },
+    ];
+  return <div className="trip-monitor-progress">
+    {steps.map((step, index) => {
+      const stepClassName = step.active ? 'is-active' : step.completed ? 'is-completed' : 'is-pending';
+      return <div key={step.key || index} className={`trip-monitor-progress-step ${stepClassName}`}>
+        {index < steps.length - 1 ? <div className={`trip-monitor-progress-connector ${step.completed ? 'is-completed' : ''}`} aria-hidden="true" /> : null}
+        <div className="trip-monitor-progress-marker" aria-hidden="true">
+          {step.completed ? '✓' : ''}
+        </div>
+        <div className="trip-monitor-progress-copy">
+          <strong>{tmsShippingStatusLabel(step.label || step.key)}</strong>
+          <span>{formatTripMonitorStatusTime(step.changedAt)}</span>
+          <small>{step.locationName || 'Menunggu update status'}</small>
+        </div>
+      </div>;
+    })}
+  </div>;
 }
 
 function TripMonitorUnitCard({ row, onOpen }) {
   const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
-  const incidentCount = (row.incidentCodes || []).length;
+  const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
+  const shippingStatusChangedAt = row.shippingStatusChangedAt || row?.metadata?.shippingStatus?.changedAt || null;
   return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen}>
     <div className="trip-monitor-card-head">
       <div className="trip-monitor-card-titleblock">
         <strong>{unitLabel}</strong>
         <div className="trip-monitor-card-subline">{row.jobOrderId || '-'} | {row.customerName || '-'}</div>
       </div>
-      <span className={`trip-monitor-severity-badge trip-monitor-severity-badge-${row.severity || 'normal'}`}>{incidentCount || 0}</span>
+      <TripMonitorIncidentIcons codes={row.incidentCodes || []} />
+    </div>
+    <div className="trip-monitor-card-status">
+      <span className="trip-monitor-card-status-label">Status pengiriman</span>
+      <strong>{shippingStatus}</strong>
+      <div className="trip-monitor-card-status-time">{formatTripMonitorStatusTime(shippingStatusChangedAt)}</div>
     </div>
     {row.unmatchedReason ? <div className="trip-monitor-card-note">{row.unmatchedReason}</div> : null}
   </button>;
@@ -5168,6 +5237,12 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
   const mapStops = headlineJob?.stops || [];
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
+  const shippingStatus = detail?.metadata?.shippingStatus || {
+    label: detail?.shippingStatusLabel || '-',
+    changedAt: detail?.shippingStatusChangedAt || null,
+    steps: [],
+  };
+  const incidentCodes = dedupeTripMonitorIncidentCodes((incidents || []).map((incident) => incident.code));
   const jobDrivers = headlineDrivers.length
     ? headlineDrivers
     : jobOrders.flatMap((job) => normalizeTmsDriverAssign(job?.driverAssign));
@@ -5206,8 +5281,9 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               <div className="subtle-line">Driver 2: {driver2Name}</div>
             </div>
             <div className="mini-metric">
-              <span>Job orders</span>
-              <strong>{jobOrders.length}</strong>
+              <span>Status pengiriman</span>
+              <strong>{shippingStatus?.label || '-'}</strong>
+              <div className="subtle-line">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</div>
             </div>
             <div className="mini-metric">
               <span>Incidents</span>
@@ -5222,9 +5298,21 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               <strong>{headlineJob ? `${fmtNum(normalizedJobTempRange.min)} to ${fmtNum(normalizedJobTempRange.max)}` : '-'}</strong>
             </div>
           </div>
-          {incidents.length ? <div className="trip-monitor-detail-incidents">
-            {incidents.map((incident, index) => <span key={`${detail.rowId}-${incident.code}-${index}`} className={`trip-monitor-chip trip-monitor-chip-${incident.severity === 'critical' ? 'danger' : 'warning'}`}>{tmsIncidentLabel(incident.code)}</span>)}
+          {incidentCodes.length ? <div className="trip-monitor-detail-incidents">
+            <TripMonitorIncidentIcons codes={incidentCodes} className="trip-monitor-detail-incident-icons" size={14} />
+            <TripMonitorIncidentLegend codes={incidentCodes} />
           </div> : null}
+          <Card className="panel-card trip-monitor-progress-panel">
+            <CardHeader className="panel-card-header">
+              <div>
+                <h3>Status pengiriman</h3>
+                <p>Progress perjalanan JO berdasarkan workflow TMS, fallback historis/geofence radius 1 KM.</p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <TripMonitorShippingProgress shippingStatus={shippingStatus} />
+            </CardContent>
+          </Card>
           <div className="split-panels trip-monitor-detail-panels">
             <Card className="panel-card trip-monitor-detail-panel">
               <CardHeader className="panel-card-header">
