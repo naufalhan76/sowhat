@@ -23,7 +23,11 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function isZeroValue(value) {
+  function isFaultTemperatureValue(value) {
+    if (value === null || value === undefined || value === '') {
+      return true;
+    }
+
     const numeric = toNumber(value);
     return numeric !== null && numeric === 0;
   }
@@ -218,18 +222,18 @@
   }
 
   function incidentTypeForRecord(record) {
-    const zeroTemp1 = isZeroValue(record.temp1);
-    const zeroTemp2 = isZeroValue(record.temp2);
+    const faultTemp1 = isFaultTemperatureValue(record.temp1);
+    const faultTemp2 = isFaultTemperatureValue(record.temp2);
 
-    if (zeroTemp1 && zeroTemp2) {
+    if (faultTemp1 && faultTemp2) {
       return 'temp1+temp2';
     }
 
-    if (zeroTemp1) {
+    if (faultTemp1) {
       return 'temp1';
     }
 
-    if (zeroTemp2) {
+    if (faultTemp2) {
       return 'temp2';
     }
 

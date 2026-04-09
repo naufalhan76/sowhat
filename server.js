@@ -3042,10 +3042,17 @@ function detectLiveSensorFaultType(unitState, snapshot, now, options) {
   const requiredDurationMs = requiredDurationMinutes * 60 * 1000;
   const minimumSamples = Math.max(2, Number(options?.minimumSamples || 2));
 
-  function checkSensor(sensorKey) {
-    if (toNumber(snapshot[sensorKey]) !== 0) return false;
+  function isFaultTemperatureValue(value) {
+    if (value === null || value === undefined || value === '') {
+      return true;
+    }
+    return toNumber(value) === 0;
+  }
 
-    // We need a continuous streak of 0.0 for the configured window.
+  function checkSensor(sensorKey) {
+    if (!isFaultTemperatureValue(snapshot[sensorKey])) return false;
+
+    // We need a continuous streak of fault values for the configured window.
     const currentMs = snapshot.lastUpdatedMs || now;
     const cutoff = currentMs - requiredDurationMs;
     const records = unitState?.records || [];
@@ -3060,11 +3067,7 @@ function detectLiveSensorFaultType(unitState, snapshot, now, options) {
       const record = records[i];
       if (record.timestamp >= currentMs) continue;
 
-      const v = toNumber(record[sensorKey]);
-      if (v === null) {
-        continue;
-      }
-      if (v !== 0) {
+      if (!isFaultTemperatureValue(record[sensorKey])) {
         break;
       }
 
