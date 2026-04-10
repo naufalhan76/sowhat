@@ -46,7 +46,7 @@ const DEFAULT_TMS_CONFIG = {
 const TRIP_MONITOR_LONG_STOP_MINUTES = 180;
 const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
 const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
-const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 30;
+const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 20;
 const TRIP_MONITOR_STATUS_RADIUS_METERS = 1000;
 const TMS_ADDRESS_CACHE_RESOLVED_TTL_MS = 24 * 60 * 60 * 1000;
 const TMS_ADDRESS_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000;
@@ -4938,34 +4938,33 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   if (fleetRow?.errGps) {
     incidents.push({ code: 'gps-error', label: 'GPS error', severity: 'critical', detail: String(fleetRow.errGps || 'GPS error') });
   }
-  if (temperatureGate.isActive && fleetRow?.hasLiveSensorFault) {
+  if (fleetRow?.hasLiveSensorFault) {
     incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
   }
-  if (temperatureGate.isActive) {
-    const tempOutOfRange = detectTripMonitorTempOutOfRange(
-      unitState,
-      fleetRow,
-      normalizedTempRange,
-      now,
-      { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
-    );
-    if (tempOutOfRange) {
-      let detailStr = '';
-      if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
-        detailStr = `Suhu box diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-      } else if (normalizedTempRange.max !== null) {
-        detailStr = `Suhu box > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-      } else if (normalizedTempRange.min !== null) {
-        detailStr = `Suhu box < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-      }
 
-      incidents.push({
-        code: 'temp-out-of-range',
-        label: 'Temp out of range',
-        severity: 'critical',
-        detail: detailStr,
-      });
+  const tempOutOfRange = detectTripMonitorTempOutOfRange(
+    unitState,
+    fleetRow,
+    normalizedTempRange,
+    now,
+    { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
+  );
+  if (tempOutOfRange) {
+    let detailStr = '';
+    if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
+      detailStr = `Suhu box diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+    } else if (normalizedTempRange.max !== null) {
+      detailStr = `Suhu box > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+    } else if (normalizedTempRange.min !== null) {
+      detailStr = `Suhu box < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
     }
+
+    incidents.push({
+      code: 'temp-out-of-range',
+      label: 'Temp out of range',
+      severity: 'critical',
+      detail: detailStr,
+    });
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
     incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
