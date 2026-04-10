@@ -3158,9 +3158,10 @@ function isSameRealtimeStopLocation(record, reference, radiusMeters = TRIP_MONIT
   return true;
 }
 
-function detectTripMonitorTempAboveMax(unitState, snapshot, tempMax, now, options) {
-  const resolvedMax = toNumber(tempMax);
-  if (resolvedMax === null || !snapshot) return null;
+function detectTripMonitorTempOutOfRange(unitState, snapshot, tempRange, now, options) {
+  const resolvedMax = toNumber(tempRange?.max);
+  const resolvedMin = toNumber(tempRange?.min);
+  if ((resolvedMax === null && resolvedMin === null) || !snapshot) return null;
 
   const requiredDurationMinutes = Math.max(1, Number(options?.requiredDurationMinutes || TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES));
   const requiredDurationMs = requiredDurationMinutes * 60 * 1000;
@@ -3169,14 +3170,25 @@ function detectTripMonitorTempAboveMax(unitState, snapshot, tempMax, now, option
   const { currentMs, records } = buildRealtimeRecordSeries(unitState, snapshot, now);
   if (!records.length) return null;
 
-  const isAboveMax = function (record) {
+  const isOutOfRange = function (record) {
     const temp1 = toNumber(record?.temp1);
     const temp2 = toNumber(record?.temp2);
     if (temp1 === null || temp2 === null) return null;
-    return temp1 > resolvedMax + tolerance && temp2 > resolvedMax + tolerance;
+
+    let overMax = false;
+    let underMin = false;
+
+    if (resolvedMax !== null) {
+      overMax = temp1 > resolvedMax + tolerance && temp2 > resolvedMax + tolerance;
+    }
+    if (resolvedMin !== null) {
+      underMin = temp1 < resolvedMin - tolerance && temp2 < resolvedMin - tolerance;
+    }
+
+    return overMax || underMin;
   };
 
-  if (isAboveMax(records[records.length - 1]) !== true) {
+  if (isOutOfRange(records[records.length - 1]) !== true) {
     return null;
   }
 
@@ -3186,7 +3198,7 @@ function detectTripMonitorTempAboveMax(unitState, snapshot, tempMax, now, option
 
   for (let i = records.length - 2; i >= 0; i--) {
     const record = records[i];
-    const state = isAboveMax(record);
+    const state = isOutOfRange(record);
     if (state === null) {
       continue;
     }
@@ -3210,6 +3222,7 @@ function detectTripMonitorTempAboveMax(unitState, snapshot, tempMax, now, option
     endTimestamp: currentMs,
     durationMinutes: Number((durationMs / 60000).toFixed(1)),
     thresholdMax: resolvedMax,
+    thresholdMin: resolvedMin,
   };
 }
 
@@ -4927,19 +4940,28 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
     incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
   }
   if (temperatureGate.isActive) {
-    const bothTempAboveMax = detectTripMonitorTempAboveMax(
+    const tempOutOfRange = detectTripMonitorTempOutOfRange(
       unitState,
       fleetRow,
-      normalizedTempRange.max,
+      normalizedTempRange,
       now,
       { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
     );
-    if (bothTempAboveMax) {
+    if (tempOutOfRange) {
+      let detailStr = '';
+      if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
+        detailStr = `Temp1 & Temp2 diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      } else if (normalizedTempRange.max !== null) {
+        detailStr = `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      } else if (normalizedTempRange.min !== null) {
+        detailStr = `Temp1 & Temp2 < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      }
+
       incidents.push({
-        code: 'temp-above-max',
-        label: 'Temp above max',
+        code: 'temp-out-of-range',
+        label: 'Temp out of range',
         severity: 'critical',
-        detail: `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(bothTempAboveMax.durationMinutes, 1)} menit`,
+        detail: detailStr,
       });
     }
   }

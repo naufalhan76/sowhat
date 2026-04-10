@@ -288,7 +288,7 @@ const TMS_BOARD_COLUMNS = [
 const TMS_INCIDENT_META = {
   'gps-error': { label: 'GPS error', tone: 'danger' },
   'temp-error': { label: 'Temp error', tone: 'danger' },
-  'temp-above-max': { label: 'Temp above max', tone: 'danger' },
+  'temp-out-of-range': { label: 'Temp out of range', tone: 'danger' },
   'late-origin': { label: 'Late load', tone: 'warning' },
   'late-destination': { label: 'Late destination', tone: 'warning' },
   'geofence-origin': { label: 'Miss load geofence', tone: 'info' },
@@ -298,7 +298,7 @@ const TMS_INCIDENT_META = {
 const TMS_INCIDENT_LEGEND_CODES = [
   'gps-error',
   'temp-error',
-  'temp-above-max',
+  'temp-out-of-range',
   'late-origin',
   'late-destination',
   'long-stop',
@@ -5157,7 +5157,7 @@ function tmsIncidentIcon(code, size = 13) {
     case 'gps-error':
       return <Route size={size} />;
     case 'temp-error':
-    case 'temp-above-max':
+    case 'temp-out-of-range':
       return <Thermometer size={size} />;
     case 'long-stop':
       return <Clock3 size={size} />;
