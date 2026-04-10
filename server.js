@@ -3173,16 +3173,18 @@ function detectTripMonitorTempOutOfRange(unitState, snapshot, tempRange, now, op
   const isOutOfRange = function (record) {
     const temp1 = toNumber(record?.temp1);
     const temp2 = toNumber(record?.temp2);
-    if (temp1 === null || temp2 === null) return null;
+    if (temp1 === null && temp2 === null) return null;
 
     let overMax = false;
     let underMin = false;
 
-    if (resolvedMax !== null) {
-      overMax = temp1 > resolvedMax + tolerance && temp2 > resolvedMax + tolerance;
+    if (temp1 !== null) {
+      if (resolvedMax !== null && temp1 > resolvedMax + tolerance) overMax = true;
+      if (resolvedMin !== null && temp1 < resolvedMin - tolerance) underMin = true;
     }
-    if (resolvedMin !== null) {
-      underMin = temp1 < resolvedMin - tolerance && temp2 < resolvedMin - tolerance;
+    if (temp2 !== null) {
+      if (resolvedMax !== null && temp2 > resolvedMax + tolerance) overMax = true;
+      if (resolvedMin !== null && temp2 < resolvedMin - tolerance) underMin = true;
     }
 
     return overMax || underMin;
@@ -4950,11 +4952,11 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
     if (tempOutOfRange) {
       let detailStr = '';
       if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
-        detailStr = `Temp1 & Temp2 diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+        detailStr = `Suhu box diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
       } else if (normalizedTempRange.max !== null) {
-        detailStr = `Temp1 & Temp2 > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+        detailStr = `Suhu box > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
       } else if (normalizedTempRange.min !== null) {
-        detailStr = `Temp1 & Temp2 < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+        detailStr = `Suhu box < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
       }
 
       incidents.push({
