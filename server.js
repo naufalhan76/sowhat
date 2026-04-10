@@ -4808,88 +4808,51 @@ function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
     now: Date.now(),
   });
   if (!progress.length) {
-    return {
-      isActive: false,
-      phase: 'unknown',
-      reason: 'Stop TMS belum tersedia.',
-      lastCompletedStopIndex: 0,
-      finalStopDeparted: false,
-    };
-  }
-
-  const finalStop = progress[progress.length - 1] || null;
-  if (finalStop?.departedAt) {
-    return {
-      isActive: false,
-      phase: 'completed-final-unload',
-      reason: `Sudah berangkat dari ${finalStop.stop.name}.`,
-      lastCompletedStopIndex: finalStop.index + 1,
-      finalStopDeparted: true,
-    };
-  }
-
-  const loadStop = progress[0] || null;
-  if (!loadStop?.departedAt) {
-    return {
-      isActive: false,
-      phase: 'before-load-departure',
-      reason: 'Belum berangkat dari lokasi load.',
-      lastCompletedStopIndex: 0,
-      finalStopDeparted: false,
-    };
+    return { isActive: false, phase: 'unknown', reason: 'Stop TMS belum tersedia.', lastCompletedStopIndex: 0, finalStopDeparted: false };
   }
 
   const currentObservedStop = progress.find(function (entry) {
     return entry.isCurrentStop;
   }) || null;
+
   if (currentObservedStop) {
     return {
       isActive: false,
-      phase: 'at-unload',
+      phase: currentObservedStop.stop.taskType === 'load' ? 'at-load' : 'at-unload',
       reason: `Sedang berada di ${currentObservedStop.stop.name}.`,
       lastCompletedStopIndex: currentObservedStop.index,
       finalStopDeparted: false,
     };
   }
-
-  const lastDeparted = [...progress].reverse().find(function (entry) {
-    return entry.departedAt !== null;
-  }) || null;
-  if (!lastDeparted) {
+  
+  const loadStop = progress[0];
+  const hasDepartedLoad = loadStop?.departedAt !== null || (progress.length > 1 && (progress[1].arrivedAt !== null || (progress[1].distanceMeters !== null && progress[1].distanceMeters < 1000)));
+  if (!hasDepartedLoad) {
     return {
       isActive: false,
-      phase: 'unknown',
-      reason: 'Belum ada workflow departure yang bisa dipastikan.',
+      phase: 'before-load-departure',
+      reason: 'Belum terkonfirmasi berangkat dari lokasi load.',
       lastCompletedStopIndex: 0,
       finalStopDeparted: false,
     };
   }
-  if (lastDeparted.index >= progress.length - 1) {
+
+  const finalStop = progress[progress.length - 1];
+  if (finalStop && finalStop.departedAt) {
     return {
       isActive: false,
       phase: 'completed-final-unload',
-      reason: `Sudah berangkat dari ${lastDeparted.stop.name}.`,
-      lastCompletedStopIndex: lastDeparted.index + 1,
+      reason: `Sudah berangkat dari unload terakhir.`,
+      lastCompletedStopIndex: finalStop.index + 1,
       finalStopDeparted: true,
-    };
-  }
-
-  const nextStop = progress[lastDeparted.index + 1] || null;
-  if (!nextStop?.observable) {
-    return {
-      isActive: false,
-      phase: 'unknown',
-      reason: `Koordinat/indikator ${nextStop?.stop?.name || 'stop berikutnya'} belum cukup untuk gate temperature.`,
-      lastCompletedStopIndex: lastDeparted.index + 1,
-      finalStopDeparted: false,
     };
   }
 
   return {
     isActive: true,
-    phase: 'in-transit-to-unload',
-    reason: `Dalam perjalanan dari ${lastDeparted.stop.name} ke ${nextStop.stop.name}.`,
-    lastCompletedStopIndex: lastDeparted.index + 1,
+    phase: 'in-transit',
+    reason: 'Sedang dalam perjalanan (tidak terpantau berada di titik bongkar/muat).',
+    lastCompletedStopIndex: progress.findIndex(entry => entry.departedAt === null) || 0,
     finalStopDeparted: false,
   };
 }
@@ -4942,29 +4905,31 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
     incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
   }
 
-  const tempOutOfRange = detectTripMonitorTempOutOfRange(
-    unitState,
-    fleetRow,
-    normalizedTempRange,
-    now,
-    { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
-  );
-  if (tempOutOfRange) {
-    let detailStr = '';
-    if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
-      detailStr = `Suhu box diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-    } else if (normalizedTempRange.max !== null) {
-      detailStr = `Suhu box > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-    } else if (normalizedTempRange.min !== null) {
-      detailStr = `Suhu box < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
-    }
+  if (temperatureGate.isActive) {
+    const tempOutOfRange = detectTripMonitorTempOutOfRange(
+      unitState,
+      fleetRow,
+      normalizedTempRange,
+      now,
+      { requiredDurationMinutes: TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES, minimumSamples: 2 },
+    );
+    if (tempOutOfRange) {
+      let detailStr = '';
+      if (normalizedTempRange.min !== null && normalizedTempRange.max !== null) {
+        detailStr = `Suhu box diluar batas ${formatTripMonitorMetric(normalizedTempRange.min, 1)} - ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      } else if (normalizedTempRange.max !== null) {
+        detailStr = `Suhu box > ${formatTripMonitorMetric(normalizedTempRange.max, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      } else if (normalizedTempRange.min !== null) {
+        detailStr = `Suhu box < ${formatTripMonitorMetric(normalizedTempRange.min, 1)} selama ${formatTripMonitorMetric(tempOutOfRange.durationMinutes, 1)} menit`;
+      }
 
-    incidents.push({
-      code: 'temp-out-of-range',
-      label: 'Temp out of range',
-      severity: 'critical',
-      detail: detailStr,
-    });
+      incidents.push({
+        code: 'temp-out-of-range',
+        label: 'Temp out of range',
+        severity: 'critical',
+        detail: detailStr,
+      });
+    }
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
     incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
