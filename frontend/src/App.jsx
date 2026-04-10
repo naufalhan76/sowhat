@@ -4973,9 +4973,13 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
     const pad = Math.max(1, (rawMax - rawMin) * 0.18 || 1);
     const minY = rawMin - pad;
     const maxY = rawMax + pad;
+    const isNegativeRange = normalizedThresholdRange.min < 0 && normalizedThresholdRange.max <= 0;
+    const minLabel = isNegativeRange ? `${thresholdLabel} max` : `${thresholdLabel} min`;
+    const maxLabel = isNegativeRange ? `${thresholdLabel} min` : `${thresholdLabel} max`;
+
     const thresholdGuides = [
-      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: '#38BDF8', label: `${thresholdLabel} min` } : null,
-      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: '#F43F5E', label: `${thresholdLabel} max` } : null,
+      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: '#38BDF8', label: minLabel } : null,
+      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: '#F43F5E', label: maxLabel } : null,
     ].filter(Boolean);
   const timeStart = series[0].timestamp;
   const timeEnd = series[series.length - 1].timestamp;

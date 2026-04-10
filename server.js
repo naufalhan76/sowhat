@@ -4646,7 +4646,7 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, options) {
       distanceMeters,
       insideRadius,
       observable,
-      isCurrentStop: insideRadius || (inferredArrivedAt !== null && departedAt === null),
+      isCurrentStop: insideRadius || (inferredArrivedAt !== null && departedAt === null && (distanceMeters === null || distanceMeters <= Math.max(1000, radius * 3))),
     };
   });
 }
