@@ -3207,13 +3207,13 @@ function detectTripMonitorTempOutOfRange(unitState, snapshot, tempRange, now, op
     }
     sampleCount += 1;
     earliestStreakTime = record.timestamp;
-    if (earliestStreakTime <= cutoff) {
-      break;
-    }
   }
 
   const durationMs = currentMs - earliestStreakTime;
-  if (durationMs < requiredDurationMs || sampleCount < minimumSamples) {
+  
+  // Tolerate up to 3 mins difference because fresh server restarts 
+  // with a 30-min lookback fetch will inherently yield ~28-29 mins of data width
+  if (durationMs < (requiredDurationMs - 180000) || sampleCount < minimumSamples) {
     return null;
   }
 
