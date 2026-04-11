@@ -5267,20 +5267,21 @@ function TripMonitorUnitCard({ row, onOpen }) {
   const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
   const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
   const shippingStatusChangedAt = row.shippingStatusChangedAt || row?.metadata?.shippingStatus?.changedAt || null;
-  return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen}>
+  const sublineText = `${row.jobOrderId || '-'} | ${row.customerName || '-'}`;
+  return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen} title={`${unitLabel} — ${sublineText}`}>
     <div className="trip-monitor-card-head">
       <div className="trip-monitor-card-titleblock">
-        <strong>{unitLabel}</strong>
-        <div className="trip-monitor-card-subline">{row.jobOrderId || '-'} | {row.customerName || '-'}</div>
+        <strong title={unitLabel}>{unitLabel}</strong>
+        <div className="trip-monitor-card-subline" title={sublineText}>{sublineText}</div>
       </div>
       <TripMonitorIncidentIcons codes={row.incidentCodes || []} />
     </div>
     <div className="trip-monitor-card-status">
       <span className="trip-monitor-card-status-label">Status pengiriman</span>
-      <strong>{shippingStatus}</strong>
+      <strong title={shippingStatus}>{shippingStatus}</strong>
       <div className="trip-monitor-card-status-time">{formatTripMonitorStatusTime(shippingStatusChangedAt)}</div>
     </div>
-    {row.unmatchedReason ? <div className="trip-monitor-card-note">{row.unmatchedReason}</div> : null}
+    {row.unmatchedReason ? <div className="trip-monitor-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
   </button>;
 }
 function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
@@ -5313,18 +5314,20 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   return <div className="auth-modal-backdrop" onClick={onClose}>
     <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header">
-        <div>
-          <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
-          <h2>{displayUnitLabel}</h2>
-          <p>{detail.customerName || '-'} | {routeSummary}</p>
-        </div>
-        <div className="inline-buttons">
-          {fleetRow?.id ? <>
-            <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
-            <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
-            <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
-          </> : null}
-          <Button variant="bordered" onPress={onClose}>Close</Button>
+        <div className="trip-monitor-detail-header">
+          <div className="trip-monitor-detail-header-info">
+            <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
+            <h2>{displayUnitLabel}</h2>
+            <p>{detail.customerName || '-'} | {routeSummary}</p>
+          </div>
+          <div className="trip-monitor-detail-header-actions">
+            {fleetRow?.id ? <>
+              <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
+              <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
+              <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
+            </> : null}
+            <button type="button" className="trip-monitor-detail-close-x" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
