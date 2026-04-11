@@ -10868,15 +10868,21 @@ if (require.main === module) {
       scheduleNextTmsSync();
       hydrateTmsMonitorHistory().catch(function (error) { console.error('[TMS Hydration Error]', error); });
       if (config && config.autoStart) {
-        startPolling().catch(function (error) {
+        console.log('[Boot] Starting sequential poll cycle FIRST, Astro snapshot will wait...');
+        startPolling().then(function () {
+          console.log('[Boot] Poll cycle complete. Now scheduling Astro snapshot...');
+          scheduleNextAstroSnapshot();
+        }).catch(function (error) {
           state.runtime.lastRunMessage = error.message;
           state.runtime.isPolling = false;
           state.runtime.nextRunAt = null;
           config.autoStart = false;
           saveConfig();
           saveState();
+          // Still schedule Astro even if polling failed
+          console.log('[Boot] Poll cycle failed, but scheduling Astro snapshot anyway.');
+          scheduleNextAstroSnapshot();
         });
-        scheduleNextAstroSnapshot();
       }
     } catch (e) {
       console.error('Failed to initialize storage on startup:', e);
