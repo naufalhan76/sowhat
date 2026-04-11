@@ -5258,14 +5258,8 @@ textarea:focus {
 .trip-monitor-detail-header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-}
-
-.trip-monitor-detail-header-info {
-  min-width: 0;
-  flex: 1;
+  flex-wrap: nowrap;
 }
 
 .trip-monitor-detail-header-actions {
@@ -5274,6 +5268,11 @@ textarea:focus {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.trip-monitor-detail-header-info {
+  min-width: 0;
+  flex: 1;
 }
 
 .trip-monitor-detail-close-x {
@@ -5519,13 +5518,28 @@ textarea:focus {
   }
 
   .trip-monitor-detail-header {
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 10px;
+    position: relative;
+  }
+
+  .trip-monitor-detail-header-info {
+    order: 1;
+    width: 100%;
+    flex: unset;
   }
 
   .trip-monitor-detail-header-actions {
+    order: 2;
     width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
+  }
+
+  .trip-monitor-detail-close-x {
+    order: 0;
+    position: absolute;
+    top: 14px;
+    right: 14px;
   }
 
   .trip-monitor-detail-panels {
