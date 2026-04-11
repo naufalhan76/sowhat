@@ -4755,35 +4755,39 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
   let currentKey = 'otw-load';
   let changedAt = null;
   let source = 'default';
-  let detail = `Menuju ${loadStop?.stop?.name || 'lokasi load'}.`;
+  let detail = `Menuju ${loadStop?.stop?.taskAddress || loadStop?.stop?.name || 'lokasi load'}.`;
   let activeStopName = loadStop?.stop?.name || '';
 
   if (isClosed) {
     currentKey = 'selesai';
     changedAt = now;
     source = 'tms-status';
-    detail = `Selesai di ${finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
+    detail = `Selesai di ${finalStop?.stop?.taskAddress || finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
     activeStopName = finalStop?.stop?.name || '';
-  } else if (!loadStop?.departedAt) {
-    if (loadStop?.arrivedAt !== null) {
-      currentKey = 'sampai-load';
-      changedAt = loadStop.arrivedAt;
-      source = loadStop.arrivedSource || 'geofence';
-      detail = `Sudah sampai di ${loadStop?.stop?.name || 'lokasi load'}.`;
-      activeStopName = loadStop?.stop?.name || '';
-    }
+  } else if (finalStop && finalStop.departedAt !== null) {
+    currentKey = 'selesai';
+    changedAt = finalStop.departedAt;
+    source = finalStop.departedSource || 'history';
+    detail = `Sudah berangkat dari ${finalStop.stop?.taskAddress || finalStop.stop?.name || 'unload terakhir'}, menunggu TMS Closed.`;
+    activeStopName = finalStop.stop?.name || '';
   } else if (currentUnload) {
     currentKey = 'sampai-unload';
     changedAt = currentUnload.arrivedAt;
     source = currentUnload.arrivedSource || 'geofence';
-    detail = `Sudah sampai di ${currentUnload.stop?.name || 'lokasi unload'}.`;
+    detail = `Sudah sampai di ${currentUnload.stop?.taskAddress || currentUnload.stop?.name || 'lokasi unload'}.`;
     activeStopName = currentUnload.stop?.name || '';
-  } else {
+  } else if (lastDeparted) {
     currentKey = 'menuju-unload';
-    changedAt = lastDeparted?.departedAt ?? loadStop?.departedAt ?? null;
-    source = lastDeparted?.departedSource || loadStop?.departedSource || 'history';
-    detail = `Dalam perjalanan ke ${transitTarget?.stop?.name || 'lokasi unload'}.`;
+    changedAt = lastDeparted.departedAt;
+    source = lastDeparted.departedSource || 'history';
+    detail = `Dalam perjalanan ke ${transitTarget?.stop?.taskAddress || transitTarget?.stop?.name || 'lokasi unload'}.`;
     activeStopName = transitTarget?.stop?.name || '';
+  } else if (loadStop?.arrivedAt !== null) {
+    currentKey = 'sampai-load';
+    changedAt = loadStop.arrivedAt;
+    source = loadStop.arrivedSource || 'geofence';
+    detail = `Sudah sampai di ${loadStop?.stop?.taskAddress || loadStop?.stop?.name || 'lokasi load'}.`;
+    activeStopName = loadStop?.stop?.name || '';
   }
 
   const timelineChangedAt = {
@@ -4791,21 +4795,21 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
     'sampai-load': loadStop?.arrivedAt ?? null,
     'menuju-unload': lastDeparted?.departedAt ?? loadStop?.departedAt ?? null,
     'sampai-unload': lastUnloadArrived?.arrivedAt ?? null,
-    selesai: isClosed ? now : null,
+    selesai: isClosed ? now : finalStop?.departedAt ?? null,
   };
   const timelineSource = {
     'otw-load': null,
     'sampai-load': loadStop?.arrivedSource || null,
     'menuju-unload': lastDeparted?.departedSource || loadStop?.departedSource || null,
     'sampai-unload': lastUnloadArrived?.arrivedSource || null,
-    selesai: isClosed ? 'tms-status' : null,
+    selesai: isClosed ? 'tms-status' : finalStop?.departedSource || null,
   };
   const timelineLocation = {
-    'otw-load': loadStop?.stop?.name || '',
-    'sampai-load': loadStop?.stop?.name || '',
-    'menuju-unload': transitTarget?.stop?.name || lastUnloadArrived?.stop?.name || finalStop?.stop?.name || '',
-    'sampai-unload': lastUnloadArrived?.stop?.name || finalStop?.stop?.name || '',
-    selesai: finalStop?.stop?.name || '',
+    'otw-load': loadStop?.stop?.taskAddress || loadStop?.stop?.name || '',
+    'sampai-load': loadStop?.stop?.taskAddress || loadStop?.stop?.name || '',
+    'menuju-unload': transitTarget?.stop?.taskAddress || lastUnloadArrived?.stop?.taskAddress || finalStop?.stop?.taskAddress || '',
+    'sampai-unload': lastUnloadArrived?.stop?.taskAddress || finalStop?.stop?.taskAddress || '',
+    selesai: finalStop?.stop?.taskAddress || '',
   };
   const activeIndex = Math.max(0, stepOrder.indexOf(currentKey));
   const steps = stepOrder.map(function (key, index) {
