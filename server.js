@@ -1627,7 +1627,8 @@ function serializeAccountStateForDisk(accountState) {
       lastFetchCompletedAt: unitState.lastFetchCompletedAt,
       lastSuccessAt: unitState.lastSuccessAt,
       lastError: unitState.lastError,
-      records: unitState.records,
+      // Records deliberately omitted to prevent Postgres app_state payload from bloating
+      // to 20MB+, causing Query Read Timeouts and Pool Exhaustion.
     };
   }
 
@@ -9381,22 +9382,20 @@ async function runPollCycle(trigger) {
     console.log(`[Poll]   📋 ${info.unitLabel} | JO: ${info.jobOrderId} | severity: ${info.severity}`);
   }
 
-  // Separate units into TMS (sequential) and non-TMS (parallel)
+  // Only fetch TMS units (skip others exactly as user requested)
+  // otherUnitsQueue logic removed entirely to avoid Solofleet limit & postgres timeouts.
   const tmsUnitsQueue = []; // [{account, unit, tmsInfo}]
-  const otherUnitsQueue = []; // [{account, unit}]
   for (const account of runnableAccounts) {
     for (const unit of account.units) {
       const normalizedId = String(unit.id || '').trim().toUpperCase();
       const tmsInfo = activeTmsUnits.get(normalizedId);
       if (tmsInfo) {
         tmsUnitsQueue.push({ account, unit, tmsInfo });
-      } else {
-        otherUnitsQueue.push({ account, unit });
       }
     }
   }
 
-  state.runtime.lastRunMessage = `Running ${trigger} poll: ${tmsUnitsQueue.length} trip monitor unit(s) [sequential 20s], ${otherUnitsQueue.length} other unit(s) [parallel].`;
+  state.runtime.lastRunMessage = `Running ${trigger} poll: ${tmsUnitsQueue.length} trip monitor unit(s) [sequential 20s delay]. Remaining non-JO units skipped.`;
   saveState();
 
   // === PHASE 1: Refresh fleet snapshots (parallel, fast) ===
@@ -9428,7 +9427,8 @@ async function runPollCycle(trigger) {
       console.log(`[Poll TMS] Nopol: ${unitLabel}`);
       console.log(`[Poll TMS] JO: ${joId} | Severity: ${tmsInfo.severity}`);
       state.runtime.lastRunMessage = `[TMS ${i + 1}/${tmsUnitsQueue.length}] Fetching ${unitLabel} (${joId})...`;
-      saveState();
+      // Intentionally NOT calling saveState() here to save DB write pressure. 
+      // Memory state is enough for /api/status.
 
       // Get status BEFORE fetch
       const unitStateBefore = accountState.units[unit.id];
@@ -9485,29 +9485,11 @@ async function runPollCycle(trigger) {
       if (i < tmsUnitsQueue.length - 1) {
         console.log(`[Poll TMS] Waiting ${POLL_UNIT_DELAY_MS / 1000}s before next TMS unit...`);
         state.runtime.lastRunMessage = `[TMS ${i + 1}/${tmsUnitsQueue.length}] Done ${unitLabel}. Waiting ${POLL_UNIT_DELAY_MS / 1000}s...`;
-        saveState();
+        // Intentionally NOT calling saveState() here.
         await new Promise(function (resolve) { setTimeout(resolve, POLL_UNIT_DELAY_MS); });
       }
     }
     console.log(`[Poll] ====== PHASE 2 DONE: ${successCount} OK, ${failureCount} FAIL ======\n`);
-  }
-
-  // === PHASE 3: Parallel fetch for OTHER units (fast, no delay) ===
-  if (otherUnitsQueue.length > 0) {
-    console.log(`[Poll] ====== PHASE 3: OTHER UNITS (${otherUnitsQueue.length} unit, parallel) ======`);
-    state.runtime.lastRunMessage = `Fetching ${otherUnitsQueue.length} other unit(s) in parallel...`;
-    saveState();
-
-    const parallelSettled = await Promise.allSettled(otherUnitsQueue.map(function (entry) {
-      const accountState = ensureAccountState(entry.account.id);
-      return pollSingleUnit(entry.account, accountState, entry.unit);
-    }));
-
-    const parallelSuccess = parallelSettled.filter(function (item) { return item.status === 'fulfilled'; }).length;
-    const parallelFail = parallelSettled.length - parallelSuccess;
-    successCount += parallelSuccess;
-    failureCount += parallelFail;
-    console.log(`[Poll] ====== PHASE 3 DONE: ${parallelSuccess} OK, ${parallelFail} FAIL ======\n`);
   }
 
   const finishedAt = Date.now();
@@ -9515,8 +9497,8 @@ async function runPollCycle(trigger) {
   state.runtime.lastRunFinishedAt = new Date(finishedAt).toISOString();
   state.runtime.lastRunDurationMs = finishedAt - startedAt;
   state.runtime.lastRunMessage = failureCount
-    ? `Poll done: TMS ${tmsUnitsQueue.length} (seq) + other ${otherUnitsQueue.length} (par) = ${successCount} ok, ${failureCount} fail. ${Math.round((finishedAt - startedAt) / 1000)}s.`
-    : `Poll done: TMS ${tmsUnitsQueue.length} (seq) + other ${otherUnitsQueue.length} (par) = ${successCount} ok. ${Math.round((finishedAt - startedAt) / 1000)}s.`;
+    ? `Poll done: TMS ${tmsUnitsQueue.length} units = ${successCount} ok, ${failureCount} fail. ${Math.round((finishedAt - startedAt) / 1000)}s.`
+    : `Poll done: TMS ${tmsUnitsQueue.length} units = ${successCount} ok. ${Math.round((finishedAt - startedAt) / 1000)}s.`;
 
   recomputeAllAnalyses();
   for (const account of runnableAccounts) {
