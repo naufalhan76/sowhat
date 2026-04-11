@@ -8876,19 +8876,24 @@ async function pollSingleUnit(accountConfig, accountState, unit) {
   unitState.label = unit.label;
   unitState.lastFetchStartedAt = new Date().toISOString();
   unitState.lastError = null;
+  const prevRecordCount = unitState.records?.length || 0;
 
   try {
     const fetched = await fetchUnitData(accountConfig, unit);
     const now = Date.now();
+    const fetchedRecordCount = fetched.records?.length || 0;
     unitState.vehicle = fetched.vehicle || unitState.vehicle || unit.label || unit.id;
     unitState.records = mergeRecords(unitState.records, fetched.records, now);
     unitState.lastFetchCompletedAt = new Date().toISOString();
     unitState.lastSuccessAt = unitState.lastFetchCompletedAt;
     unitState.analysis = buildAnalysisFromRecords(unitState);
+    const afterRecordCount = unitState.records?.length || 0;
+    console.log(`[PollUnit] ${unit.label || unit.id}: before=${prevRecordCount}, fetched=${fetchedRecordCount}, after_merge=${afterRecordCount}`);
   } catch (error) {
     unitState.lastFetchCompletedAt = new Date().toISOString();
     unitState.lastError = error.message;
     unitState.analysis = buildAnalysisFromRecords(unitState);
+    console.log(`[PollUnit] ${unit.label || unit.id}: FETCH ERROR (had ${prevRecordCount} records before) - ${error.message}`);
     throw error;
   }
 }
@@ -9334,7 +9339,7 @@ async function runPollCycle(trigger) {
   const totalUnitCount = runnableAccounts.reduce(function (sum, account) {
     return sum + account.units.length;
   }, 0);
-  state.runtime.lastRunMessage = `Running ${trigger} poll for ${totalUnitCount} unit(s) across ${runnableAccounts.length} account(s).`;
+  state.runtime.lastRunMessage = `Running ${trigger} poll for ${totalUnitCount} unit(s) across ${runnableAccounts.length} account(s) [SEQUENTIAL MODE, 20s delay per unit].`;
   saveState();
 
   const refreshSettled = await Promise.allSettled(runnableAccounts.map(function (account) {
@@ -9348,22 +9353,55 @@ async function runPollCycle(trigger) {
     }
   }
 
-  const settled = await Promise.allSettled(runnableAccounts.flatMap(function (account) {
-    const accountState = ensureAccountState(account.id);
-    return account.units.map(function (unit) {
-      return pollSingleUnit(account, accountState, unit);
-    });
-  }));
+  // === SEQUENTIAL UNIT FETCHING WITH 20-SECOND DELAY ===
+  const POLL_UNIT_DELAY_MS = 20000;
+  let successCount = 0;
+  let failureCount = 0;
+  let unitIndex = 0;
 
-  const successCount = settled.filter(function (item) { return item.status === 'fulfilled'; }).length;
-  const failureCount = settled.length - successCount;
+  for (const account of runnableAccounts) {
+    const accountState = ensureAccountState(account.id);
+    for (const unit of account.units) {
+      unitIndex += 1;
+      const unitLabel = unit.label || unit.id;
+      console.log(`[Poll Sequential] [${unitIndex}/${totalUnitCount}] Fetching unit: ${unitLabel} (account: ${account.id})...`);
+      state.runtime.lastRunMessage = `[${unitIndex}/${totalUnitCount}] Fetching ${unitLabel}...`;
+      saveState();
+
+      try {
+        await pollSingleUnit(account, accountState, unit);
+        const unitState = accountState.units[unit.id];
+        const recordCount = unitState?.records?.length || 0;
+        if (recordCount > 0) {
+          const oldest = unitState.records[0];
+          const newest = unitState.records[recordCount - 1];
+          console.log(`[Poll Sequential] ✅ ${unitLabel}: ${recordCount} record points OK (oldest: ${new Date(oldest.timestamp).toLocaleString()}, newest: ${new Date(newest.timestamp).toLocaleString()})`);
+        } else {
+          console.log(`[Poll Sequential] ⚠️ ${unitLabel}: Fetch succeeded but 0 record points found!`);
+        }
+        successCount += 1;
+      } catch (error) {
+        console.log(`[Poll Sequential] ❌ ${unitLabel}: FAILED - ${error.message}`);
+        failureCount += 1;
+      }
+
+      // Wait 20 seconds before next unit (skip delay after last unit)
+      if (unitIndex < totalUnitCount) {
+        console.log(`[Poll Sequential] Waiting ${POLL_UNIT_DELAY_MS / 1000}s before next unit...`);
+        state.runtime.lastRunMessage = `[${unitIndex}/${totalUnitCount}] Done ${unitLabel}. Waiting ${POLL_UNIT_DELAY_MS / 1000}s...`;
+        saveState();
+        await new Promise(function (resolve) { setTimeout(resolve, POLL_UNIT_DELAY_MS); });
+      }
+    }
+  }
+
   const finishedAt = Date.now();
 
   state.runtime.lastRunFinishedAt = new Date(finishedAt).toISOString();
   state.runtime.lastRunDurationMs = finishedAt - startedAt;
   state.runtime.lastRunMessage = failureCount
-    ? `Polling selesai: ${successCount} sukses, ${failureCount} gagal.`
-    : `Polling selesai: ${successCount} unit sukses.`;
+    ? `Polling selesai (sequential): ${successCount} sukses, ${failureCount} gagal. Total ${Math.round((finishedAt - startedAt) / 1000)}s.`
+    : `Polling selesai (sequential): ${successCount} unit sukses. Total ${Math.round((finishedAt - startedAt) / 1000)}s.`;
 
   recomputeAllAnalyses();
   for (const account of runnableAccounts) {
