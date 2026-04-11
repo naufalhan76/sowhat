@@ -9321,6 +9321,39 @@ async function syncAstroSnapshots(rangeStartMs, rangeEndMs, options) {
   };
 }
 
+async function getActiveTripMonitorUnitIds() {
+  // Query tms_monitor_rows for units with active JOs (severity != 'no-job-order' and != 'unmatched')
+  try {
+    if (!getPostgresConfig().enabled) return new Map();
+    const window = buildTmsMonitorWindow(Date.now());
+    const result = await postgresQuery(
+      `select distinct unit_id, unit_label, job_order_id, severity, metadata
+       from tms_monitor_rows
+       where day >= $1 and day <= $2
+         and severity not in ('no-job-order', 'unmatched')
+         and unit_id is not null and unit_id != ''`,
+      [window.startDay, window.endDay]
+    );
+    const map = new Map();
+    for (const row of result.rows || []) {
+      const uid = String(row.unit_id || '').trim();
+      if (uid) {
+        map.set(uid.toUpperCase(), {
+          unitId: uid,
+          unitLabel: row.unit_label || uid,
+          jobOrderId: row.job_order_id || '',
+          severity: row.severity || 'normal',
+          metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+        });
+      }
+    }
+    return map;
+  } catch (err) {
+    console.error('[Poll] Failed to query active trip monitor units:', err.message);
+    return new Map();
+  }
+}
+
 async function runPollCycle(trigger) {
   if (pollInFlight) {
     return { skipped: true, message: 'Polling already in progress.' };
@@ -9339,9 +9372,34 @@ async function runPollCycle(trigger) {
   const totalUnitCount = runnableAccounts.reduce(function (sum, account) {
     return sum + account.units.length;
   }, 0);
-  state.runtime.lastRunMessage = `Running ${trigger} poll for ${totalUnitCount} unit(s) across ${runnableAccounts.length} account(s) [SEQUENTIAL MODE, 20s delay per unit].`;
+
+  // === PHASE 0: Identify trip monitor units with active JOs ===
+  const activeTmsUnits = await getActiveTripMonitorUnitIds();
+  const tmsUnitIds = new Set(activeTmsUnits.keys());
+  console.log(`[Poll] === ACTIVE TRIP MONITOR UNITS: ${tmsUnitIds.size} ===`);
+  for (const [key, info] of activeTmsUnits) {
+    console.log(`[Poll]   📋 ${info.unitLabel} | JO: ${info.jobOrderId} | severity: ${info.severity}`);
+  }
+
+  // Separate units into TMS (sequential) and non-TMS (parallel)
+  const tmsUnitsQueue = []; // [{account, unit, tmsInfo}]
+  const otherUnitsQueue = []; // [{account, unit}]
+  for (const account of runnableAccounts) {
+    for (const unit of account.units) {
+      const normalizedId = String(unit.id || '').trim().toUpperCase();
+      const tmsInfo = activeTmsUnits.get(normalizedId);
+      if (tmsInfo) {
+        tmsUnitsQueue.push({ account, unit, tmsInfo });
+      } else {
+        otherUnitsQueue.push({ account, unit });
+      }
+    }
+  }
+
+  state.runtime.lastRunMessage = `Running ${trigger} poll: ${tmsUnitsQueue.length} trip monitor unit(s) [sequential 20s], ${otherUnitsQueue.length} other unit(s) [parallel].`;
   saveState();
 
+  // === PHASE 1: Refresh fleet snapshots (parallel, fast) ===
   const refreshSettled = await Promise.allSettled(runnableAccounts.map(function (account) {
     return refreshFleetSnapshot(account.id);
   }));
@@ -9353,46 +9411,103 @@ async function runPollCycle(trigger) {
     }
   }
 
-  // === SEQUENTIAL UNIT FETCHING WITH 20-SECOND DELAY ===
-  const POLL_UNIT_DELAY_MS = 20000;
   let successCount = 0;
   let failureCount = 0;
-  let unitIndex = 0;
 
-  for (const account of runnableAccounts) {
-    const accountState = ensureAccountState(account.id);
-    for (const unit of account.units) {
-      unitIndex += 1;
+  // === PHASE 2: Sequential fetch for TRIP MONITOR units only (20s delay) ===
+  const POLL_UNIT_DELAY_MS = 20000;
+  if (tmsUnitsQueue.length > 0) {
+    console.log(`[Poll] ====== PHASE 2: TRIP MONITOR UNITS (${tmsUnitsQueue.length} unit, sequential 20s delay) ======`);
+    for (let i = 0; i < tmsUnitsQueue.length; i++) {
+      const { account, unit, tmsInfo } = tmsUnitsQueue[i];
+      const accountState = ensureAccountState(account.id);
       const unitLabel = unit.label || unit.id;
-      console.log(`[Poll Sequential] [${unitIndex}/${totalUnitCount}] Fetching unit: ${unitLabel} (account: ${account.id})...`);
-      state.runtime.lastRunMessage = `[${unitIndex}/${totalUnitCount}] Fetching ${unitLabel}...`;
+      const joId = tmsInfo.jobOrderId || '?';
+
+      console.log(`\n[Poll TMS] [${i + 1}/${tmsUnitsQueue.length}] ────────────────────────────────`);
+      console.log(`[Poll TMS] Nopol: ${unitLabel}`);
+      console.log(`[Poll TMS] JO: ${joId} | Severity: ${tmsInfo.severity}`);
+      state.runtime.lastRunMessage = `[TMS ${i + 1}/${tmsUnitsQueue.length}] Fetching ${unitLabel} (${joId})...`;
       saveState();
+
+      // Get status BEFORE fetch
+      const unitStateBefore = accountState.units[unit.id];
+      const recordsBefore = unitStateBefore?.records?.length || 0;
 
       try {
         await pollSingleUnit(account, accountState, unit);
-        const unitState = accountState.units[unit.id];
-        const recordCount = unitState?.records?.length || 0;
-        if (recordCount > 0) {
-          const oldest = unitState.records[0];
-          const newest = unitState.records[recordCount - 1];
-          console.log(`[Poll Sequential] ✅ ${unitLabel}: ${recordCount} record points OK (oldest: ${new Date(oldest.timestamp).toLocaleString()}, newest: ${new Date(newest.timestamp).toLocaleString()})`);
+        const unitStateAfter = accountState.units[unit.id];
+        const recordCount = unitStateAfter?.records?.length || 0;
+
+        console.log(`[Poll TMS] Records: before=${recordsBefore}, after=${recordCount}`);
+
+        // Now evaluate shipping status with the fresh data
+        const tmsConfig = getTmsConfig();
+        const now = Date.now();
+        const fleetIndex = buildFleetPlateIndex(now);
+        const normalizedId = normalizeUnitKey(unit.id);
+        const fleetContext = fleetIndex.byRowKey.get(`${account.id}::${unit.id}`) || null;
+        const fleetRow = fleetContext?.row || null;
+        const vehicleSnapshot = accountState.fleet.vehicles[normalizedId] || null;
+
+        // Get headline JO from metadata
+        const headlineJo = tmsInfo.metadata?.headlineJobOrder || null;
+        if (headlineJo) {
+          const stops = getTripMonitorSnapshotStops(headlineJo);
+          const progress = buildTripMonitorStopProgress(headlineJo, fleetRow, unitStateAfter, {
+            radiusMeters: TRIP_MONITOR_STATUS_RADIUS_METERS,
+            now,
+          });
+          console.log(`[Poll TMS] POD Points (${stops.length} titik):`);
+          for (let s = 0; s < stops.length; s++) {
+            const stop = stops[s];
+            const prog = progress[s] || {};
+            const arrivedLabel = prog.arrivedAt ? new Date(prog.arrivedAt).toLocaleString() : '❌ belum';
+            const departedLabel = prog.departedAt ? new Date(prog.departedAt).toLocaleString() : '-';
+            const distLabel = prog.distanceMeters !== null ? `${Math.round(prog.distanceMeters)}m` : '?';
+            console.log(`[Poll TMS]   [${s}] ${stop.taskType.toUpperCase()} "${stop.taskAddress || stop.name}" | arrived: ${arrivedLabel} (${prog.arrivedSource || '-'}) | departed: ${departedLabel} | dist: ${distLabel} | inside: ${prog.insideRadius ? 'YES' : 'no'}`);
+          }
+
+          const shippingStatus = buildTripMonitorShippingStatus(headlineJo, fleetRow, unitStateAfter, tmsConfig, now);
+          console.log(`[Poll TMS] ➜ Status: ${shippingStatus.label} (source: ${shippingStatus.source || '-'})`);
+          console.log(`[Poll TMS]   Detail: ${shippingStatus.detail || '-'}`);
         } else {
-          console.log(`[Poll Sequential] ⚠️ ${unitLabel}: Fetch succeeded but 0 record points found!`);
+          console.log(`[Poll TMS] ⚠️ Tidak ada headline JO di metadata, skip geofence eval`);
         }
+
         successCount += 1;
       } catch (error) {
-        console.log(`[Poll Sequential] ❌ ${unitLabel}: FAILED - ${error.message}`);
+        console.log(`[Poll TMS] ❌ ${unitLabel}: FAILED - ${error.message}`);
         failureCount += 1;
       }
 
-      // Wait 20 seconds before next unit (skip delay after last unit)
-      if (unitIndex < totalUnitCount) {
-        console.log(`[Poll Sequential] Waiting ${POLL_UNIT_DELAY_MS / 1000}s before next unit...`);
-        state.runtime.lastRunMessage = `[${unitIndex}/${totalUnitCount}] Done ${unitLabel}. Waiting ${POLL_UNIT_DELAY_MS / 1000}s...`;
+      // Wait 20 seconds before next TMS unit
+      if (i < tmsUnitsQueue.length - 1) {
+        console.log(`[Poll TMS] Waiting ${POLL_UNIT_DELAY_MS / 1000}s before next TMS unit...`);
+        state.runtime.lastRunMessage = `[TMS ${i + 1}/${tmsUnitsQueue.length}] Done ${unitLabel}. Waiting ${POLL_UNIT_DELAY_MS / 1000}s...`;
         saveState();
         await new Promise(function (resolve) { setTimeout(resolve, POLL_UNIT_DELAY_MS); });
       }
     }
+    console.log(`[Poll] ====== PHASE 2 DONE: ${successCount} OK, ${failureCount} FAIL ======\n`);
+  }
+
+  // === PHASE 3: Parallel fetch for OTHER units (fast, no delay) ===
+  if (otherUnitsQueue.length > 0) {
+    console.log(`[Poll] ====== PHASE 3: OTHER UNITS (${otherUnitsQueue.length} unit, parallel) ======`);
+    state.runtime.lastRunMessage = `Fetching ${otherUnitsQueue.length} other unit(s) in parallel...`;
+    saveState();
+
+    const parallelSettled = await Promise.allSettled(otherUnitsQueue.map(function (entry) {
+      const accountState = ensureAccountState(entry.account.id);
+      return pollSingleUnit(entry.account, accountState, entry.unit);
+    }));
+
+    const parallelSuccess = parallelSettled.filter(function (item) { return item.status === 'fulfilled'; }).length;
+    const parallelFail = parallelSettled.length - parallelSuccess;
+    successCount += parallelSuccess;
+    failureCount += parallelFail;
+    console.log(`[Poll] ====== PHASE 3 DONE: ${parallelSuccess} OK, ${parallelFail} FAIL ======\n`);
   }
 
   const finishedAt = Date.now();
@@ -9400,8 +9515,8 @@ async function runPollCycle(trigger) {
   state.runtime.lastRunFinishedAt = new Date(finishedAt).toISOString();
   state.runtime.lastRunDurationMs = finishedAt - startedAt;
   state.runtime.lastRunMessage = failureCount
-    ? `Polling selesai (sequential): ${successCount} sukses, ${failureCount} gagal. Total ${Math.round((finishedAt - startedAt) / 1000)}s.`
-    : `Polling selesai (sequential): ${successCount} unit sukses. Total ${Math.round((finishedAt - startedAt) / 1000)}s.`;
+    ? `Poll done: TMS ${tmsUnitsQueue.length} (seq) + other ${otherUnitsQueue.length} (par) = ${successCount} ok, ${failureCount} fail. ${Math.round((finishedAt - startedAt) / 1000)}s.`
+    : `Poll done: TMS ${tmsUnitsQueue.length} (seq) + other ${otherUnitsQueue.length} (par) = ${successCount} ok. ${Math.round((finishedAt - startedAt) / 1000)}s.`;
 
   recomputeAllAnalyses();
   for (const account of runnableAccounts) {
