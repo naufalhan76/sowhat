@@ -10771,6 +10771,51 @@ module.exports = {
   initializeStorage,
 };
 
+async function hydrateTmsMonitorHistory() {
+  if (!getPostgresConfig().enabled) return;
+  try {
+    console.log('[TMS Hydration] Memulai pengecekan histori GPS yang kosong pada background...');
+    const result = await postgresQuery(`
+      select unit_key, unit_id, unit_label
+      from tms_monitor_rows
+      where severity != 'no-job-order'
+      and board_status != 'closed'
+      group by unit_key, unit_id, unit_label
+    `);
+    const now = Date.now();
+    let hydratedCount = 0;
+    
+    for (const row of result.rows) {
+      if (!row.unit_key || !row.unit_id) continue;
+      const accountId = row.unit_key.split('::')[0] || 'primary';
+      const unitId = row.unit_id;
+      
+      const accountConfig = getAccountConfigById(accountId);
+      if (!accountConfig) continue;
+      
+      const state = ensureAccountState(accountId);
+      const unitState = state.units[unitId] || normalizeUnitState(unitId, { label: row.unit_label || unitId, vehicle: row.unit_label || unitId });
+      state.units[unitId] = unitState;
+      
+      if (!unitState.records || unitState.records.length < 50) {
+         const endMs = now;
+         const startMs = now - (3 * 24 * 60 * 60 * 1000); // Tarik 3 hari ke belakang
+         console.log(`[TMS Hydration] Mengisi data historis untuk ${row.unit_label || row.unit_key}...`);
+         try {
+           const history = await fetchUnitHistory(accountConfig, unitId, startMs, endMs);
+           unitState.records = mergeRecords(unitState.records || [], history.records || [], now);
+           hydratedCount++;
+         } catch (e) {
+           console.log(`[TMS Hydration] Gagal menarik histori ${row.unit_label || row.unit_key}: ${e.message}`);
+         }
+      }
+    }
+    console.log(`[TMS Hydration] Selesai. Total unit yang di-hydrate: ${hydratedCount}`);
+  } catch (err) {
+    console.error('[TMS Hydration] Gagal menjalankan check:', err.message);
+  }
+}
+
 if (require.main === module) {
   const server = http.createServer(requestHandler);
 
@@ -10783,6 +10828,7 @@ if (require.main === module) {
     try {
       await storageInitializationPromise;
       scheduleNextTmsSync();
+      hydrateTmsMonitorHistory().catch(function (error) { console.error('[TMS Hydration Error]', error); });
       if (config && config.autoStart) {
         startPolling().catch(function (error) {
           state.runtime.lastRunMessage = error.message;
