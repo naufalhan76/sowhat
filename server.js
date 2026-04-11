@@ -5005,10 +5005,17 @@ function chooseHeadlineSnapshot(items, fleetRow, unitState, tmsConfig, now) {
   const scored = items.map(function (item) {
     const incidents = evaluateTmsIncidents(item, fleetRow, unitState, tmsConfig, now);
     const severityScore = incidents.some(function (incident) { return incident.severity === 'critical'; }) ? 2 : incidents.length ? 1 : 0;
-    const etaScore = -(item.etaDestination || item.etaOrigin || 0);
-    return { item, incidents, severityScore, etaScore };
+    
+    // Prioritaskan JO terbaru berdasarkan timestamp eta
+    const timeScore = item.etaOrigin || item.etaDestination || 0;
+    
+    return { item, incidents, severityScore, timeScore };
   }).sort(function (left, right) {
-    return right.severityScore - left.severityScore || right.etaScore - left.etaScore;
+    if (right.severityScore !== left.severityScore) {
+      return right.severityScore - left.severityScore;
+    }
+    // Jika severity sama, pilih yang timeScore nya lebih besar (terbaru)
+    return right.timeScore - left.timeScore;
   });
   return scored[0] || null;
 }
