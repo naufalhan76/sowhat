@@ -4602,72 +4602,109 @@ function getTripMonitorSnapshotStops(snapshot) {
   }).filter(function (stop) { return stop.taskAddress || stop.latitude !== null || stop.longitude !== null; });
 }
 
-function buildTripMonitorStopProgress(snapshot, fleetRow, options) {
+function extractGeofenceVisitStats(records, stop, radius) {
+  if (stop.latitude === null || stop.longitude === null) return { firstInside: null, lastInside: null };
+  const sLat = toNumber(stop.latitude);
+  const sLng = toNumber(stop.longitude);
+  if (sLat === null || sLng === null) return { firstInside: null, lastInside: null };
+
+  let firstInside = null;
+  let lastInside = null;
+  for (const record of records) {
+    const lat = toNumber(record.latitude);
+    const lng = toNumber(record.longitude);
+    const dist = distanceMetersBetween(lat, lng, sLat, sLng);
+    if (dist !== null && dist <= radius) {
+      if (!firstInside) firstInside = record;
+      lastInside = record;
+    }
+  }
+  return { firstInside, lastInside };
+}
+
+function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   const stops = getTripMonitorSnapshotStops(snapshot);
-  const workflowLines = Array.isArray(snapshot?.workflowLines) ? snapshot.workflowLines : [];
   const radius = Math.max(50, Number(options?.radiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters));
   const now = Number(options?.now || Date.now());
   const liveLat = toNumber(fleetRow?.latitude);
   const liveLng = toNumber(fleetRow?.longitude);
+  const { records } = buildRealtimeRecordSeries(unitState, snapshot, now);
+
+  const jobId = snapshot.jobOrderId || 'unknown';
+  if (unitState) {
+    unitState.tmsGeofence = unitState.tmsGeofence || {};
+    for (const key of Object.keys(unitState.tmsGeofence)) {
+      if (key !== jobId) {
+        delete unitState.tmsGeofence[key];
+      }
+    }
+    unitState.tmsGeofence[jobId] = unitState.tmsGeofence[jobId] || {};
+  }
+  const geoMemory = unitState?.tmsGeofence?.[jobId] || {};
+
   return stops.map(function (stop, index) {
-    const arrivedLine = findWorkflowStopStatus(workflowLines, stop, /\btiba\b/i);
-    const departedLine = findWorkflowStopStatus(workflowLines, stop, /\bberangkat\b/i);
-    const startedLine = findWorkflowStopStatus(
-      workflowLines,
-      stop,
-      stop.taskType === 'load' ? /\bmulai muat\b/i : /\bmulai bongkar\b/i,
-    );
-    const completedLine = findWorkflowStopStatus(
-      workflowLines,
-      stop,
-      stop.taskType === 'load' ? /\bselesai muat\b/i : /\bselesai bongkar\b/i,
-    );
-    const arrivedAt = toTimestampMaybe(arrivedLine?.checked_time) ?? stop.ata ?? null;
-    const departedAt = toTimestampMaybe(departedLine?.checked_time) ?? stop.atd ?? null;
-    const startedAt = toTimestampMaybe(startedLine?.checked_time) ?? null;
-    const completedAt = toTimestampMaybe(completedLine?.checked_time) ?? null;
     const distanceMeters = distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude);
     const insideRadius = distanceMeters !== null && distanceMeters <= radius;
-    const inferredArrivedAt = arrivedAt ?? ((insideRadius && departedAt === null) ? now : null);
-    const arrivalSource = arrivedAt !== null
-      ? (arrivedLine ? 'workflow' : 'history')
-      : (insideRadius && departedAt === null ? 'geofence' : null);
-    const departedSource = departedAt !== null
-      ? (departedLine ? 'workflow' : 'history')
-      : null;
-    const completedSource = completedAt !== null
-      ? (completedLine ? 'workflow' : 'history')
-      : null;
-    const observable = stop.latitude !== null
-      && stop.longitude !== null
-      || arrivedAt !== null
-      || departedAt !== null
-      || startedAt !== null
-      || completedAt !== null
-      || stop.eta !== null
-      || stop.etd !== null;
+    const { firstInside, lastInside } = extractGeofenceVisitStats(records, stop, radius);
+
+    let arrivedAt = null;
+    let departedAt = null;
+    let arrivalSource = null;
+    let departedSource = null;
+
+    if (geoMemory[index]?.arrivedAt) {
+      arrivedAt = geoMemory[index].arrivedAt;
+      arrivalSource = geoMemory[index].arrivedSource || 'geofence-memory';
+    } else if (firstInside) {
+      arrivedAt = firstInside.timestamp;
+      arrivalSource = 'geofence-history';
+    } else if (insideRadius) {
+      arrivedAt = now;
+      arrivalSource = 'geofence';
+    }
+
+    if (geoMemory[index]?.departedAt) {
+      departedAt = geoMemory[index].departedAt;
+      departedSource = geoMemory[index].departedSource || 'geofence-memory';
+    } else if (lastInside && !insideRadius) {
+      departedAt = lastInside.timestamp;
+      departedSource = 'geofence-history';
+    }
+
+    if (unitState) {
+      geoMemory[index] = geoMemory[index] || {};
+      if (arrivedAt !== null && !geoMemory[index].arrivedAt) {
+        geoMemory[index].arrivedAt = arrivedAt;
+        geoMemory[index].arrivedSource = arrivalSource;
+      }
+      if (departedAt !== null && !geoMemory[index].departedAt) {
+        geoMemory[index].departedAt = departedAt;
+        geoMemory[index].departedSource = departedSource;
+      }
+    }
+
     return {
       index,
       stop,
       arrivedAt,
       arrivedSource: arrivalSource,
-      inferredArrivedAt,
+      inferredArrivedAt: arrivedAt,
       departedAt,
       departedSource,
-      startedAt,
-      startedSource: startedAt !== null ? (startedLine ? 'workflow' : 'history') : null,
-      completedAt,
-      completedSource,
+      startedAt: null,
+      startedSource: null,
+      completedAt: null,
+      completedSource: null,
       distanceMeters,
       insideRadius,
-      observable,
-      isCurrentStop: insideRadius || (inferredArrivedAt !== null && departedAt === null && (distanceMeters === null || distanceMeters <= Math.max(1000, radius * 3))),
+      observable: stop.latitude !== null && stop.longitude !== null,
+      isCurrentStop: insideRadius || (arrivedAt !== null && departedAt === null && (distanceMeters === null || distanceMeters <= Math.max(1000, radius * 3))),
     };
   });
 }
 
-function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
-  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, {
+function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig, now) {
+  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, unitState, {
     radiusMeters: TRIP_MONITOR_STATUS_RADIUS_METERS,
     now,
   });
@@ -4694,7 +4731,7 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
           changedAt: null,
           source: null,
           locationName: '',
-          completed: index === 0 ? false : false,
+          completed: false,
           active: index === 0,
         };
       }),
@@ -4704,24 +4741,12 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
   const loadStop = progress[0] || null;
   const unloadEntries = progress.filter(function (entry) { return entry.stop.taskType === 'unload'; });
   const finalStop = unloadEntries[unloadEntries.length - 1] || progress[progress.length - 1] || null;
-  const finalFinishedAt = finalStop?.departedAt ?? finalStop?.completedAt ?? null;
-  const finalFinishedSource = finalStop?.departedAt !== null
-    ? finalStop?.departedSource
-    : finalStop?.completedAt !== null
-      ? finalStop?.completedSource
-      : null;
-  const currentUnload = unloadEntries.find(function (entry) {
-    return entry.isCurrentStop;
-  }) || null;
-  const lastDeparted = [...progress].reverse().find(function (entry) {
-    return entry.departedAt !== null;
-  }) || null;
-  const lastUnloadArrived = [...unloadEntries].reverse().find(function (entry) {
-    return entry.inferredArrivedAt !== null;
-  }) || null;
-  const transitTarget = lastDeparted
-    ? progress.find(function (entry) { return entry.index > lastDeparted.index; }) || null
-    : null;
+  const currentUnload = unloadEntries.find(function (entry) { return entry.isCurrentStop; }) || null;
+  const lastDeparted = [...progress].reverse().find(function (entry) { return entry.departedAt !== null; }) || null;
+  const lastUnloadArrived = [...unloadEntries].reverse().find(function (entry) { return entry.arrivedAt !== null; }) || null;
+  const transitTarget = lastDeparted ? progress.find(function (entry) { return entry.index > lastDeparted.index; }) || null : null;
+
+  const isClosed = String(snapshot.jobOrderStatus || '').toLowerCase() === 'closed';
 
   let currentKey = 'otw-load';
   let changedAt = null;
@@ -4729,24 +4754,24 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
   let detail = `Menuju ${loadStop?.stop?.name || 'lokasi load'}.`;
   let activeStopName = loadStop?.stop?.name || '';
 
-  if (finalFinishedAt !== null) {
+  if (isClosed) {
     currentKey = 'selesai';
-    changedAt = finalFinishedAt;
-    source = finalFinishedSource || 'history';
-    detail = `Selesai di ${finalStop?.stop?.name || 'unload terakhir'}.`;
+    changedAt = now;
+    source = 'tms-status';
+    detail = `Selesai di ${finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
     activeStopName = finalStop?.stop?.name || '';
   } else if (!loadStop?.departedAt) {
-    if (loadStop?.inferredArrivedAt !== null || loadStop?.startedAt !== null || loadStop?.completedAt !== null) {
+    if (loadStop?.arrivedAt !== null) {
       currentKey = 'sampai-load';
-      changedAt = loadStop?.inferredArrivedAt ?? loadStop?.startedAt ?? loadStop?.completedAt ?? null;
-      source = loadStop?.arrivedSource || loadStop?.startedSource || loadStop?.completedSource || 'geofence';
+      changedAt = loadStop.arrivedAt;
+      source = loadStop.arrivedSource || 'geofence';
       detail = `Sudah sampai di ${loadStop?.stop?.name || 'lokasi load'}.`;
       activeStopName = loadStop?.stop?.name || '';
     }
   } else if (currentUnload) {
     currentKey = 'sampai-unload';
-    changedAt = currentUnload.inferredArrivedAt ?? currentUnload.startedAt ?? currentUnload.completedAt ?? null;
-    source = currentUnload.arrivedSource || currentUnload.startedSource || currentUnload.completedSource || 'geofence';
+    changedAt = currentUnload.arrivedAt;
+    source = currentUnload.arrivedSource || 'geofence';
     detail = `Sudah sampai di ${currentUnload.stop?.name || 'lokasi unload'}.`;
     activeStopName = currentUnload.stop?.name || '';
   } else {
@@ -4759,17 +4784,17 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
 
   const timelineChangedAt = {
     'otw-load': null,
-    'sampai-load': loadStop?.inferredArrivedAt ?? loadStop?.startedAt ?? loadStop?.completedAt ?? null,
+    'sampai-load': loadStop?.arrivedAt ?? null,
     'menuju-unload': lastDeparted?.departedAt ?? loadStop?.departedAt ?? null,
-    'sampai-unload': lastUnloadArrived?.inferredArrivedAt ?? lastUnloadArrived?.startedAt ?? lastUnloadArrived?.completedAt ?? null,
-    selesai: finalFinishedAt,
+    'sampai-unload': lastUnloadArrived?.arrivedAt ?? null,
+    selesai: isClosed ? now : null,
   };
   const timelineSource = {
     'otw-load': null,
-    'sampai-load': loadStop?.arrivedSource || loadStop?.startedSource || loadStop?.completedSource || null,
+    'sampai-load': loadStop?.arrivedSource || null,
     'menuju-unload': lastDeparted?.departedSource || loadStop?.departedSource || null,
-    'sampai-unload': lastUnloadArrived?.arrivedSource || lastUnloadArrived?.startedSource || lastUnloadArrived?.completedSource || null,
-    selesai: finalFinishedSource,
+    'sampai-unload': lastUnloadArrived?.arrivedSource || null,
+    selesai: isClosed ? 'tms-status' : null,
   };
   const timelineLocation = {
     'otw-load': loadStop?.stop?.name || '',
@@ -4802,10 +4827,15 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, tmsConfig, now) {
   };
 }
 
-function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
-  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, {
+function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, unitState, tmsConfig, now) {
+  const isClosed = String(snapshot.jobOrderStatus || '').toLowerCase() === 'closed';
+  if (isClosed) {
+    return { isActive: false, phase: 'completed-final-unload', reason: 'Job Order sudah Closed.', lastCompletedStopIndex: 99, finalStopDeparted: true };
+  }
+
+  const progress = buildTripMonitorStopProgress(snapshot, fleetRow, unitState, {
     radiusMeters: Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters),
-    now: Date.now(),
+    now: now || Date.now(),
   });
   if (!progress.length) {
     return { isActive: false, phase: 'unknown', reason: 'Stop TMS belum tersedia.', lastCompletedStopIndex: 0, finalStopDeparted: false };
@@ -4826,7 +4856,7 @@ function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig) {
   }
   
   const loadStop = progress[0];
-  const hasDepartedLoad = loadStop?.departedAt !== null || (progress.length > 1 && (progress[1].arrivedAt !== null || (progress[1].distanceMeters !== null && progress[1].distanceMeters < 1000)));
+  const hasDepartedLoad = loadStop?.departedAt !== null;
   if (!hasDepartedLoad) {
     return {
       isActive: false,
@@ -4878,7 +4908,7 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const incidents = [];
   const radius = Number(tmsConfig?.geofenceRadiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters);
   const { taskList, workflowLines } = snapshot;
-  const temperatureGate = evaluateTripMonitorTemperatureGate(snapshot, fleetRow, tmsConfig);
+  const temperatureGate = evaluateTripMonitorTemperatureGate(snapshot, fleetRow, unitState, tmsConfig, now);
   const normalizedTempRange = normalizeTemperatureRange(snapshot?.tempMin, snapshot?.tempMax);
   const loadTask = taskList.find(function (task) { return String(task.task_type || '').toLowerCase() === 'load'; }) || taskList[0] || null;
   const unloadTasks = taskList.filter(function (task) { return String(task.task_type || '').toLowerCase() === 'unload'; });
@@ -5048,6 +5078,7 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
   const shippingStatus = buildTripMonitorShippingStatus(
     headline.item,
     fleetRow,
+    fleetContext?.unitState || null,
     tmsConfig,
     now,
   );
@@ -5150,6 +5181,7 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
     const shippingStatus = buildTripMonitorShippingStatus(
       headline.item,
       group.fleetContext?.row || null,
+      group.fleetContext?.unitState || null,
       tmsConfig,
       now,
     );
