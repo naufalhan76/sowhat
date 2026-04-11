@@ -5011,11 +5011,11 @@ function chooseHeadlineSnapshot(items, fleetRow, unitState, tmsConfig, now) {
     
     return { item, incidents, severityScore, timeScore };
   }).sort(function (left, right) {
-    if (right.severityScore !== left.severityScore) {
-      return right.severityScore - left.severityScore;
+    // Prioritaskan JO terbaru
+    if (right.timeScore !== left.timeScore) {
+      return right.timeScore - left.timeScore;
     }
-    // Jika severity sama, pilih yang timeScore nya lebih besar (terbaru)
-    return right.timeScore - left.timeScore;
+    return right.severityScore - left.severityScore;
   });
   return scored[0] || null;
 }
