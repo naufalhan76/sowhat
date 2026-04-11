@@ -4631,6 +4631,10 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   const { records } = buildRealtimeRecordSeries(unitState, snapshot, now);
 
   const jobId = snapshot.jobOrderId || 'unknown';
+  if (records.length > 0) {
+    console.log(`[TMS Geofence] Unit ${fleetRow?.label || snapshot?.unitId || '-'} (Job: ${jobId}) dievaluasi dengan ${records.length} titik GPS historis (Paling lama: ${new Date(records[0].timestamp).toLocaleString()})`);
+  }
+
   if (unitState) {
     unitState.tmsGeofence = unitState.tmsGeofence || {};
     for (const key of Object.keys(unitState.tmsGeofence)) {
@@ -4824,6 +4828,8 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
     detail,
     activeStopName,
     steps,
+    loadEta: loadStop?.stop?.eta ?? null,
+    unloadEtd: finalStop?.stop?.etd ?? null,
   };
 }
 

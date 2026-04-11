@@ -5339,6 +5339,11 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               <strong>Driver 1: {driver1Name}</strong>
               <div className="subtle-line">Driver 2: {driver2Name}</div>
             </div>
+            <div className="mini-metric trip-monitor-driver-metric">
+              <span>Schedule</span>
+              <strong>ETA Load: {formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
+              <div className="subtle-line">ETD Unload: {formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</div>
+            </div>
             <div className="mini-metric">
               <span>Status pengiriman</span>
               <strong>{shippingStatus?.label || '-'}</strong>
