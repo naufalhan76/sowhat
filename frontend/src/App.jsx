@@ -5314,24 +5314,24 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   return <div className="auth-modal-backdrop" onClick={onClose}>
     <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header">
-        <div className="trip-monitor-detail-header">
-          <div className="trip-monitor-detail-header-actions">
-            {fleetRow?.id ? <>
-              <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
-              <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
-              <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
-            </> : null}
-          </div>
-          <div className="trip-monitor-detail-header-info">
-            <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
-            <h2>{displayUnitLabel}</h2>
-            <p>{detail.customerName || '-'} | {routeSummary}</p>
-          </div>
-          <button type="button" className="trip-monitor-detail-close-x" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
+        <div>
+          <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
+          <h2>{displayUnitLabel}</h2>
+          <p>{detail.customerName || '-'} | {routeSummary}</p>
         </div>
       </CardHeader>
       <CardContent>
         {busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack">
+          <div className="trip-monitor-detail-actions-bar">
+            <div className="trip-monitor-detail-header-actions">
+              {fleetRow?.id ? <>
+                <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
+                <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
+                <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
+              </> : null}
+              <button type="button" className="trip-monitor-detail-close-x" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
+            </div>
+          </div>
           <div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary">
             <div className="mini-metric">
               <span>Severity</span>

@@ -5255,11 +5255,12 @@ textarea:focus {
   -webkit-overflow-scrolling: touch;
 }
 
-.trip-monitor-detail-header {
+.trip-monitor-detail-actions-bar {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .trip-monitor-detail-header-actions {
@@ -5267,12 +5268,6 @@ textarea:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
-}
-
-.trip-monitor-detail-header-info {
-  min-width: 0;
-  flex: 1;
 }
 
 .trip-monitor-detail-close-x {
@@ -5517,29 +5512,8 @@ textarea:focus {
     font-size: 13px;
   }
 
-  .trip-monitor-detail-header {
+  .trip-monitor-detail-actions-bar {
     flex-wrap: wrap;
-    gap: 10px;
-    position: relative;
-  }
-
-  .trip-monitor-detail-header-info {
-    order: 1;
-    width: 100%;
-    flex: unset;
-  }
-
-  .trip-monitor-detail-header-actions {
-    order: 2;
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .trip-monitor-detail-close-x {
-    order: 0;
-    position: absolute;
-    top: 14px;
-    right: 14px;
   }
 
   .trip-monitor-detail-panels {
