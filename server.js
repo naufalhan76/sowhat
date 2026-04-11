@@ -4604,23 +4604,29 @@ function getTripMonitorSnapshotStops(snapshot) {
 }
 
 function extractGeofenceVisitStats(records, stop, radius) {
-  if (stop.latitude === null || stop.longitude === null) return { firstInside: null, lastInside: null };
+  if (stop.latitude === null || stop.longitude === null) return { firstInside: null, lastInside: null, minDistance: null };
   const sLat = toNumber(stop.latitude);
   const sLng = toNumber(stop.longitude);
-  if (sLat === null || sLng === null) return { firstInside: null, lastInside: null };
+  if (sLat === null || sLng === null) return { firstInside: null, lastInside: null, minDistance: null };
 
   let firstInside = null;
   let lastInside = null;
+  let minDistance = null;
   for (const record of records) {
     const lat = toNumber(record.latitude);
     const lng = toNumber(record.longitude);
     const dist = distanceMetersBetween(lat, lng, sLat, sLng);
-    if (dist !== null && dist <= radius) {
-      if (!firstInside) firstInside = record;
-      lastInside = record;
+    if (dist !== null) {
+      if (minDistance === null || dist < minDistance) {
+        minDistance = dist;
+      }
+      if (dist <= radius) {
+        if (!firstInside) firstInside = record;
+        lastInside = record;
+      }
     }
   }
-  return { firstInside, lastInside };
+  return { firstInside, lastInside, minDistance };
 }
 
 function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
@@ -4650,7 +4656,7 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   return stops.map(function (stop, index) {
     const distanceMeters = distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude);
     const insideRadius = distanceMeters !== null && distanceMeters <= radius;
-    const { firstInside, lastInside } = extractGeofenceVisitStats(records, stop, radius);
+    const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(records, stop, radius);
 
     let arrivedAt = null;
     let departedAt = null;
@@ -4674,6 +4680,34 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
     } else if (lastInside && !insideRadius) {
       departedAt = lastInside.timestamp;
       departedSource = 'geofence-history';
+    }
+
+    if (arrivedAt === null) {
+      const wfArrived = findWorkflowStopStatus(snapshot.workflowLines, stop, /tiba|sampai|arrived/i);
+      if (wfArrived) {
+        arrivedAt = toTimestampMaybe(wfArrived.checked_time) || now;
+        arrivalSource = 'tms-workflow-tiba';
+      } else {
+        const wfStarted = findWorkflowStopStatus(snapshot.workflowLines, stop, /muat|bongkar|mulai/i);
+        if (wfStarted) {
+          arrivedAt = toTimestampMaybe(wfStarted.checked_time) || now;
+          arrivalSource = 'tms-workflow-mulai';
+        }
+      }
+    }
+
+    if (departedAt === null) {
+      const wfDeparted = findWorkflowStopStatus(snapshot.workflowLines, stop, /berangkat/i);
+      if (wfDeparted) {
+        departedAt = toTimestampMaybe(wfDeparted.checked_time) || now;
+        departedSource = 'tms-workflow-berangkat';
+      } else {
+        const isClosed = String(snapshot.jobOrderStatus || '').toLowerCase() === 'closed';
+        if (isClosed && stop.taskType === 'unload' && index === stops.length - 1) {
+          departedAt = now;
+          departedSource = 'tms-job-closed';
+        }
+      }
     }
 
     if (unitState) {
@@ -4702,6 +4736,7 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
       completedSource: null,
       distanceMeters,
       insideRadius,
+      historicalMinDistance: minDistance,
       observable: stop.latitude !== null && stop.longitude !== null,
       isCurrentStop: insideRadius || (arrivedAt !== null && departedAt === null && (distanceMeters === null || distanceMeters <= Math.max(1000, radius * 3))),
     };
@@ -9465,7 +9500,8 @@ async function runPollCycle(trigger) {
             const arrivedLabel = prog.arrivedAt ? new Date(prog.arrivedAt).toLocaleString() : '❌ belum';
             const departedLabel = prog.departedAt ? new Date(prog.departedAt).toLocaleString() : '-';
             const distLabel = prog.distanceMeters !== null ? `${Math.round(prog.distanceMeters)}m` : '?';
-            console.log(`[Poll TMS]   [${s}] ${stop.taskType.toUpperCase()} "${stop.taskAddress || stop.name}" | arrived: ${arrivedLabel} (${prog.arrivedSource || '-'}) | departed: ${departedLabel} | dist: ${distLabel} | inside: ${prog.insideRadius ? 'YES' : 'no'}`);
+            const histDistLabel = prog.historicalMinDistance !== null ? `${Math.round(prog.historicalMinDistance)}m` : '?';
+            console.log(`[Poll TMS]   [${s}] ${stop.taskType.toUpperCase()} "${stop.taskAddress || stop.name}" | arrived: ${arrivedLabel} (${prog.arrivedSource || '-'}) | departed: ${departedLabel} | dist: ${distLabel} | histMinDist: ${histDistLabel} | inside: ${prog.insideRadius ? 'YES' : 'no'}`);
           }
 
           const shippingStatus = buildTripMonitorShippingStatus(headlineJo, fleetRow, unitStateAfter, tmsConfig, now);
