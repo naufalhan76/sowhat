@@ -1540,44 +1540,46 @@ export default function App() {
   }, [astroRoutes]);
   const loadDashboard = async (syncConfig = false, quiet = false) => {
     if (!quiet) startBusy();
-    const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
-    const nextStatus = await api('/api/status');
-    if (!nextStatus.webAuth?.sessionUser) {
+    try {
+      const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
+      const nextStatus = await api('/api/status');
+      if (!nextStatus.webAuth?.sessionUser) {
+        startTransition(() => {
+          setStatus(nextStatus);
+          setReport(null);
+          setApiMonitor(null);
+          setWebSessionUser(null);
+          setRemoteResetLogs([]);
+          if (syncConfig || !loaded) {
+            setLoaded(true);
+          }
+        });
+        return;
+      }
+
+      const [nextReport, nextMonitor] = await Promise.all([api(`/api/report?${query.toString()}`), api('/api/monitor')]);
       startTransition(() => {
+        const nextActiveAccountId = nextStatus.config?.activeAccountId || 'primary';
         setStatus(nextStatus);
-        setReport(null);
-        setApiMonitor(null);
-        setWebSessionUser(null);
-        setRemoteResetLogs([]);
+        setReport(nextReport);
+        setApiMonitor(nextMonitor);
+        setWebSessionUser(nextStatus.webAuth?.sessionUser || null);
         if (syncConfig || !loaded) {
+          setActiveAccountId(nextActiveAccountId);
+          setForm(formFromConfig(nextStatus.config, nextActiveAccountId));
+          setRemoteResetForm(remoteResetFormFromConfig(nextStatus.config));
+          setTmsForm(tmsFormFromConfig(nextStatus.config));
           setLoaded(true);
         }
+        setAuthModal((current) => current.open ? { open: false, message: '' } : current);
+        if (!stopForm.unitId && nextStatus.fleet?.rows?.length) {
+          setStopForm((current) => ({ ...current, accountId: nextStatus.fleet.rows[0].accountId || 'primary', unitId: nextStatus.fleet.rows[0].id }));
+        }
+        if (!quiet && nextStatus.webAuth?.sessionUser) setBanner({ tone: 'success', message: 'Dashboard refreshed.' });
       });
+    } finally {
       if (!quiet) stopBusy();
-      return;
     }
-
-    const [nextReport, nextMonitor] = await Promise.all([api(`/api/report?${query.toString()}`), api('/api/monitor')]);
-    startTransition(() => {
-      const nextActiveAccountId = nextStatus.config?.activeAccountId || 'primary';
-      setStatus(nextStatus);
-      setReport(nextReport);
-      setApiMonitor(nextMonitor);
-      setWebSessionUser(nextStatus.webAuth?.sessionUser || null);
-      if (syncConfig || !loaded) {
-        setActiveAccountId(nextActiveAccountId);
-        setForm(formFromConfig(nextStatus.config, nextActiveAccountId));
-        setRemoteResetForm(remoteResetFormFromConfig(nextStatus.config));
-        setTmsForm(tmsFormFromConfig(nextStatus.config));
-        setLoaded(true);
-      }
-      setAuthModal((current) => current.open ? { open: false, message: '' } : current);
-      if (!stopForm.unitId && nextStatus.fleet?.rows?.length) {
-        setStopForm((current) => ({ ...current, accountId: nextStatus.fleet.rows[0].accountId || 'primary', unitId: nextStatus.fleet.rows[0].id }));
-      }
-      if (!quiet && nextStatus.webAuth?.sessionUser) setBanner({ tone: 'success', message: 'Dashboard refreshed.' });
-    });
-    if (!quiet) stopBusy();
   };
 
   const loadAdminUsers = async (quiet = false) => {

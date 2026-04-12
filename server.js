@@ -5993,6 +5993,12 @@ async function buildReportPayload(searchParams) {
   const localSnapshotRows = [];
   const podRows = [];
 
+  function safePushAll(target, source) {
+    for (let index = 0; index < source.length; index += 1) {
+      target.push(source[index]);
+    }
+  }
+
   for (const accountConfig of getAllAccountConfigs()) {
     const accountState = ensureAccountState(accountConfig.id);
     syncFleetSnapshotRecords(accountConfig, accountState, Date.now());
@@ -6003,8 +6009,8 @@ async function buildReportPayload(searchParams) {
     } catch (error) {
       accountState.runtime.lastSnapshotError = error.message;
     }
-    incidents.push(...buildCurrentFleetSensorAlerts(accountConfig, accountState, Date.now()));
-    incidents.push(...Object.entries(accountState.units).flatMap(function ([unitId, unitState]) {
+    safePushAll(incidents, buildCurrentFleetSensorAlerts(accountConfig, accountState, Date.now()));
+    safePushAll(incidents, Object.entries(accountState.units).flatMap(function ([unitId, unitState]) {
       return (unitState.analysis ? unitState.analysis.incidents : []).map(function (incident) {
         const snapshot = accountState.fleet.vehicles[normalizeUnitKey(unitId)] || null;
         return {
@@ -6020,8 +6026,8 @@ async function buildReportPayload(searchParams) {
         };
       });
     }));
-    localSnapshotRows.push(...buildDailySnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
-    podRows.push(...buildPodSnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
+    safePushAll(localSnapshotRows, buildDailySnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
+    safePushAll(podRows, buildPodSnapshotRows(accountState, range.rangeStartMs, range.rangeEndMs));
   }
 
   const summary = core.summarizeIncidents(incidents, range.rangeStartMs, range.rangeEndMs);
@@ -6037,7 +6043,7 @@ async function buildReportPayload(searchParams) {
     const supabasPodRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
     if (supabasPodRows.length) {
       podRows.length = 0;
-      podRows.push(...supabasPodRows);
+      safePushAll(podRows, supabasPodRows);
     }
   } catch (error) {
     state.runtime.lastSnapshotError = error.message;
