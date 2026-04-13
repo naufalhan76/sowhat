@@ -8396,7 +8396,7 @@ async function fetchUnitData(accountConfig, unit) {
   }
 
   if (/<!doctype html|<html/i.test(text)) {
-    throw new Error('Solofleet returned HTML instead of JSON. Session cookie may be expired.');
+    throw new Error('Sesi Solofleet telah habis (session cookie expired). Silakan perbarui di menu Settings.');
   }
 
   const payload = core.parsePossiblyDoubleEncodedJson(text);
@@ -8456,7 +8456,7 @@ async function fetchUnitHistoryChunk(accountConfig, unitId, rangeStartMs, rangeE
     throw new Error(`HTTP ${response.status}: ${cleanErrorText}`);
   }
   if (/<!doctype html|<html/i.test(text)) {
-    throw new Error(`Session cookie may be expired (HTML result): ${cleanErrorText}`);
+    throw new Error(`Sesi Solofleet telah habis (session cookie expired). Peringatan dari server: ${cleanErrorText}`);
   }
 
   const payload = core.parsePossiblyDoubleEncodedJson(text);

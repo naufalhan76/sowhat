@@ -1792,7 +1792,10 @@ export default function App() {
     try {
       const query = new URLSearchParams({ accountId: fleetRow.accountId || 'primary', unitId: fleetRow.id, startDate: resolvedRange.startDate, endDate: resolvedRange.endDate, source: 'remote' });
       const payload = await api(`/api/unit-history?${query.toString()}`);
-      startTransition(() => setTripMonitorDetailHistory(payload));
+      startTransition(() => {
+        if (payload.remoteError) setBanner({ tone: 'warning', message: `Data tidak lengkap. Error: ${payload.remoteError}` });
+        setTripMonitorDetailHistory(payload);
+      });
     } catch (error) {
       startTransition(() => {
         setTripMonitorDetailHistory({ unit: { id: fleetRow.id }, records: [], incidents: [], geofenceEvents: [] });
@@ -1918,6 +1921,7 @@ export default function App() {
       if (source === 'remote') query.set('source', 'remote');
       const payload = await api(`/api/unit-history?${query.toString()}`);
       startTransition(() => {
+        if (payload.remoteError) setBanner({ tone: 'warning', message: `Data tidak lengkap. Error: ${payload.remoteError}` });
         setUnitDetail(payload);
         setSelectedUnitId(unitId);
         setSelectedUnitAccountId(accountId || 'primary');
@@ -1939,6 +1943,7 @@ export default function App() {
       const query = new URLSearchParams({ accountId: accountId || 'primary', unitId, startDate: detailRange.startDate, endDate: detailRange.endDate, source: 'remote' });
       const payload = await api(`/api/unit-history?${query.toString()}`);
       startTransition(() => {
+        if (payload.remoteError) setBanner({ tone: 'warning', message: `Data tidak lengkap. Error: ${payload.remoteError}` });
         setHistoricalDetail(payload);
         setHistoricalAppliedSelection({ accountId: accountId || 'primary', unitId });
         setHistoricalRangeApplied({ ...detailRange });
