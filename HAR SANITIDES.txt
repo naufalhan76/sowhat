@@ -1,0 +1,5835 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "WebInspector",
+      "version": "537.36"
+    },
+    "pages": [
+      {
+        "startedDateTime": "2026-04-13T15:54:37.458Z",
+        "id": "page_3",
+        "title": "https://www.solofleet.com/ReportTemperatureChart",
+        "pageTimings": {
+          "onContentLoad": 1188.586000000214,
+          "onLoad": 1243.004999999357
+        }
+      }
+    ],
+    "entries": [
+      {
+        "_connectionId": "91322",
+        "_initiator": {
+          "type": "other"
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "document",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "max-age=0"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportDailyDetail"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 2031,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Cache-Control",
+              "value": "private, s-maxage=0"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "59694"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/html; charset=utf-8"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:43 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "X-AspNetMvc-Version",
+              "value": "5.2"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 303532,
+            "mimeType": "text/html",
+            "compression": 243838
+          },
+          "redirectURL": "",
+          "headersSize": 308,
+          "bodySize": 59694,
+          "_transferSize": 60002,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:37.456Z",
+        "time": 701.5199999996184,
+        "timings": {
+          "blocked": 5.511000000110187,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.2589999999999999,
+          "wait": 691.9430000003662,
+          "receive": 3.8069999991421355,
+          "_blocked_queueing": 2.523000000110187,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 6
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "stylesheet",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/Content/css?v=9KI9jvO5SkaaA-CWfkUB_n53YXrfeZQ1BiCVK58THIk1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "9KI9jvO5SkaaA-CWfkUB_n53YXrfeZQ1BiCVK58THIk1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "37297"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/css; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 164436,
+            "mimeType": "text/css"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.190Z",
+        "time": 0.1919999995152466,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.15799999982846202,
+          "receive": 0.03399999968678458,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 8
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "stylesheet",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/Content/themes/base/css?v=H16rEOL_-JIp4Zq6wJC6nbRp_6xUZ-pEuxiKp2x5-hg1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "H16rEOL_-JIp4Zq6wJC6nbRp_6xUZ-pEuxiKp2x5-hg1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "11233"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/css; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 42705,
+            "mimeType": "text/css"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.190Z",
+        "time": 0.12400000014167745,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.10400000064691994,
+          "receive": 0.019999999494757503,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 10
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/SoloHelperFunctions?v=H3uL3oceXxIANl5KNIkRMbcjGq-A_ToUrgGpPiHRydU1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "H3uL3oceXxIANl5KNIkRMbcjGq-A_ToUrgGpPiHRydU1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "9390"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 28230,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.190Z",
+        "time": 0.09099999988393392,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07699999969190685,
+          "receive": 0.014000000192027073,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 12
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/SoloSound?v=BLPXicjlM07huMOJ-6Bww1x6GciCcqS4hqcYCVk4bFw1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "BLPXicjlM07huMOJ-6Bww1x6GciCcqS4hqcYCVk4bFw1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 102548,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.190Z",
+        "time": 0.09299999965151073,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0759999993533711,
+          "receive": 0.01700000029813964,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 178
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.16.0/moment.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03f26-ef61\""
+            },
+            {
+              "name": "age",
+              "value": "261774"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=FBSnfcqJGoWc0x7PFJNxPT05QYy85E7DAEsiZI5Sts2PXR2OhYDc%2BN7P2UEM%2Bn0zZN%2FPfOqcXW8CPxBiae%2BPzOoQB2EE7bNpmMg8KNITg%2FU4X7ss1NyyfhktpwNLV4nbiiUL5%2FBp6Y%2BOGsmII08Zc8Gk\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:13:26 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98732acb87bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "18887"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 61281,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.08999999954539817,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07699999969190685,
+          "receive": 0.012999999853491317,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 183
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/modernizr?v=wBEWDufH_8Md-Pbioxomt90vm6tJN2Pyy9u9zHtWsPo1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "wBEWDufH_8Md-Pbioxomt90vm6tJN2Pyy9u9zHtWsPo1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "5229"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 10999,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.06899999971210491,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.05899999996472616,
+          "receive": 0.009999999747378752,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 185
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "40198"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 88175,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.08100000013655517,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.06500000017695129,
+          "receive": 0.015999999959603883,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 188
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/jqueryui?v=tG29gr4b89aZuHZhwb2RRduOLQe69zZ-D0yHV7Mp9SM1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "tG29gr4b89aZuHZhwb2RRduOLQe69zZ-D0yHV7Mp9SM1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:01 GMT"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 252537,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.0869999994392856,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0669999999445281,
+          "receive": 0.019999999494757503,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 192
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/bootstrap?v=gfimAJH11B5XNN4ST-gT97gVWBWQZ8tuVzYcsSiRlSw1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "gfimAJH11B5XNN4ST-gT97gVWBWQZ8tuVzYcsSiRlSw1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:02 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "23186"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:01 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:02 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 66337,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.06899999971210491,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.05899999996472616,
+          "receive": 0.009999999747378752,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 805
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/SoloJQgrid?v=Mpeax4t-TkrFbnnfWDBdAjxGBL2K3YyT27HJ3uDVQxU1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "Mpeax4t-TkrFbnnfWDBdAjxGBL2K3YyT27HJ3uDVQxU1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "19132"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 130050,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.06600000051548705,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.052999999752501026,
+          "receive": 0.01300000076298602,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 811
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/solojsonfileretrieve?v=X3uQu4R9QjNBgKSMxTDFKuP3wdIqpGFLsykEn5UJ4S01",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "X3uQu4R9QjNBgKSMxTDFKuP3wdIqpGFLsykEn5UJ4S01"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "283"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 225,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.191Z",
+        "time": 0.10600000041449675,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.09399999999004649,
+          "receive": 0.012000000424450263,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 809
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/bundles/SoloCookieFunction?v=u7vL4psBhMZ2LBPqcGGaVcPsqlYPGOvNmTI7IuWLq4Q1",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [
+            {
+              "name": "v",
+              "value": "u7vL4psBhMZ2LBPqcGGaVcPsqlYPGOvNmTI7IuWLq4Q1"
+            }
+          ],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Expires",
+              "value": "Tue, 13 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Length",
+              "value": "267"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "User-Agent,Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 317,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.06800000028306386,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0580000005356851,
+          "receive": 0.009999999747378752,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1074
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/Scripts/jquery.unobtrusive-ajax.min.js",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "ETag",
+              "value": "\"cf80e7bdeb40d81:0\""
+            },
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Length",
+              "value": "2022"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:33 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-javascript"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:30:25 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 3819,
+            "mimeType": "application/x-javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.08100000013655517,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0669999999445281,
+          "receive": 0.014000000192027073,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_connectionId": "91514",
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1084
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/jquery-ui-sliderAccess.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03ec2-c04\""
+            },
+            {
+              "name": "age",
+              "value": "6825"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=gscchvEkfUjttRME8obUgmOpmhOHYg90S2%2FqUVnxrCgoyijOeQTtqi9zbwMVHSBk7fLNOOCnl4YRSYuTtCLFDqjE%2BqyeY4OYyJRYguS%2FSMk77wAeEr0ZvlXz5%2FgwfwB5JNtut1bgpvMfkKGCJlkwvRPJ\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:54:33 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:54:33 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:11:46 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "strict-transport-security",
+              "value": "max-age=15780000"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebba6665b52f8ff-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "982"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 3076,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.09300000056100544,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0760000002628658,
+          "receive": 0.01700000029813964,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1441
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "stylesheet",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/jquery-ui-timepicker-addon.min.css",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03ec2-76d\""
+            },
+            {
+              "name": "age",
+              "value": "423"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=0C6LRwiodZs%2BI2uI2sTXTSD%2B5M37xTCR5v8zUdc%2F4cdYKcXxS6sS0svVvnH7XsTvt794MI2fDu8AtCJ7CbmDuBlBZlyI4s5clrd2wYYpUEajVyZvXO2dxtDKnuQi79YMApBGoZfUyyYuN8iXMURUIod%2B\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "text/css; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:11:46 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=0,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a0587bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "435"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 1901,
+            "mimeType": "text/css"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.08299999990413198,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07000000005064066,
+          "receive": 0.012999999853491317,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1442
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery-ui-timepicker-addon/1.6.3/jquery-ui-timepicker-addon.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03ec2-a1e1\""
+            },
+            {
+              "name": "age",
+              "value": "1290"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=nSUBHKIOtJqRDzwokndw28J1U3abMJsQkMDs0sb%2BjEjEUwvBBvpRFJvpzX3cjbgXJZVOppxB6GfHw4zsntB8RiGn85l2EaS4K%2FIRASAuFQ8ZBBXJTsGGr7ThKO%2FMWvlL%2BTY0mQFKSKqPiNjSkqOLpjGJ\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:11:46 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a0f87bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "9610"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 41441,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.08299999990413198,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07000000005064066,
+          "receive": 0.012999999853491317,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1406
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "stylesheet",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/free-jqgrid/4.13.4/css/ui.jqgrid.min.css",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "MISS"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03e6a-674d\""
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=1b1gLpapcrWaLRCiCXftSJtRMHRTqe8hisUBQRKto86COzP95i8x0Bv3EtriHcLmIxnH9cax0rTsIkFE3STEOJPriiy0%2BV1AmkZ8TUwaCEfSNf%2BoTrSg%2BD0voO0amWIJ7iNf5a%2FhOCyzaIOzJYClns%2BK\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "text/css; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:10:18 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=0,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb988889f987bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "4201"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 26445,
+            "mimeType": "text/css"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.07000000005064066,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0580000005356851,
+          "receive": 0.011999999514955562,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1408
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/free-jqgrid/4.13.4/js/jquery.jqgrid.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "MISS"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03e6a-501e0\""
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=Qi31dfWiayTJBZCkcv7Ccmdi4kpdZU2KpZEmFtT213xb7FoJINWYpZH%2By42knEl%2BGAxg51DlQy3Yt%2BZupE4%2FDzi0qYNDKf8uGoeLlvXtqJcBL%2F0eVXPQNgkDB2250TzA53PFJW5rd0Kc0CVOL5ldKYgZ\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:10:18 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a0387bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "88785"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 328160,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.07499999992433004,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.0579999996261904,
+          "receive": 0.01700000029813964,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1451
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/highcharts/10.0.0/highcharts.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"62260a3b-146b4\""
+            },
+            {
+              "name": "age",
+              "value": "3441532"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=PIipI0Cmn74zbu34zIIiaP6cpY71xAJa8wH6tAR%2BAugk0yYrZwEt9xsfzb2vaOhuS68hwb6TD7k04NQRiOenS2Qd5REfwqQfWCMk6hMGLIPWCqA%2BFUbg5knwEs8PaZw%2FoDIYHwtl4EIbU%2BdtziAKX7Pi\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 07 Mar 2022 13:35:55 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1287bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "83636"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 297060,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.192Z",
+        "time": 0.07999999979801942,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.06599999960599234,
+          "receive": 0.014000000192027073,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1452
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/highcharts/10.0.0/modules/exporting.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"62260a3b-1886\""
+            },
+            {
+              "name": "age",
+              "value": "1617"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=QgEx%2FWjNptCjRu6R8ZrHjyrAiRRUPyrIAeQNSju%2FPIx46mur6CQnUaCsMo8Ux1%2FpAlvUGsEP4uCC4yHfeaMh5eWI6ZmxHw81lXCYjzwNevAv6QfW%2Fsn7zi6btFH0PcCNj5QHBwJmB6V87M%2FGn54WAC7s\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 07 Mar 2022 13:35:55 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1487bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "6278"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 19074,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.08400000024266774,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.06300000040937448,
+          "receive": 0.02099999983329326,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1453
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/highcharts/10.0.0/modules/offline-exporting.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"62260a3b-d5e\""
+            },
+            {
+              "name": "age",
+              "value": "480713"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=vtq%2FmOqxyJ7CqrTEIql9K7c6ZGuDq2RMQeU8z1euj6b4laPrfizBviM0u%2FeBfpggC3FGIULTMmByalFQVZXAvHc2RH9U3ZXZVTeT2tnMV63RsDULTjg1PqSZkFi2PbVrF0RbhOK%2B3QYlVX%2BpuLq%2BWcYd\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 07 Mar 2022 13:35:55 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1587bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "3422"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 9273,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.09399999999004649,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07399999958579428,
+          "receive": 0.020000000404252205,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1443
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "stylesheet",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/css/select2.min.css",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03fcb-3b5c\""
+            },
+            {
+              "name": "age",
+              "value": "17562"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=f4iTeBFP7VQgSoN6VghpcNSyNZay7ftCx8IYJE6xKetl%2BF%2ByT1Sil9yjcg2Cn0%2F6tWqHb2PbypotxlqdjnEKFiS6Y%2FYWR24UOt1xTiN2x9fzFBqbib%2BG3zJJm%2FTda%2F7pmGCRBGmjsVGBSTpYu0IocVvX\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "text/css; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:16:11 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=0,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a0987bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "1624"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 15196,
+            "mimeType": "text/css"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.07300000015675323,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.06099999973230297,
+          "receive": 0.012000000424450263,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1444
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/js/select2.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03fcb-10468\""
+            },
+            {
+              "name": "age",
+              "value": "153778"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=eZw5BZuu9CgVbW4ucfLzgEUnk8cM4ytdilKdu7OgvmJzdZWBPsyXBwHmoujZnidSkM6OKBNYU8WSWQEmFsTF%2BfT5aUH2FsSohHQh0UdgN7O7UxryVSxmRdF341MpUMwrBDkHxwR1lPB6JINwpn1bXbsD\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:16:11 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1187bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "15671"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 66664,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.10699999984353781,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.08600000001024455,
+          "receive": 0.02099999983329326,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_connectionId": "91514",
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1120
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.11/moment-timezone.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03f26-1793\""
+            },
+            {
+              "name": "age",
+              "value": "512365"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=JWZXTaEABFp4UlsGCp3tCGogz%2BFgQCXXH2U7HpJaj4OFCnpLbbUvNHzRJd8zPlkP8unTjNQ5zMcy5NBGN%2FduXF0fbQyiWVGGnbRbOXpjvSaJARawzG9KRFOtxTui9X3QKT%2Fv%2B0KgUNFmb2QXG8deFvxx\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:54:33 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:54:33 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:13:26 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "strict-transport-security",
+              "value": "max-age=15780000"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebba6665b5af8ff-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "2391"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 6035,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.09099999988393392,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.07499999992433004,
+          "receive": 0.015999999959603883,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1440
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/defiant.js/1.4.0/defiant.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03e34-2d64\""
+            },
+            {
+              "name": "age",
+              "value": "2214979"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=Es0qA7KgOOSCUVEqACzuvXvj7plXywNIPghb5fj8O6I5Ss%2F91wxOr%2BzA2g6KWPkqgy%2B9b9ShBX8w4aW3V%2FZp5MNkqV90u5VKsADaj1GdZW33zas3jYnxw6h%2BX2KetsaZtckkiapZxKp8ivZ7KYe6zTm9\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:09:24 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a0d87bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "3941"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 11620,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.07300000015675323,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.05999999939376721,
+          "receive": 0.01300000076298602,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1468
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/split.js/1.3.5/split.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03fd6-126c\""
+            },
+            {
+              "name": "age",
+              "value": "3440797"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=8s8KZPGePI6dGvSTJRHsk2izrEgCSPAPMDVST%2FkAwvs99SBCTACj8SzMWqabofaMthc60rVvL%2FSAriOyxup1twpevwU7P788SLpXm3%2BVRY5IFuXbQhLT9LowWiqe6unEcKjL6mSzwI%2FHUx5SQV0gXbA0\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:16:22 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1987bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "1607"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 4716,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.11100000028818613,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.05700000019714935,
+          "receive": 0.05400000009103678,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 1469
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery.easytabs/3.2.0/jquery.easytabs.min.js",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "h3",
+          "headers": [
+            {
+              "name": "cf-cdnjs-via",
+              "value": "cfworker/kv"
+            },
+            {
+              "name": "content-encoding",
+              "value": "br"
+            },
+            {
+              "name": "cf-cache-status",
+              "value": "HIT"
+            },
+            {
+              "name": "etag",
+              "value": "\"5eb03ec2-24a0\""
+            },
+            {
+              "name": "age",
+              "value": "18196"
+            },
+            {
+              "name": "report-to",
+              "value": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=wFkhh2i%2BN2cNiNoqKaD%2F1OnvmoPfiDLLWv8o64uSi3TB0uyouo%2BwnTPgDQiEZnG9bIiRZ7hW1ItytgR%2BcF8KeXptfmi9BMDtB6nSTy%2Bw%2B%2FzzYEXHr1ehww5Adxcgy7tijfdj7H0pHltcb1TUh%2BLlfwFl\"}]}"
+            },
+            {
+              "name": "x-content-type-options",
+              "value": "nosniff"
+            },
+            {
+              "name": "expires",
+              "value": "Sat, 03 Apr 2027 15:45:05 GMT"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=86400"
+            },
+            {
+              "name": "server-timing",
+              "value": "cfExtPri"
+            },
+            {
+              "name": "date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "content-type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "name": "last-modified",
+              "value": "Mon, 04 May 2020 16:11:46 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "priority",
+              "value": "u=1,i=?0"
+            },
+            {
+              "name": "cache-control",
+              "value": "public, max-age=30672000"
+            },
+            {
+              "name": "timing-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "nel",
+              "value": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+            },
+            {
+              "name": "cross-origin-resource-policy",
+              "value": "cross-origin"
+            },
+            {
+              "name": "cf-ray",
+              "value": "9ebb98889a1c87bd-SIN"
+            },
+            {
+              "name": "accept-ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "*"
+            },
+            {
+              "name": "content-length",
+              "value": "2631"
+            },
+            {
+              "name": "server",
+              "value": "cloudflare"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 9376,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "[2606:4700::6811:190e]",
+        "startedDateTime": "2026-04-13T15:54:38.193Z",
+        "time": 0.08299999990413198,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.06500000017695129,
+          "receive": 0.017999999727180693,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/Content/themes/base/css?v=H16rEOL_-JIp4Zq6wJC6nbRp_6xUZ-pEuxiKp2x5-hg1"
+        },
+        "_priority": "Low",
+        "_resourceType": "image",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/Content/themes/base/images/ui-icons_444444_256x240.png",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "Referer",
+              "value": ""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "ETag",
+              "value": "\"dd2021afeb40d81:0\""
+            },
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Length",
+              "value": "7006"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:22 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:30:00 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 7006,
+            "mimeType": "image/png"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.287Z",
+        "time": 0.21500000002561137,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.18499999987398041,
+          "receive": 0.030000000151630957,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 6156
+        },
+        "_priority": "Low",
+        "_resourceType": "image",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/media/splitjs/horizontal.png",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "ETag",
+              "value": "\"cdddbb5eb40d81:0\""
+            },
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Length",
+              "value": "104"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:30:10 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 104,
+            "mimeType": "image/png"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.344Z",
+        "time": 0.11899999935849337,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.10399999973742524,
+          "receive": 0.014999999621068127,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_fromCache": "memory",
+        "_initiator": {
+          "type": "parser",
+          "url": "https://www.solofleet.com/ReportTemperatureChart",
+          "lineNumber": 6156
+        },
+        "_priority": "Low",
+        "_resourceType": "image",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/media/splitjs/vertical.png",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "http/1.1",
+          "headers": [
+            {
+              "name": "ETag",
+              "value": "\"a35e55b5eb40d81:0\""
+            },
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Length",
+              "value": "91"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:45:05 GMT"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:30:11 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 91,
+            "mimeType": "image/png"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0,
+          "_transferSize": 0,
+          "_error": null,
+          "_fetchedViaServiceWorker": false,
+          "_fulfilledBy": "(memory cache)"
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.344Z",
+        "time": 0.10599999950500205,
+        "timings": {
+          "blocked": -1,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0,
+          "wait": 0.09199999931297498,
+          "receive": 0.014000000192027073,
+          "_blocked_queueing": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "send",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 81607
+              },
+              {
+                "functionName": "ajax",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 79081
+              },
+              {
+                "functionName": "getjsonfile",
+                "scriptId": "380",
+                "url": "https://www.solofleet.com/bundles/solojsonfileretrieve?v=X3uQu4R9QjNBgKSMxTDFKuP3wdIqpGFLsykEn5UJ4S01",
+                "lineNumber": 0,
+                "columnNumber": 39
+              },
+              {
+                "functionName": "",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 1355,
+                "columnNumber": 38
+              }
+            ]
+          }
+        },
+        "_priority": "VeryHigh",
+        "_resourceType": "xhr",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/Content/solofleetjson/tempoffsetupdown.json?_=1776095678255",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "*/*"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [
+            {
+              "name": "_",
+              "value": "1776095678255"
+            }
+          ],
+          "cookies": [],
+          "headersSize": 1892,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "191"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:43 GMT"
+            },
+            {
+              "name": "ETag",
+              "value": "\"87cc21aceb40d81:0\""
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:29:55 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 134,
+            "mimeType": "application/json",
+            "compression": -57
+          },
+          "redirectURL": "",
+          "headersSize": 302,
+          "bodySize": 191,
+          "_transferSize": 493,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.349Z",
+        "time": 28.986999999688123,
+        "timings": {
+          "blocked": 4.007000000013155,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.347,
+          "wait": 21.3950000003468,
+          "receive": 3.237999999328167,
+          "_blocked_queueing": 1.886000000013155,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "send",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 81607
+              },
+              {
+                "functionName": "ajax",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 79081
+              },
+              {
+                "functionName": "GetTempProfile",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 5413,
+                "columnNumber": 21
+              },
+              {
+                "functionName": "",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 5105,
+                "columnNumber": 19
+              },
+              {
+                "functionName": "l",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 39364
+              },
+              {
+                "functionName": "a",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 39672
+              }
+            ],
+            "parent": {
+              "description": "setTimeout",
+              "callFrames": [
+                {
+                  "functionName": "",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 39882
+                },
+                {
+                  "functionName": "y",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 37661
+                },
+                {
+                  "functionName": "fireWith",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 38406
+                },
+                {
+                  "functionName": "fire",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 38442
+                },
+                {
+                  "functionName": "y",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 37661
+                },
+                {
+                  "functionName": "fireWith",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 38406
+                },
+                {
+                  "functionName": "ready",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 41290
+                },
+                {
+                  "functionName": "oi",
+                  "scriptId": "374",
+                  "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                  "lineNumber": 0,
+                  "columnNumber": 1394
+                }
+              ]
+            }
+          }
+        },
+        "_priority": "High",
+        "_resourceType": "xhr",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "POST",
+          "url": "https://www.solofleet.com/Shipment/getTempProfile",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Content-Length",
+              "value": "0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Origin",
+              "value": "https://www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 2001,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Cache-Control",
+              "value": "private"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "642"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:43 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "X-AspNetMvc-Version",
+              "value": "5.2"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "x-ms-middleware-request-id",
+              "value": "00000000-0000-0000-0000-000000000000"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 3015,
+            "mimeType": "application/json",
+            "compression": 2373
+          },
+          "redirectURL": "",
+          "headersSize": 367,
+          "bodySize": 642,
+          "_transferSize": 1009,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.660Z",
+        "time": 48.19799999950192,
+        "timings": {
+          "blocked": 17.530000000178347,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.38399999999999856,
+          "wait": 25.566000000094064,
+          "receive": 4.717999999229505,
+          "_blocked_queueing": 7.179000000178348,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_initiator": {
+          "type": "other"
+        },
+        "_priority": "High",
+        "_resourceType": "other",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "GET",
+          "url": "https://www.solofleet.com/favicon.ico",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "image"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "no-cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 1874,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept-Ranges",
+              "value": "bytes"
+            },
+            {
+              "name": "Content-Length",
+              "value": "32038"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/x-icon"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:43 GMT"
+            },
+            {
+              "name": "ETag",
+              "value": "\"cfdbd9a1eb40d81:0\""
+            },
+            {
+              "name": "Last-Modified",
+              "value": "Sat, 26 Mar 2022 08:29:38 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 32038,
+            "mimeType": "image/x-icon",
+            "compression": 0
+          },
+          "redirectURL": "",
+          "headersSize": 253,
+          "bodySize": 32038,
+          "_transferSize": 32291,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:38.725Z",
+        "time": 44.06699999981356,
+        "timings": {
+          "blocked": 3.223999999744585,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.32199999999999984,
+          "wait": 28.24499999968533,
+          "receive": 12.276000000383647,
+          "_blocked_queueing": 1.4069999997445848,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_connectionId": "91322",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "send",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 81607
+              },
+              {
+                "functionName": "ajax",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 79081
+              },
+              {
+                "functionName": "btnSearchPullDailyreport",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 2042,
+                "columnNumber": 14
+              },
+              {
+                "functionName": "",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 1823,
+                "columnNumber": 12
+              },
+              {
+                "functionName": "dispatch",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 48933
+              },
+              {
+                "functionName": "a.handle",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 46952
+              }
+            ]
+          }
+        },
+        "_priority": "High",
+        "_resourceType": "xhr",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "POST",
+          "url": "https://www.solofleet.com/ReportDailyDetail/getVehicleDetailJsonWithoutZoneCalcFilterevery1minCalc",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Content-Length",
+              "value": "187"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Origin",
+              "value": "https://www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 2052,
+          "bodySize": 187,
+          "postData": {
+            "mimeType": "application/json; charset=UTF-8",
+            "text": "{\"ddl\":\"col65\",\"startdatetime\":\"2026-04-12T17:00:00.000Z\",\"enddatetime\":\"2026-04-13T15:54:38.000Z\",\"interval\":120,\"tempprofile\":\"-1\",\"temperatureprocessing\":\"\",\"ArchiveType\":\"liveserver\"}"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Cache-Control",
+              "value": "private"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "51514"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:49 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "X-AspNetMvc-Version",
+              "value": "5.2"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "x-ms-middleware-request-id",
+              "value": "00000000-0000-0000-0000-000000000000"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 644949,
+            "mimeType": "application/json",
+            "compression": 593435
+          },
+          "redirectURL": "",
+          "headersSize": 369,
+          "bodySize": 51514,
+          "_transferSize": 51883,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:43.655Z",
+        "time": 190.32700000025216,
+        "timings": {
+          "blocked": 3.6320000002193846,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.31099999999999994,
+          "wait": 177.63799999960432,
+          "receive": 8.746000000428467,
+          "_blocked_queueing": 1.3090000002193847,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_connectionId": "91348",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "send",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 81607
+              },
+              {
+                "functionName": "ajax",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 79081
+              },
+              {
+                "functionName": "btnSearchPullDailyreport",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 2216,
+                "columnNumber": 14
+              },
+              {
+                "functionName": "",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 1823,
+                "columnNumber": 12
+              },
+              {
+                "functionName": "dispatch",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 48933
+              },
+              {
+                "functionName": "a.handle",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 46952
+              }
+            ]
+          }
+        },
+        "_priority": "High",
+        "_resourceType": "xhr",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "POST",
+          "url": "https://www.solofleet.com/ReportTemperatureChart/getVehicleDetailDefrostJson",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Content-Length",
+              "value": "187"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Origin",
+              "value": "https://www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 2030,
+          "bodySize": 187,
+          "postData": {
+            "mimeType": "application/json; charset=UTF-8",
+            "text": "{\"ddl\":\"col65\",\"startdatetime\":\"2026-04-12T17:00:00.000Z\",\"enddatetime\":\"2026-04-13T15:54:38.000Z\",\"interval\":120,\"tempprofile\":\"-1\",\"temperatureprocessing\":\"\",\"ArchiveType\":\"liveserver\"}"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Cache-Control",
+              "value": "private"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "4149"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:49 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "X-AspNetMvc-Version",
+              "value": "5.2"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "x-ms-middleware-request-id",
+              "value": "00000000-0000-0000-0000-000000000000"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 169281,
+            "mimeType": "application/json",
+            "compression": 165132
+          },
+          "redirectURL": "",
+          "headersSize": 368,
+          "bodySize": 4149,
+          "_transferSize": 4517,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:43.657Z",
+        "time": 117.72299999938696,
+        "timings": {
+          "blocked": 3.415999999805179,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.19200000000000017,
+          "wait": 112.71200000028185,
+          "receive": 1.4029999992999365,
+          "_blocked_queueing": 1.382999999805179,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      },
+      {
+        "_connectionId": "91342",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "send",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 81607
+              },
+              {
+                "functionName": "ajax",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 79081
+              },
+              {
+                "functionName": "getZoneMovement",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 5998,
+                "columnNumber": 18
+              },
+              {
+                "functionName": "btnSearchPullDailyreport",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 2280,
+                "columnNumber": 8
+              },
+              {
+                "functionName": "",
+                "scriptId": "396",
+                "url": "https://www.solofleet.com/ReportTemperatureChart",
+                "lineNumber": 1823,
+                "columnNumber": 12
+              },
+              {
+                "functionName": "dispatch",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 48933
+              },
+              {
+                "functionName": "a.handle",
+                "scriptId": "374",
+                "url": "https://www.solofleet.com/bundles/jquery?v=8kmHc-ukmg3rp-jj2rNMjYYIG_lP3ErMNtowPG93XbM1",
+                "lineNumber": 0,
+                "columnNumber": 46952
+              }
+            ]
+          }
+        },
+        "_priority": "High",
+        "_resourceType": "xhr",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_3",
+        "request": {
+          "method": "POST",
+          "url": "https://www.solofleet.com/ReportZoneMovement/getVehicleDetailZoneMovementJsonUsingApp",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "application/json, text/javascript, */*; q=0.01"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9,id;q=0.8"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Content-Length",
+              "value": "195"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=UTF-8"
+            },
+            {
+              "name": "Host",
+              "value": "www.solofleet.com"
+            },
+            {
+              "name": "Origin",
+              "value": "https://www.solofleet.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.solofleet.com/ReportTemperatureChart"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "empty"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "cors"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+            },
+            {
+              "name": "X-Requested-With",
+              "value": "XMLHttpRequest"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Microsoft Edge\";v=\"146\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Windows\""
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": 2039,
+          "bodySize": 195,
+          "postData": {
+            "mimeType": "application/json; charset=UTF-8",
+            "text": "{\"ddl\":\"col65\",\"startdatetime\":\"2026-04-12T17:00:00.000Z\",\"enddatetime\":\"2026-04-13T15:54:38.000Z\",\"useselector\":\"zonemovementetl\",\"useselectorsecondary\":\"addstopidle\",\"selectoutside\":\"extended\"}"
+          }
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "headers": [
+            {
+              "name": "Cache-Control",
+              "value": "private"
+            },
+            {
+              "name": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "Content-Length",
+              "value": "605"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 13 Apr 2026 15:54:49 GMT"
+            },
+            {
+              "name": "Server",
+              "value": "Microsoft-IIS/10.0"
+            },
+            {
+              "name": "Vary",
+              "value": "Accept-Encoding"
+            },
+            {
+              "name": "X-AspNet-Version",
+              "value": "4.0.30319"
+            },
+            {
+              "name": "X-AspNetMvc-Version",
+              "value": "5.2"
+            },
+            {
+              "name": "X-Powered-By",
+              "value": "ASP.NET"
+            },
+            {
+              "name": "x-ms-middleware-request-id",
+              "value": "00000000-0000-0000-0000-000000000000"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 1581,
+            "mimeType": "application/json",
+            "compression": 976
+          },
+          "redirectURL": "",
+          "headersSize": 367,
+          "bodySize": 605,
+          "_transferSize": 972,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "13.67.9.8",
+        "startedDateTime": "2026-04-13T15:54:43.658Z",
+        "time": 139.55299999997806,
+        "timings": {
+          "blocked": 3.4840000003713065,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.34099999999999997,
+          "wait": 134.32599999973584,
+          "receive": 1.4019999998708954,
+          "_blocked_queueing": 1.5190000003713067,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      }
+    ]
+  }
+}

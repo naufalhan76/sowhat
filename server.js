@@ -8365,17 +8365,30 @@ async function fetchUnitData(accountConfig, unit) {
     ArchiveType: config.archiveType,
   };
 
-  const response = await fetch(endpointUrl, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json, text/javascript, */*; q=0.01',
-      'content-type': 'application/json; charset=UTF-8',
-      referer: String(refererUrl),
-      cookie: accountConfig.sessionCookie,
-      'x-requested-with': 'XMLHttpRequest',
-    },
-    body: JSON.stringify(body),
-  });
+  const abortController = new AbortController();
+  const fetchTimeout = setTimeout(() => abortController.abort(), 45000);
+  let response;
+  try {
+    response = await fetch(endpointUrl, {
+      method: 'POST',
+      signal: abortController.signal,
+      headers: {
+        accept: 'application/json, text/javascript, */*; q=0.01',
+        'content-type': 'application/json; charset=UTF-8',
+        referer: String(refererUrl),
+        cookie: accountConfig.sessionCookie,
+        'x-requested-with': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (fetchError) {
+    clearTimeout(fetchTimeout);
+    if (fetchError.name === 'AbortError') {
+      throw new Error('Solofleet request timed out after 45s.');
+    }
+    throw fetchError;
+  }
+  clearTimeout(fetchTimeout);
 
   const text = await response.text();
   if (!response.ok) {
@@ -8403,17 +8416,30 @@ async function fetchUnitHistoryChunk(accountConfig, unitId, rangeStartMs, rangeE
     ArchiveType: config.archiveType,
   };
 
-  const response = await fetch(endpointUrl, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json, text/javascript, */*; q=0.01',
-      'content-type': 'application/json; charset=UTF-8',
-      referer: String(refererUrl),
-      cookie: accountConfig.sessionCookie,
-      'x-requested-with': 'XMLHttpRequest',
-    },
-    body: JSON.stringify(body),
-  });
+  const abortController = new AbortController();
+  const fetchTimeout = setTimeout(() => abortController.abort(), 45000);
+  let response;
+  try {
+    response = await fetch(endpointUrl, {
+      method: 'POST',
+      signal: abortController.signal,
+      headers: {
+        accept: 'application/json, text/javascript, */*; q=0.01',
+        'content-type': 'application/json; charset=UTF-8',
+        referer: String(refererUrl),
+        cookie: accountConfig.sessionCookie,
+        'x-requested-with': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (fetchError) {
+    clearTimeout(fetchTimeout);
+    if (fetchError.name === 'AbortError') {
+      throw new Error('Solofleet request timed out after 45s.');
+    }
+    throw fetchError;
+  }
+  clearTimeout(fetchTimeout);
 
   const text = await response.text();
   let cleanErrorText = text.slice(0, 130).replace(/[\r\n]+/g, ' ').trim();
@@ -10713,9 +10739,11 @@ async function handleApi(req, res, url) {
         const cachedRecords = buildCachedUnitHistory(accountState, detail.unit.id, range.rangeStartMs, range.rangeEndMs);
         records = mergeHistoryRecords(historyRecords, cachedRecords);
       }
-      if (!records.length && historyError) {
-        throw historyError;
-      }
+      // Jika remote gagal tapi ada cached records, lanjut dengan cache.
+      // Jika remote gagal DAN tidak ada cache, tetap return 200 dengan records kosong
+      // + field remoteError sehingga frontend bisa menampilkan pesan informatif,
+      // bukan crash dengan 500.
+      const remoteError = historyError ? historyError.message : null;
       const geofenceEvents = astroCore.buildGeofenceEvents(
         records,
         config.astroLocations || [],
@@ -10731,6 +10759,7 @@ async function handleApi(req, res, url) {
         customerProfile: detail.customerProfile,
         geofenceEvents,
         records: geofenceAnnotatedRecords,
+        ...(remoteError ? { remoteError } : {}),
       });
     } catch (error) {
       sendApiError(res, error, 'Aksi gagal diproses.');
