@@ -5164,6 +5164,7 @@ function tmsIncidentIcon(code, size = 13) {
     case 'gps-error':
       return <Route size={size} />;
     case 'temp-error':
+      return <ShieldAlert size={size} />;
     case 'temp-out-of-range':
       return <Thermometer size={size} />;
     case 'long-stop':
