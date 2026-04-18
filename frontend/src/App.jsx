@@ -666,6 +666,35 @@ const tmsSeverityTone = (value) => TMS_SEVERITY_META[String(value || '').toLower
 const tmsIncidentLabel = (value) => TMS_INCIDENT_META[String(value || '').toLowerCase()]?.label || value || '-';
 const tmsShippingStatusLabel = (value) => TMS_SHIPPING_STATUS_META[String(value || '').toLowerCase()]?.label || value || '-';
 const dedupeTripMonitorIncidentCodes = (codes) => [...new Set((codes || []).map((code) => String(code || '').trim()).filter(Boolean))];
+const tripMonitorIncidentHistoryStatusLabel = (value) => String(value || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active';
+const tripMonitorIncidentHistoryStatusTone = (value) => String(value || '').toLowerCase() === 'resolved' ? 'success' : 'warning';
+const buildTripMonitorIncidentHistoryLocationLabel = (item) => {
+  const first = String(item?.firstLocationSummary || '').trim();
+  const last = String(item?.lastLocationSummary || '').trim();
+  const resolved = String(item?.resolvedLocationSummary || '').trim();
+  if (String(item?.status || '').toLowerCase() === 'resolved') {
+    return {
+      primary: first || last || resolved || '-',
+      secondary: resolved ? `Resolved: ${resolved}` : (last ? `Last: ${last}` : '-'),
+    };
+  }
+  return {
+    primary: first || last || '-',
+    secondary: last ? `Last: ${last}` : '-',
+  };
+};
+const buildTripMonitorIncidentHistoryDescription = (item) => {
+  const primary = String(
+    (String(item?.status || '').toLowerCase() === 'resolved'
+      ? (item?.detailClose || item?.detailOpen)
+      : item?.detailOpen) || '-',
+  ).trim() || '-';
+  const secondary = String(item?.detailOpen || '').trim();
+  if (String(item?.status || '').toLowerCase() === 'resolved' && secondary && secondary !== primary) {
+    return { primary, secondary: `Opened: ${secondary}` };
+  }
+  return { primary, secondary: '' };
+};
 const formatTripMonitorStatusTime = (value) => value ? fmtDateCompact(value) : '-';
 const formatEtaText = (value) => value ? `${fmtDateOnly(value)} ${fmtClock(value)}` : '-';
 const csv = (name, rows) => {
@@ -5297,6 +5326,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const fleetRow = detail?.metadata?.fleetRow || null;
   const jobOrders = detail?.metadata?.jobOrders || [];
   const incidents = detail?.metadata?.incidents || [];
+  const incidentHistory = Array.isArray(detail?.incidentHistory) ? detail.incidentHistory : [];
   const headlineJob = detail?.metadata?.headlineJobOrder || jobOrders[0] || null;
   const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
   const historyRows = [...(historyDetail?.records || [])].reverse();
@@ -5318,6 +5348,9 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const driver2Name = extractTmsDriverName(jobDrivers[1]);
   const leadDriver = jobDrivers[0] || null;
   const appStatus = detail?.driverAppStatus || [leadDriver?.assignment_status, leadDriver?.driver_status, leadDriver?.job_offer_status].filter(Boolean).join(' | ') || '-';
+  const incidentHistoryActiveCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() !== 'resolved').length;
+  const incidentHistoryResolvedCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() === 'resolved').length;
+  const incidentHistoryTotalMinutes = incidentHistory.reduce((total, item) => total + Number(item?.durationMinutes || 0), 0);
 
   return <div className="auth-modal-backdrop" onClick={onClose}>
     <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
@@ -5376,6 +5409,50 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
           {incidentCodes.length ? <div className="trip-monitor-detail-incidents">
             <TripMonitorIncidentIcons codes={incidentCodes} className="trip-monitor-detail-incident-icons" size={14} />
           </div> : null}
+          <Card className="panel-card trip-monitor-incident-history-card">
+            <CardHeader className="panel-card-header">
+              <div>
+                <h3>Incident history</h3>
+                <p>Riwayat anomaly untuk JO aktif/terpilih. Incident aktif akan hilang dari board saat kondisi normal, tapi riwayatnya tetap disimpan.</p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="metric-strip trip-monitor-incident-history-strip">
+                <div className="mini-metric">
+                  <span>Active</span>
+                  <strong>{incidentHistoryActiveCount}</strong>
+                </div>
+                <div className="mini-metric">
+                  <span>Resolved</span>
+                  <strong>{incidentHistoryResolvedCount}</strong>
+                </div>
+                <div className="mini-metric">
+                  <span>Total anomaly</span>
+                  <strong>{formatMinutesText(incidentHistoryTotalMinutes)}</strong>
+                </div>
+              </div>
+              <div className="spacer-16" />
+              <DataTable
+                pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location"]}
+                emptyMessage="Belum ada incident history untuk JO ini."
+                rows={incidentHistory.map((item) => {
+                  const description = buildTripMonitorIncidentHistoryDescription(item);
+                  const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
+                  return [
+                    <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
+                    <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
+                    <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
+                    <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
+                    formatMinutesText(item.durationMinutes || 0),
+                    fmtDate(item.openedAt),
+                    String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
+                    <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
+                  ];
+                })}
+              />
+            </CardContent>
+          </Card>
           <Card className="panel-card trip-monitor-progress-panel">
             <CardHeader className="panel-card-header">
               <div>

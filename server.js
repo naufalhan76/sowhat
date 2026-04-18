@@ -4975,10 +4975,26 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
   const originEtaLateByMinutes = originEta && now > originEta ? Math.round((now - originEta) / 60000) : 0;
 
   if (fleetRow?.errGps) {
-    incidents.push({ code: 'gps-error', label: 'GPS error', severity: 'critical', detail: String(fleetRow.errGps || 'GPS error') });
+    incidents.push({
+      code: 'gps-error',
+      label: 'GPS error',
+      severity: 'critical',
+      detail: String(fleetRow.errGps || 'GPS error'),
+      startedAt: null,
+      endedAt: now,
+      durationMinutes: null,
+    });
   }
   if (fleetRow?.hasLiveSensorFault) {
-    incidents.push({ code: 'temp-error', label: 'Temp error', severity: 'critical', detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error') });
+    incidents.push({
+      code: 'temp-error',
+      label: 'Temp error',
+      severity: 'critical',
+      detail: String(fleetRow.liveSensorFaultLabel || 'Sensor temperature error'),
+      startedAt: null,
+      endedAt: now,
+      durationMinutes: null,
+    });
   }
 
   if (temperatureGate.isActive) {
@@ -5004,20 +5020,55 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
         label: 'Temp out of range',
         severity: 'critical',
         detail: detailStr,
+        startedAt: tempOutOfRange.startTimestamp || null,
+        endedAt: tempOutOfRange.endTimestamp || now,
+        durationMinutes: tempOutOfRange.durationMinutes ?? null,
       });
     }
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine) {
-    incidents.push({ code: 'late-origin', label: 'Late to load', severity: 'warning', detail: `ETA load lewat ${originEtaLateByMinutes} menit` });
+    incidents.push({
+      code: 'late-origin',
+      label: 'Late to load',
+      severity: 'warning',
+      detail: `ETA load lewat ${originEtaLateByMinutes} menit`,
+      startedAt: originEta || null,
+      endedAt: now,
+      durationMinutes: originEtaLateByMinutes || null,
+    });
   }
   if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && !destinationDoneLine) {
-    incidents.push({ code: 'late-destination', label: 'Late to destination', severity: 'warning', detail: `ETA tujuan lewat ${destinationEtaLateByMinutes} menit` });
+    incidents.push({
+      code: 'late-destination',
+      label: 'Late to destination',
+      severity: 'warning',
+      detail: `ETA tujuan lewat ${destinationEtaLateByMinutes} menit`,
+      startedAt: destinationEta || null,
+      endedAt: now,
+      durationMinutes: destinationEtaLateByMinutes || null,
+    });
   }
   if (snapshot.active && originEtaLateByMinutes > 15 && !loadArrivedLine && originDistance !== null && originDistance > radius) {
-    incidents.push({ code: 'geofence-origin', label: 'Missed load geofence', severity: 'warning', detail: `Jarak ${Math.round(originDistance)} m dari tempat muat` });
+    incidents.push({
+      code: 'geofence-origin',
+      label: 'Missed load geofence',
+      severity: 'warning',
+      detail: `Jarak ${Math.round(originDistance)} m dari tempat muat`,
+      startedAt: originEta || null,
+      endedAt: now,
+      durationMinutes: originEtaLateByMinutes || null,
+    });
   }
   if (snapshot.active && destinationEtaLateByMinutes > 15 && !destinationArrivedLine && destinationDistance !== null && destinationDistance > radius) {
-    incidents.push({ code: 'geofence-destination', label: 'Missed destination geofence', severity: 'warning', detail: `Jarak ${Math.round(destinationDistance)} m dari tujuan` });
+    incidents.push({
+      code: 'geofence-destination',
+      label: 'Missed destination geofence',
+      severity: 'warning',
+      detail: `Jarak ${Math.round(destinationDistance)} m dari tujuan`,
+      startedAt: destinationEta || null,
+      endedAt: now,
+      durationMinutes: destinationEtaLateByMinutes || null,
+    });
   }
   const realtimeLongStop = snapshot.active
     ? detectRealtimeLongStop(unitState, fleetRow, now, {
@@ -5035,6 +5086,9 @@ function evaluateTmsIncidents(snapshot, fleetRow, unitState, tmsConfig, now) {
       label: 'Long stop',
       severity: 'warning',
       detail: `Diam di titik yang sama >= ${formatTripMonitorMetric(realtimeLongStop.durationMinutes, 1)} menit`,
+      startedAt: realtimeLongStop.startTimestamp || null,
+      endedAt: realtimeLongStop.endTimestamp || now,
+      durationMinutes: realtimeLongStop.durationMinutes ?? null,
     });
   }
 
@@ -5189,6 +5243,383 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
 
 function summarizeIncidentCodes(incidents) {
   return [...new Set((incidents || []).map(function (incident) { return incident.code; }).filter(Boolean))];
+}
+
+function firstNonEmptyText() {
+  for (let index = 0; index < arguments.length; index += 1) {
+    const value = arguments[index];
+    const text = String(value || '').trim();
+    if (text) {
+      return text;
+    }
+  }
+  return '';
+}
+
+function buildTripMonitorIncidentLocationSnapshot(fleetRow, unitState, now) {
+  const latestRecord = Array.isArray(unitState?.records) && unitState.records.length
+    ? unitState.records[unitState.records.length - 1]
+    : null;
+  const latitude = toNumber(latestRecord?.latitude ?? fleetRow?.latitude);
+  const longitude = toNumber(latestRecord?.longitude ?? fleetRow?.longitude);
+  const zoneName = firstNonEmptyText(latestRecord?.zoneName, fleetRow?.zoneName);
+  const geofenceName = firstNonEmptyText(latestRecord?.geofenceLocationName, latestRecord?.geofenceLocationType);
+  const locationSummary = firstNonEmptyText(
+    latestRecord?.locationSummary,
+    fleetRow?.locationSummary,
+    geofenceName,
+  );
+  return {
+    latitude,
+    longitude,
+    zoneName,
+    locationSummary,
+    timestamp: toTimestampMaybe(latestRecord?.timestamp || fleetRow?.lastUpdatedAt || fleetRow?.lastUpdatedMs || now) || Number(now || Date.now()),
+  };
+}
+
+function buildTripMonitorIncidentUnitIdentity(row, snapshot) {
+  return firstNonEmptyText(
+    row?.unitKey,
+    snapshot?.normalizedPlate,
+    row?.normalizedPlate,
+    row?.unitId,
+    snapshot?.jobOrderId,
+  );
+}
+
+function buildTripMonitorIncidentEventOpenKey(jobOrderId, unitIdentity, incidentCode) {
+  return `${String(jobOrderId || '').trim()}::${String(unitIdentity || '').trim()}::${String(incidentCode || '').trim().toLowerCase()}`;
+}
+
+function buildTripMonitorIncidentEventId(jobOrderId, unitIdentity, incidentCode, openedAt) {
+  return `${buildTripMonitorIncidentEventOpenKey(jobOrderId, unitIdentity, incidentCode)}::${String(openedAt || '').trim()}`;
+}
+
+function buildTripMonitorIncidentHistoryMetadata(row, snapshot, incident, locationSnapshot) {
+  return {
+    rowId: row?.rowId || '',
+    day: row?.day || snapshot?.day || '',
+    boardStatus: row?.boardStatus || '',
+    customerName: row?.customerName || snapshot?.customerName || '',
+    tenantLabel: row?.tenantLabel || snapshot?.tenantLabel || '',
+    originName: snapshot?.originName || row?.originName || '',
+    destinationName: snapshot?.destinationName || row?.destinationName || '',
+    etaOrigin: snapshot?.etaOrigin || row?.etaOrigin || null,
+    etaDestination: snapshot?.etaDestination || row?.etaDestination || null,
+    shippingStatusLabel: row?.shippingStatusLabel || '',
+    unitLabel: row?.unitLabel || snapshot?.plateRaw || snapshot?.unitLabel || '',
+    locationTimestamp: locationSnapshot?.timestamp || null,
+    zoneName: locationSnapshot?.zoneName || '',
+    currentDetail: incident?.detail || '',
+    durationMinutes: Number(incident?.durationMinutes || 0),
+  };
+}
+
+function buildTripMonitorIncidentHistoryRow(row, snapshot, incident, locationSnapshot, now, existingRow, resolveReason) {
+  const unitIdentity = buildTripMonitorIncidentUnitIdentity(row, snapshot);
+  const incidentCode = String(incident?.code || existingRow?.incident_code || '').trim().toLowerCase();
+  const openedAtMs = toTimestampMaybe(existingRow?.opened_at || incident?.startedAt || now) || Number(now || Date.now());
+  const lastSeenAtMs = toTimestampMaybe(incident?.endedAt || existingRow?.last_seen_at || now) || Number(now || Date.now());
+  const resolvedAtMs = resolveReason ? (toTimestampMaybe(now) || Number(now || Date.now())) : null;
+  const durationMinutes = Number(Math.max(
+    0,
+    ((resolvedAtMs || lastSeenAtMs) - openedAtMs) / 60000,
+  ).toFixed(1));
+  const metadata = buildTripMonitorIncidentHistoryMetadata(row, snapshot, incident, locationSnapshot);
+  return {
+    id: String(existingRow?.id || buildTripMonitorIncidentEventId(snapshot?.jobOrderId, unitIdentity, incidentCode, new Date(openedAtMs).toISOString())),
+    tenant_label: row?.tenantLabel || snapshot?.tenantLabel || existingRow?.tenant_label || '',
+    customer_name: row?.customerName || snapshot?.customerName || existingRow?.customer_name || '',
+    unit_key: row?.unitKey || existingRow?.unit_key || '',
+    unit_id: row?.unitId || existingRow?.unit_id || '',
+    unit_label: row?.unitLabel || snapshot?.plateRaw || snapshot?.unitLabel || existingRow?.unit_label || '',
+    normalized_plate: snapshot?.normalizedPlate || row?.normalizedPlate || existingRow?.normalized_plate || '',
+    job_order_id: snapshot?.jobOrderId || existingRow?.job_order_id || '',
+    incident_code: incidentCode,
+    incident_label: incident?.label || existingRow?.incident_label || incidentCode,
+    severity: incident?.severity || existingRow?.severity || 'warning',
+    event_status: resolveReason ? 'resolved' : 'open',
+    opened_at: new Date(openedAtMs).toISOString(),
+    last_seen_at: new Date(lastSeenAtMs).toISOString(),
+    resolved_at: resolvedAtMs ? new Date(resolvedAtMs).toISOString() : null,
+    duration_minutes: durationMinutes,
+    detail_open: existingRow?.detail_open || incident?.detail || '',
+    detail_close: resolveReason ? String(resolveReason || '') : null,
+    first_location_summary: existingRow?.first_location_summary || locationSnapshot?.locationSummary || '',
+    last_location_summary: locationSnapshot?.locationSummary || existingRow?.last_location_summary || '',
+    resolved_location_summary: resolveReason ? (locationSnapshot?.locationSummary || existingRow?.resolved_location_summary || '') : null,
+    first_latitude: existingRow?.first_latitude ?? locationSnapshot?.latitude ?? null,
+    first_longitude: existingRow?.first_longitude ?? locationSnapshot?.longitude ?? null,
+    last_latitude: locationSnapshot?.latitude ?? existingRow?.last_latitude ?? null,
+    last_longitude: locationSnapshot?.longitude ?? existingRow?.last_longitude ?? null,
+    resolved_latitude: resolveReason ? (locationSnapshot?.latitude ?? null) : null,
+    resolved_longitude: resolveReason ? (locationSnapshot?.longitude ?? null) : null,
+    metadata,
+    updated_at: new Date(Number(now || Date.now())).toISOString(),
+  };
+}
+
+function mapTmsMonitorRowForStorage(row) {
+  return {
+    row_id: row.rowId,
+    day: row.day,
+    tenant_label: row.tenantLabel,
+    customer_name: row.customerName,
+    unit_key: row.unitKey,
+    unit_id: row.unitId,
+    unit_label: row.unitLabel,
+    normalized_plate: row.normalizedPlate,
+    severity: row.severity,
+    board_status: row.boardStatus,
+    job_order_id: row.jobOrderId,
+    job_order_count: row.jobOrderCount,
+    origin_name: row.originName,
+    destination_name: row.destinationName,
+    temp_min: row.tempMin,
+    temp_max: row.tempMax,
+    eta_origin: row.etaOrigin ? new Date(row.etaOrigin).toISOString() : null,
+    eta_destination: row.etaDestination ? new Date(row.etaDestination).toISOString() : null,
+    driver_app_status: row.driverAppStatus,
+    incident_codes: row.incidentCodes,
+    incident_summary: row.incidentSummary,
+    unmatched_reason: row.unmatchedReason,
+    metadata: row.metadata || {},
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function upsertTmsMonitorRows(rows) {
+  if (!getPostgresConfig().enabled || !rows.length) {
+    return 0;
+  }
+  return postgresUpsertRows(
+    'tms_monitor_rows',
+    rows.map(mapTmsMonitorRowForStorage),
+    ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
+    ['row_id'],
+    { touchUpdatedAt: false },
+  );
+}
+
+async function listOpenTmsMonitorIncidentEvents(jobOrderIds) {
+  const resolvedIds = [...new Set((jobOrderIds || []).map(function (jobOrderId) {
+    return String(jobOrderId || '').trim();
+  }).filter(Boolean))];
+  if (!resolvedIds.length || !getPostgresConfig().enabled) {
+    return [];
+  }
+  const result = await postgresQuery(
+    `select id, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, job_order_id,
+            incident_code, incident_label, severity, event_status, opened_at, last_seen_at, resolved_at,
+            duration_minutes, detail_open, detail_close, first_location_summary, last_location_summary,
+            resolved_location_summary, first_latitude, first_longitude, last_latitude, last_longitude,
+            resolved_latitude, resolved_longitude, metadata
+     from tms_monitor_incidents
+     where event_status = 'open'
+       and job_order_id = any($1)`,
+    [resolvedIds],
+  );
+  return result.rows || [];
+}
+
+async function listTmsMonitorIncidentHistory(jobOrderId) {
+  const resolvedJobOrderId = String(jobOrderId || '').trim();
+  if (!resolvedJobOrderId || !getPostgresConfig().enabled) {
+    return [];
+  }
+  const result = await postgresQuery(
+    `select id, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, job_order_id,
+            incident_code, incident_label, severity, event_status, opened_at, last_seen_at, resolved_at,
+            duration_minutes, detail_open, detail_close, first_location_summary, last_location_summary,
+            resolved_location_summary, first_latitude, first_longitude, last_latitude, last_longitude,
+            resolved_latitude, resolved_longitude, metadata
+     from tms_monitor_incidents
+     where job_order_id = $1
+     order by case when event_status = 'open' then 0 else 1 end, opened_at desc, updated_at desc`,
+    [resolvedJobOrderId],
+  );
+  return (result.rows || []).map(function (row) {
+    return {
+      id: String(row.id || ''),
+      jobOrderId: String(row.job_order_id || ''),
+      incidentCode: String(row.incident_code || ''),
+      label: String(row.incident_label || row.incident_code || ''),
+      severity: String(row.severity || 'warning'),
+      status: String(row.event_status || 'open'),
+      openedAt: row.opened_at ? Date.parse(row.opened_at) : null,
+      lastSeenAt: row.last_seen_at ? Date.parse(row.last_seen_at) : null,
+      resolvedAt: row.resolved_at ? Date.parse(row.resolved_at) : null,
+      durationMinutes: toNumber(row.duration_minutes) ?? 0,
+      detailOpen: String(row.detail_open || ''),
+      detailClose: String(row.detail_close || ''),
+      firstLocationSummary: String(row.first_location_summary || ''),
+      lastLocationSummary: String(row.last_location_summary || ''),
+      resolvedLocationSummary: String(row.resolved_location_summary || ''),
+      metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+    };
+  });
+}
+
+async function upsertTmsMonitorIncidentHistoryRows(rows) {
+  if (!getPostgresConfig().enabled || !rows.length) {
+    return 0;
+  }
+  return postgresUpsertRows(
+    'tms_monitor_incidents',
+    rows,
+    ['id', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'job_order_id', 'incident_code', 'incident_label', 'severity', 'event_status', 'opened_at', 'last_seen_at', 'resolved_at', 'duration_minutes', 'detail_open', 'detail_close', 'first_location_summary', 'last_location_summary', 'resolved_location_summary', 'first_latitude', 'first_longitude', 'last_latitude', 'last_longitude', 'resolved_latitude', 'resolved_longitude', 'metadata', 'updated_at'],
+    ['id'],
+    { touchUpdatedAt: false },
+  );
+}
+
+async function resolveInactiveTmsMonitorIncidentEvents(activeJobOrderIds, now) {
+  if (!getPostgresConfig().enabled) {
+    return 0;
+  }
+  const resolvedActiveIds = [...new Set((activeJobOrderIds || []).map(function (jobOrderId) {
+    return String(jobOrderId || '').trim();
+  }).filter(Boolean))];
+  const query = resolvedActiveIds.length
+    ? `select id, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, job_order_id,
+              incident_code, incident_label, severity, event_status, opened_at, last_seen_at, resolved_at,
+              duration_minutes, detail_open, detail_close, first_location_summary, last_location_summary,
+              resolved_location_summary, first_latitude, first_longitude, last_latitude, last_longitude,
+              resolved_latitude, resolved_longitude, metadata
+       from tms_monitor_incidents
+       where event_status = 'open'
+         and not (job_order_id = any($1))`
+    : `select id, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, job_order_id,
+              incident_code, incident_label, severity, event_status, opened_at, last_seen_at, resolved_at,
+              duration_minutes, detail_open, detail_close, first_location_summary, last_location_summary,
+              resolved_location_summary, first_latitude, first_longitude, last_latitude, last_longitude,
+              resolved_latitude, resolved_longitude, metadata
+       from tms_monitor_incidents
+       where event_status = 'open'`;
+  const result = await postgresQuery(query, resolvedActiveIds.length ? [resolvedActiveIds] : []);
+  const rows = result.rows || [];
+  if (!rows.length) {
+    return 0;
+  }
+  const resolvedRows = rows.map(function (existing) {
+    const locationSnapshot = {
+      locationSummary: String(existing.last_location_summary || existing.first_location_summary || ''),
+      latitude: toNumber(existing.last_latitude ?? existing.first_latitude),
+      longitude: toNumber(existing.last_longitude ?? existing.first_longitude),
+      timestamp: Number(now || Date.now()),
+    };
+    return buildTripMonitorIncidentHistoryRow(
+      {
+        tenantLabel: existing.tenant_label,
+        customerName: existing.customer_name,
+        unitKey: existing.unit_key,
+        unitId: existing.unit_id,
+        unitLabel: existing.unit_label,
+        normalizedPlate: existing.normalized_plate,
+      },
+      {
+        jobOrderId: existing.job_order_id,
+        normalizedPlate: existing.normalized_plate,
+        plateRaw: existing.unit_label,
+      },
+      {
+        code: existing.incident_code,
+        label: existing.incident_label,
+        severity: existing.severity,
+        detail: existing.detail_open,
+      },
+      locationSnapshot,
+      now,
+      existing,
+      'Closed automatically because Job Order is no longer active.',
+    );
+  });
+  return upsertTmsMonitorIncidentHistoryRows(resolvedRows);
+}
+
+async function syncTripMonitorIncidentHistoryForRows(rows, fleetIndex, tmsConfig, now) {
+  if (!getPostgresConfig().enabled || !rows.length) {
+    return rows;
+  }
+  const relatedJobIds = [...new Set(rows.flatMap(function (row) {
+    const jobOrders = Array.isArray(row?.metadata?.jobOrders) ? row.metadata.jobOrders : [];
+    return jobOrders.map(function (jobOrder) {
+      return String(jobOrder?.jobOrderId || '').trim();
+    }).filter(Boolean);
+  }))];
+  const openRows = await listOpenTmsMonitorIncidentEvents(relatedJobIds);
+  const openMap = new Map();
+  for (const openRow of openRows) {
+    const unitIdentity = firstNonEmptyText(openRow.unit_key, openRow.normalized_plate, openRow.unit_id, openRow.job_order_id);
+    const key = buildTripMonitorIncidentEventOpenKey(openRow.job_order_id, unitIdentity, openRow.incident_code);
+    openMap.set(key, openRow);
+  }
+
+  const upserts = [];
+  for (const row of rows) {
+    const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    const jobOrders = Array.isArray(metadata.jobOrders) ? metadata.jobOrders.filter(Boolean) : [];
+    if (!jobOrders.length) {
+      continue;
+    }
+    const referenceSnapshot = metadata.headlineJobOrder || jobOrders[0] || null;
+    const fleetContext = resolveFleetContextForTripMonitor(referenceSnapshot, fleetIndex);
+    const fleetRow = metadata.fleetRow || fleetContext?.row || null;
+    const unitState = fleetContext?.unitState || null;
+    const locationSnapshot = buildTripMonitorIncidentLocationSnapshot(fleetRow, unitState, now);
+
+    for (const jobSnapshot of jobOrders) {
+      const unitIdentity = buildTripMonitorIncidentUnitIdentity(row, jobSnapshot);
+      const currentIncidents = jobSnapshot.active
+        ? evaluateTmsIncidents(jobSnapshot, fleetRow, unitState, tmsConfig, now)
+        : [];
+      const currentCodes = new Set();
+      for (const incident of currentIncidents) {
+        const key = buildTripMonitorIncidentEventOpenKey(jobSnapshot.jobOrderId, unitIdentity, incident.code);
+        currentCodes.add(key);
+        const existing = openMap.get(key) || null;
+        const nextRow = buildTripMonitorIncidentHistoryRow(row, jobSnapshot, incident, locationSnapshot, now, existing, null);
+        upserts.push(nextRow);
+        openMap.set(key, nextRow);
+      }
+
+      for (const [key, existing] of openMap.entries()) {
+        if (String(existing.job_order_id || '') !== String(jobSnapshot.jobOrderId || '')) continue;
+        const existingUnitIdentity = buildTripMonitorIncidentUnitIdentity({
+          unitKey: existing.unit_key,
+          normalizedPlate: existing.normalized_plate,
+          unitId: existing.unit_id,
+        }, null);
+        if (existingUnitIdentity !== unitIdentity) continue;
+        if (currentCodes.has(key)) continue;
+        const resolveReason = jobSnapshot.active
+          ? 'Recovered automatically after unit returned to normal.'
+          : 'Closed automatically because Job Order is no longer active.';
+        const resolvedRow = buildTripMonitorIncidentHistoryRow(
+          row,
+          jobSnapshot,
+          {
+            code: existing.incident_code,
+            label: existing.incident_label,
+            severity: existing.severity,
+            detail: existing.detail_open,
+          },
+          locationSnapshot,
+          now,
+          existing,
+          resolveReason,
+        );
+        upserts.push(resolvedRow);
+        openMap.delete(key);
+      }
+    }
+  }
+
+  if (upserts.length) {
+    await upsertTmsMonitorIncidentHistoryRows(upserts);
+  }
+  return rows;
 }
 
 function severityRank(value) {
@@ -5348,40 +5779,7 @@ async function replaceTmsMonitorRows(day, rows) {
   if (!rows.length) {
     return 0;
   }
-  return postgresUpsertRows(
-    'tms_monitor_rows',
-    rows.map(function (row) {
-      return {
-        row_id: row.rowId,
-        day: row.day,
-        tenant_label: row.tenantLabel,
-        customer_name: row.customerName,
-        unit_key: row.unitKey,
-        unit_id: row.unitId,
-        unit_label: row.unitLabel,
-        normalized_plate: row.normalizedPlate,
-        severity: row.severity,
-        board_status: row.boardStatus,
-        job_order_id: row.jobOrderId,
-        job_order_count: row.jobOrderCount,
-        origin_name: row.originName,
-        destination_name: row.destinationName,
-        temp_min: row.tempMin,
-        temp_max: row.tempMax,
-        eta_origin: row.etaOrigin ? new Date(row.etaOrigin).toISOString() : null,
-        eta_destination: row.etaDestination ? new Date(row.etaDestination).toISOString() : null,
-        driver_app_status: row.driverAppStatus,
-        incident_codes: row.incidentCodes,
-        incident_summary: row.incidentSummary,
-        unmatched_reason: row.unmatchedReason,
-        metadata: row.metadata || {},
-        updated_at: new Date().toISOString(),
-      };
-    }),
-    ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
-    ['row_id'],
-    { touchUpdatedAt: false },
-  );
+  return upsertTmsMonitorRows(rows);
 }
 
 async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
@@ -5427,40 +5825,7 @@ async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
     );
   }
   if (rows.length) {
-    rowsSaved = await postgresUpsertRows(
-      'tms_monitor_rows',
-      rows.map(function (row) {
-        return {
-          row_id: row.rowId,
-          day: row.day,
-          tenant_label: row.tenantLabel,
-          customer_name: row.customerName,
-          unit_key: row.unitKey,
-          unit_id: row.unitId,
-          unit_label: row.unitLabel,
-          normalized_plate: row.normalizedPlate,
-          severity: row.severity,
-          board_status: row.boardStatus,
-          job_order_id: row.jobOrderId,
-          job_order_count: row.jobOrderCount,
-          origin_name: row.originName,
-          destination_name: row.destinationName,
-          temp_min: row.tempMin,
-          temp_max: row.tempMax,
-          eta_origin: row.etaOrigin ? new Date(row.etaOrigin).toISOString() : null,
-          eta_destination: row.etaDestination ? new Date(row.etaDestination).toISOString() : null,
-          driver_app_status: row.driverAppStatus,
-          incident_codes: row.incidentCodes,
-          incident_summary: row.incidentSummary,
-          unmatched_reason: row.unmatchedReason,
-          metadata: row.metadata || {},
-          updated_at: new Date().toISOString(),
-        };
-      }),
-      ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
-      ['row_id'],
-      { touchUpdatedAt: false },
-    );
+    rowsSaved = await upsertTmsMonitorRows(rows);
   }
   return { snapshotsSaved, rowsSaved };
 }
@@ -5495,6 +5860,10 @@ async function syncTmsMonitor(options) {
   const fleetIndex = buildFleetPlateIndex(now);
   const monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
   const saveResult = await replaceTmsSnapshotWindow(window, jobSnapshots, monitorRows);
+  await syncTripMonitorIncidentHistoryForRows(monitorRows, fleetIndex, runtime, now);
+  await resolveInactiveTmsMonitorIncidentEvents(jobSnapshots.map(function (snapshot) {
+    return snapshot.jobOrderId;
+  }), now);
 
   const fetchedCount = jobSnapshots.length;
   const matchedCount = monitorRows.filter(function (row) { return row.severity !== 'unmatched'; }).length;
@@ -5593,7 +5962,7 @@ async function listTmsMonitorRows(searchParams) {
   }
   query += ` order by day desc, updated_at desc`;
   const result = await postgresQuery(query, params);
-  return result.rows.map(function (row) {
+  const refreshedRows = result.rows.map(function (row) {
     return refreshTripMonitorStoredRow({
       rowId: row.row_id,
       day: String(row.day || ''),
@@ -5620,6 +5989,9 @@ async function listTmsMonitorRows(searchParams) {
       metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
     }, fleetIndex, tmsRuntime, now);
   });
+  await syncTripMonitorIncidentHistoryForRows(refreshedRows, fleetIndex, tmsRuntime, now);
+  await upsertTmsMonitorRows(refreshedRows);
+  return refreshedRows;
 }
 
 function buildTmsMonitorSummary(rows, logs, meta) {
@@ -6570,6 +6942,38 @@ async function ensurePostgresSchema() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists tms_monitor_incidents (
+      id text primary key,
+      tenant_label text,
+      customer_name text,
+      unit_key text,
+      unit_id text,
+      unit_label text,
+      normalized_plate text,
+      job_order_id text not null,
+      incident_code text not null,
+      incident_label text not null,
+      severity text not null,
+      event_status text not null default 'open',
+      opened_at timestamptz not null,
+      last_seen_at timestamptz not null,
+      resolved_at timestamptz,
+      duration_minutes numeric not null default 0,
+      detail_open text,
+      detail_close text,
+      first_location_summary text,
+      last_location_summary text,
+      resolved_location_summary text,
+      first_latitude numeric,
+      first_longitude numeric,
+      last_latitude numeric,
+      last_longitude numeric,
+      resolved_latitude numeric,
+      resolved_longitude numeric,
+      metadata jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now()
+    );
+
     create table if not exists tms_sync_logs (
       id text primary key,
       synced_at timestamptz not null,
@@ -6605,6 +7009,9 @@ async function ensurePostgresSchema() {
     create index if not exists idx_tms_monitor_rows_day on tms_monitor_rows(day desc);
     create index if not exists idx_tms_monitor_rows_severity on tms_monitor_rows(severity);
     create index if not exists idx_tms_monitor_rows_customer on tms_monitor_rows(customer_name);
+    create index if not exists idx_tms_monitor_incidents_job on tms_monitor_incidents(job_order_id);
+    create index if not exists idx_tms_monitor_incidents_status on tms_monitor_incidents(event_status);
+    create index if not exists idx_tms_monitor_incidents_unit on tms_monitor_incidents(unit_key, normalized_plate);
     create index if not exists idx_tms_sync_logs_synced_at on tms_sync_logs(synced_at desc);
     create index if not exists idx_tms_address_cache_status on tms_address_cache(status);
     create index if not exists idx_tms_address_cache_seen on tms_address_cache(last_seen_at desc);
@@ -10132,7 +10539,7 @@ async function handleApi(req, res, url) {
       if (!rowId) {
         throw new Error('rowId wajib diisi.');
       }
-      const result = await postgresQuery('select row_id, day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
+      const result = await postgresQuery('select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
       if (!result.rows[0]) {
         console.warn(`[TMS] Detail miss for row ${rowId}`);
         throw new Error('Trip monitor detail tidak ditemukan.');
@@ -10163,6 +10570,14 @@ async function handleApi(req, res, url) {
         unmatchedReason: String(result.rows[0].unmatched_reason || ''),
         metadata: result.rows[0].metadata && typeof result.rows[0].metadata === 'object' ? result.rows[0].metadata : {},
       }, buildFleetPlateIndex(now), getTmsConfig(), now);
+      await syncTripMonitorIncidentHistoryForRows([refreshed], buildFleetPlateIndex(now), getTmsConfig(), now);
+      await upsertTmsMonitorRows([refreshed]);
+      const activeHeadlineJobOrderId = String(
+        refreshed?.metadata?.headlineJobOrder?.jobOrderId
+        || refreshed?.jobOrderId
+        || '',
+      ).trim();
+      const incidentHistory = await listTmsMonitorIncidentHistory(activeHeadlineJobOrderId);
       console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
       sendJson(res, 200, {
         ok: true,
@@ -10174,8 +10589,10 @@ async function handleApi(req, res, url) {
         unitId: refreshed.unitId,
         unitLabel: refreshed.unitLabel,
         customerName: refreshed.customerName,
+        driverAppStatus: refreshed.driverAppStatus || '',
         shippingStatusLabel: refreshed.shippingStatusLabel || '',
         shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
+        incidentHistory,
         metadata: refreshed.metadata || {},
       },
     });
