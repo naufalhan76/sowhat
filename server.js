@@ -5316,12 +5316,12 @@ function buildTripMonitorIncidentHistoryMetadata(row, snapshot, incident, locati
   };
 }
 
-function buildTripMonitorIncidentHistoryRow(row, snapshot, incident, locationSnapshot, now, existingRow, resolveReason) {
+function buildTripMonitorIncidentHistoryRow(row, snapshot, incident, locationSnapshot, now, existingRow, resolveReason, resolveTimestampOverride) {
   const unitIdentity = buildTripMonitorIncidentUnitIdentity(row, snapshot);
   const incidentCode = String(incident?.code || existingRow?.incident_code || '').trim().toLowerCase();
   const openedAtMs = toTimestampMaybe(existingRow?.opened_at || incident?.startedAt || now) || Number(now || Date.now());
   const lastSeenAtMs = toTimestampMaybe(incident?.endedAt || existingRow?.last_seen_at || now) || Number(now || Date.now());
-  const resolvedAtMs = resolveReason ? (toTimestampMaybe(now) || Number(now || Date.now())) : null;
+  const resolvedAtMs = resolveReason ? (toTimestampMaybe(resolveTimestampOverride || now) || Number(now || Date.now())) : null;
   const durationMinutes = Number(Math.max(
     0,
     ((resolvedAtMs || lastSeenAtMs) - openedAtMs) / 60000,
@@ -5577,9 +5577,31 @@ async function syncTripMonitorIncidentHistoryForRows(rows, fleetIndex, tmsConfig
       const currentCodes = new Set();
       for (const incident of currentIncidents) {
         const key = buildTripMonitorIncidentEventOpenKey(jobSnapshot.jobOrderId, unitIdentity, incident.code);
-        currentCodes.add(key);
         const existing = openMap.get(key) || null;
-        const nextRow = buildTripMonitorIncidentHistoryRow(row, jobSnapshot, incident, locationSnapshot, now, existing, null);
+        const incidentStartMs = toTimestampMaybe(incident?.startedAt || incident?.endedAt || now) || Number(now || Date.now());
+        const existingLastSeenMs = toTimestampMaybe(existing?.last_seen_at || existing?.opened_at || null);
+        if (existing && existingLastSeenMs !== null && incidentStartMs > (existingLastSeenMs + 60000)) {
+          const resolvedPrevious = buildTripMonitorIncidentHistoryRow(
+            row,
+            jobSnapshot,
+            {
+              code: existing.incident_code,
+              label: existing.incident_label,
+              severity: existing.severity,
+              detail: existing.detail_open,
+            },
+            locationSnapshot,
+            now,
+            existing,
+            'Recovered before recurring incident started.',
+            incidentStartMs,
+          );
+          upserts.push(resolvedPrevious);
+          openMap.delete(key);
+        }
+        currentCodes.add(key);
+        const nextExisting = openMap.get(key) || null;
+        const nextRow = buildTripMonitorIncidentHistoryRow(row, jobSnapshot, incident, locationSnapshot, now, nextExisting, null);
         upserts.push(nextRow);
         openMap.set(key, nextRow);
       }
