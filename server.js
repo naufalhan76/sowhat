@@ -47,6 +47,7 @@ const TRIP_MONITOR_LONG_STOP_MINUTES = 180;
 const TRIP_MONITOR_LONG_STOP_RADIUS_METERS = 150;
 const TRIP_MONITOR_IDLE_SPEED_THRESHOLD_KPH = 1;
 const TRIP_MONITOR_TEMP_ABOVE_MAX_MINUTES = 20;
+const TRIP_MONITOR_TEMP_REOPEN_DEBOUNCE_MINUTES = 15;
 const TRIP_MONITOR_STATUS_RADIUS_METERS = 1000;
 const TMS_ADDRESS_CACHE_RESOLVED_TTL_MS = 24 * 60 * 60 * 1000;
 const TMS_ADDRESS_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000;
@@ -5423,6 +5424,35 @@ async function listOpenTmsMonitorIncidentEvents(jobOrderIds) {
   return result.rows || [];
 }
 
+async function listLatestTmsMonitorIncidentEvents(jobOrderIds) {
+  const resolvedIds = [...new Set((jobOrderIds || []).map(function (jobOrderId) {
+    return String(jobOrderId || '').trim();
+  }).filter(Boolean))];
+  if (!resolvedIds.length || !getPostgresConfig().enabled) {
+    return [];
+  }
+  const result = await postgresQuery(
+    `select id, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, job_order_id,
+            incident_code, incident_label, severity, event_status, opened_at, last_seen_at, resolved_at,
+            duration_minutes, detail_open, detail_close, first_location_summary, last_location_summary,
+            resolved_location_summary, first_latitude, first_longitude, last_latitude, last_longitude,
+            resolved_latitude, resolved_longitude, metadata, updated_at
+     from tms_monitor_incidents
+     where job_order_id = any($1)
+     order by updated_at desc nulls last, resolved_at desc nulls last, last_seen_at desc nulls last, opened_at desc nulls last`,
+    [resolvedIds],
+  );
+  const latestByKey = new Map();
+  for (const row of result.rows || []) {
+    const unitIdentity = firstNonEmptyText(row.unit_key, row.normalized_plate, row.unit_id, row.job_order_id);
+    const key = buildTripMonitorIncidentEventOpenKey(row.job_order_id, unitIdentity, row.incident_code);
+    if (!latestByKey.has(key)) {
+      latestByKey.set(key, row);
+    }
+  }
+  return [...latestByKey.values()];
+}
+
 async function listTmsMonitorIncidentHistory(jobOrderId) {
   const resolvedJobOrderId = String(jobOrderId || '').trim();
   if (!resolvedJobOrderId || !getPostgresConfig().enabled) {
@@ -5642,6 +5672,88 @@ async function syncTripMonitorIncidentHistoryForRows(rows, fleetIndex, tmsConfig
     await upsertTmsMonitorIncidentHistoryRows(upserts);
   }
   return rows;
+}
+
+function applyTripMonitorIncidentState(row, incidents) {
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const nextIncidents = Array.isArray(incidents) ? incidents.filter(Boolean) : [];
+  const nextRow = {
+    ...row,
+    incidentCodes: summarizeIncidentCodes(nextIncidents),
+    incidentSummary: nextIncidents.map(function (incident) { return incident.label; }).join(', '),
+    metadata: {
+      ...metadata,
+      incidents: nextIncidents,
+    },
+  };
+  if (nextRow.boardStatus === 'unmatched' || nextRow.boardStatus === 'no-job-order') {
+    return nextRow;
+  }
+  if (nextIncidents.some(function (incident) { return incident.severity === 'critical'; })) {
+    nextRow.severity = 'critical';
+    nextRow.boardStatus = 'critical';
+    return nextRow;
+  }
+  if (nextIncidents.length) {
+    nextRow.severity = 'warning';
+    nextRow.boardStatus = 'warning';
+    return nextRow;
+  }
+  nextRow.severity = 'normal';
+  nextRow.boardStatus = 'normal';
+  return nextRow;
+}
+
+async function applyTripMonitorIncidentDebounceToRows(rows) {
+  if (!getPostgresConfig().enabled || !Array.isArray(rows) || !rows.length) {
+    return rows;
+  }
+  const relatedJobIds = [...new Set(rows.flatMap(function (row) {
+    const jobOrders = Array.isArray(row?.metadata?.jobOrders) ? row.metadata.jobOrders : [];
+    return jobOrders.map(function (jobOrder) {
+      return String(jobOrder?.jobOrderId || '').trim();
+    }).filter(Boolean);
+  }))];
+  if (!relatedJobIds.length) {
+    return rows;
+  }
+  const latestRows = await listLatestTmsMonitorIncidentEvents(relatedJobIds);
+  const latestMap = new Map();
+  for (const historyRow of latestRows) {
+    const unitIdentity = firstNonEmptyText(historyRow.unit_key, historyRow.normalized_plate, historyRow.unit_id, historyRow.job_order_id);
+    const key = buildTripMonitorIncidentEventOpenKey(historyRow.job_order_id, unitIdentity, historyRow.incident_code);
+    latestMap.set(key, historyRow);
+  }
+  const reopenDebounceMs = TRIP_MONITOR_TEMP_REOPEN_DEBOUNCE_MINUTES * 60 * 1000;
+  return rows.map(function (row) {
+    const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    const headlineJobOrder = metadata.headlineJobOrder || null;
+    const incidents = Array.isArray(metadata.incidents) ? metadata.incidents : [];
+    if (!headlineJobOrder || !incidents.length) {
+      return row;
+    }
+    const unitIdentity = buildTripMonitorIncidentUnitIdentity(row, headlineJobOrder);
+    const filteredIncidents = incidents.filter(function (incident) {
+      if (String(incident?.code || '').trim().toLowerCase() !== 'temp-out-of-range') {
+        return true;
+      }
+      const key = buildTripMonitorIncidentEventOpenKey(headlineJobOrder.jobOrderId, unitIdentity, incident.code);
+      const latest = latestMap.get(key);
+      if (!latest || String(latest.event_status || '').toLowerCase() !== 'resolved') {
+        return true;
+      }
+      const resolvedAtMs = toTimestampMaybe(latest.resolved_at || latest.last_seen_at || null);
+      const incidentStartMs = toTimestampMaybe(incident?.startedAt || incident?.endedAt || null);
+      if (resolvedAtMs === null || incidentStartMs === null) {
+        return true;
+      }
+      return incidentStartMs >= (resolvedAtMs + reopenDebounceMs);
+    });
+    if (filteredIncidents.length === incidents.length) {
+      return row;
+    }
+    return applyTripMonitorIncidentState(row, filteredIncidents);
+  });
 }
 
 function severityRank(value) {
@@ -5880,7 +5992,8 @@ async function syncTmsMonitor(options) {
     return snapshot.day >= window.startDay && snapshot.day <= window.endDay;
   });
   const fleetIndex = buildFleetPlateIndex(now);
-  const monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
+  let monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
+  monitorRows = await applyTripMonitorIncidentDebounceToRows(monitorRows);
   const saveResult = await replaceTmsSnapshotWindow(window, jobSnapshots, monitorRows);
   await syncTripMonitorIncidentHistoryForRows(monitorRows, fleetIndex, runtime, now);
   await resolveInactiveTmsMonitorIncidentEvents(jobSnapshots.map(function (snapshot) {
@@ -5984,7 +6097,7 @@ async function listTmsMonitorRows(searchParams) {
   }
   query += ` order by day desc, updated_at desc`;
   const result = await postgresQuery(query, params);
-  const refreshedRows = result.rows.map(function (row) {
+  let refreshedRows = result.rows.map(function (row) {
     return refreshTripMonitorStoredRow({
       rowId: row.row_id,
       day: String(row.day || ''),
@@ -6011,6 +6124,7 @@ async function listTmsMonitorRows(searchParams) {
       metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
     }, fleetIndex, tmsRuntime, now);
   });
+  refreshedRows = await applyTripMonitorIncidentDebounceToRows(refreshedRows);
   await syncTripMonitorIncidentHistoryForRows(refreshedRows, fleetIndex, tmsRuntime, now);
   await upsertTmsMonitorRows(refreshedRows);
   return refreshedRows;
@@ -10567,7 +10681,7 @@ async function handleApi(req, res, url) {
         throw new Error('Trip monitor detail tidak ditemukan.');
       }
       const now = Date.now();
-      const refreshed = refreshTripMonitorStoredRow({
+      let refreshed = refreshTripMonitorStoredRow({
         rowId: result.rows[0].row_id,
         day: String(result.rows[0].day || ''),
         tenantLabel: String(result.rows[0].tenant_label || ''),
@@ -10592,6 +10706,7 @@ async function handleApi(req, res, url) {
         unmatchedReason: String(result.rows[0].unmatched_reason || ''),
         metadata: result.rows[0].metadata && typeof result.rows[0].metadata === 'object' ? result.rows[0].metadata : {},
       }, buildFleetPlateIndex(now), getTmsConfig(), now);
+      refreshed = (await applyTripMonitorIncidentDebounceToRows([refreshed]))[0] || refreshed;
       await syncTripMonitorIncidentHistoryForRows([refreshed], buildFleetPlateIndex(now), getTmsConfig(), now);
       await upsertTmsMonitorRows([refreshed]);
       const activeHeadlineJobOrderId = String(
