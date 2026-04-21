@@ -2,7 +2,7 @@
 import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MoonStar, Navigation,
+  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
@@ -4422,6 +4422,7 @@ export default function App() {
           historyDetail={tripMonitorDetailHistory}
           historyBusy={tripMonitorDetailHistoryBusy}
           historyRange={tripMonitorDetailRange}
+          webSessionUser={webSessionUser}
           onClose={closeTripMonitorDetail}
           onOpenFleet={() => openTripMonitorInvestigation(tripMonitorDetail, 'fleet')}
           onOpenMap={() => openTripMonitorInvestigation(tripMonitorDetail, 'map')}
@@ -5254,7 +5255,15 @@ function TripMonitorShippingProgress({ shippingStatus }) {
   </div>;
 }
 
-function TripMonitorShippingProgressClean({ shippingStatus }) {
+const SHIPPING_STEP_ICONS = {
+  'otw-load': Truck,
+  'sampai-load': PackageSearch,
+  'menuju-unload': Navigation,
+  'sampai-unload': Flag,
+  'selesai': Box,
+};
+
+function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
   const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
     ? shippingStatus.steps
     : [
@@ -5268,6 +5277,16 @@ function TripMonitorShippingProgressClean({ shippingStatus }) {
   const completedStepIndex = steps.reduce((lastIndex, step, index) => (step.completed ? index : lastIndex), 0);
   const resolvedActiveIndex = activeStepIndex >= 0 ? activeStepIndex : completedStepIndex;
   const progressPercent = steps.length > 1 ? (Math.max(0, resolvedActiveIndex) / (steps.length - 1)) * 100 : 0;
+  const allStops = headlineJob?.stops || [];
+  const loadStops = allStops.filter((s) => String(s.type || '').toLowerCase() === 'load');
+  const unloadStops = allStops.filter((s) => String(s.type || '').toLowerCase() === 'unload');
+  const [expandedStopKey, setExpandedStopKey] = useState(null);
+
+  const getMultiStops = (stepKey) => {
+    if (stepKey === 'sampai-load' || stepKey === 'otw-load') return loadStops.length > 1 ? loadStops : null;
+    if (stepKey === 'menuju-unload' || stepKey === 'sampai-unload') return unloadStops.length > 1 ? unloadStops : null;
+    return null;
+  };
 
   return <div className="trip-monitor-progress-shell">
     <div className="trip-monitor-progress-track" aria-hidden="true">
@@ -5276,15 +5295,27 @@ function TripMonitorShippingProgressClean({ shippingStatus }) {
     <div className="trip-monitor-progress">
       {steps.map((step, index) => {
         const stepClassName = step.active ? 'is-active' : step.completed ? 'is-completed' : 'is-pending';
+        const StepIcon = SHIPPING_STEP_ICONS[step.key] || Box;
         const stepNote = step.locationName || (step.active ? 'Sedang aktif' : step.completed ? 'Selesai' : 'Belum tercapai');
+        const multiStops = getMultiStops(step.key);
+        const isExpanded = expandedStopKey === step.key;
+        const stopLabel = step.key === 'sampai-load' || step.key === 'otw-load' ? 'Load locations' : 'Unload locations';
         return <div key={step.key || index} className={`trip-monitor-progress-step ${stepClassName}`}>
           <div className="trip-monitor-progress-marker" aria-hidden="true">
-            {step.completed ? '\u2713' : step.active ? <span className="trip-monitor-progress-marker-dot" /> : null}
+            <StepIcon size={16} />
           </div>
           <div className="trip-monitor-progress-copy">
             <strong>{tmsShippingStatusLabel(step.label || step.key)}</strong>
             <span>{formatTripMonitorStatusTime(step.changedAt)}</span>
-            <small>{stepNote}</small>
+            {multiStops ? <button type="button" className="trip-monitor-progress-expand-btn" onClick={() => setExpandedStopKey(isExpanded ? null : step.key)}>
+              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {stopLabel}
+            </button> : <small>{stepNote}</small>}
+            {isExpanded && multiStops ? <div className="trip-monitor-progress-stops">
+              {multiStops.map((stop, i) => <div key={i} className="trip-monitor-progress-stop-item">
+                {stop.arrived || stop.completed ? <span className="trip-monitor-progress-stop-check">{'\u2713'}</span> : <span className="trip-monitor-progress-stop-pending" />}
+                <span>{stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
+              </div>)}
+            </div> : null}
           </div>
         </div>;
       })}
@@ -5295,8 +5326,10 @@ function TripMonitorShippingProgressClean({ shippingStatus }) {
 function TripMonitorUnitCard({ row, onOpen }) {
   const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
   const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
-  const shippingStatusChangedAt = row.shippingStatusChangedAt || row?.metadata?.shippingStatus?.changedAt || null;
+  const activeStopName = row?.metadata?.shippingStatus?.activeStopName || '';
   const sublineText = `${row.jobOrderId || '-'} | ${row.customerName || '-'}`;
+  const tempRange = normalizeTemperatureRange(row.tempMin, row.tempMax);
+  const tempLabel = tempRange.min !== null ? `${fmtNum(tempRange.min)}°C s/d ${fmtNum(tempRange.max)}°C` : null;
   return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen} title={`${unitLabel} — ${sublineText}`}>
     <div className="trip-monitor-card-head">
       <div className="trip-monitor-card-titleblock">
@@ -5306,14 +5339,79 @@ function TripMonitorUnitCard({ row, onOpen }) {
       <TripMonitorIncidentIcons codes={row.incidentCodes || []} />
     </div>
     <div className="trip-monitor-card-status">
-      <span className="trip-monitor-card-status-label">Status pengiriman</span>
       <strong title={shippingStatus}>{shippingStatus}</strong>
-      <div className="trip-monitor-card-status-time">{formatTripMonitorStatusTime(shippingStatusChangedAt)}</div>
+      {activeStopName ? <div className="trip-monitor-card-location" title={activeStopName}>{activeStopName}</div> : null}
     </div>
+    {tempLabel ? <div className="trip-monitor-card-temp"><Thermometer size={12} /> {tempLabel}</div> : null}
     {row.unmatchedReason ? <div className="trip-monitor-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
   </button>;
 }
-function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
+
+function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
+  const [comments, setComments] = useState([]);
+  const [showComments, setShowComments] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [commentCount, setCommentCount] = useState(null);
+
+  const fetchComments = async () => {
+    try {
+      const res = await fetch(`/api/tms/incidents/${encodeURIComponent(incidentId)}/comments`);
+      const data = await res.json();
+      if (data.ok) {
+        setComments(data.comments || []);
+        setCommentCount((data.comments || []).length);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (incidentId) fetchComments();
+  }, [incidentId]);
+
+  const handleSubmit = async () => {
+    if (!commentText.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tms/incidents/${encodeURIComponent(incidentId)}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: commentText.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCommentText('');
+        setShowForm(false);
+        await fetchComments();
+        setShowComments(true);
+      }
+    } catch (_) {}
+    setBusy(false);
+  };
+
+  return <div className="trip-monitor-incident-actions">
+    <button type="button" className="sf-btn sf-btn-light sf-btn-xs" onClick={() => { setShowForm(!showForm); if (!showForm) setShowComments(false); }}>
+      <MessageSquare size={12} /> Add
+    </button>
+    <button type="button" className="sf-btn sf-btn-light sf-btn-xs" onClick={() => { setShowComments(!showComments); if (!showComments) setShowForm(false); }}>
+      <MessageSquare size={12} /> {commentCount !== null ? commentCount : '..'}
+    </button>
+    {showForm ? <div className="trip-monitor-comment-form">
+      <textarea rows={2} placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+      <button type="button" className="sf-btn sf-btn-primary sf-btn-xs" disabled={busy || !commentText.trim()} onClick={handleSubmit}>{busy ? 'Saving...' : 'Submit'}</button>
+    </div> : null}
+    {showComments && comments.length ? <div className="trip-monitor-comment-list">
+      {comments.map((c) => <div key={c.id} className="trip-monitor-comment-item">
+        <div className="trip-monitor-comment-meta"><strong>{c.display_name || c.username}</strong> <span>{fmtDate(c.created_at)}</span></div>
+        <div className="trip-monitor-comment-text">{c.comment}</div>
+      </div>)}
+    </div> : null}
+    {showComments && !comments.length ? <div className="trip-monitor-comment-list"><div className="empty-state">Belum ada komentar.</div></div> : null}
+  </div>;
+}
+
+function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
   if (!detail) return null;
   const fleetRow = detail?.metadata?.fleetRow || null;
   const jobOrders = detail?.metadata?.jobOrders || [];
@@ -5425,8 +5523,8 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               </div>
               <div className="spacer-16" />
               <DataTable
-                pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location"]}
+                pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
+                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
                 emptyMessage="Belum ada incident history untuk JO ini."
                 rows={incidentHistory.map((item) => {
                   const description = buildTripMonitorIncidentHistoryDescription(item);
@@ -5440,6 +5538,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
                     fmtDate(item.openedAt),
                     String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
                     <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
+                    <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
                   ];
                 })}
               />
@@ -5453,7 +5552,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               </div>
             </CardHeader>
             <CardContent>
-              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} />
+              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} />
             </CardContent>
           </Card>
           <div className="split-panels trip-monitor-detail-panels">

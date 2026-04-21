@@ -7110,6 +7110,16 @@ async function ensurePostgresSchema() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists tms_incident_comments (
+      id text primary key,
+      incident_id text not null references tms_monitor_incidents(id),
+      username text not null,
+      display_name text,
+      comment text not null,
+      created_at timestamptz not null default now()
+    );
+    create index if not exists idx_tms_incident_comments_incident on tms_incident_comments(incident_id);
+
     create table if not exists tms_sync_logs (
       id text primary key,
       synced_at timestamptz not null,
@@ -10735,6 +10745,61 @@ async function handleApi(req, res, url) {
     });
     } catch (error) {
       sendApiError(res, error, 'Trip monitor detail gagal diambil.', 404);
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tms/incidents/') && pathname.endsWith('/comments') && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const incidentId = pathname.split('/')[4];
+      if (!incidentId) {
+        throw new Error('incidentId wajib diisi.');
+      }
+      const result = await postgresQuery(
+        'select id, incident_id, username, display_name, comment, created_at from tms_incident_comments where incident_id = $1 order by created_at asc',
+        [incidentId],
+      );
+      sendJson(res, 200, { ok: true, comments: result.rows });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal mengambil komentar incident.');
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tms/incidents/') && pathname.endsWith('/comments') && method === 'POST') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      const incidentId = pathname.split('/')[4];
+      if (!incidentId) {
+        throw new Error('incidentId wajib diisi.');
+      }
+      const body = await readRequestBody(req);
+      const comment = String(body.comment || '').trim();
+      if (!comment) {
+        throw new Error('Komentar tidak boleh kosong.');
+      }
+      const id = crypto.randomUUID();
+      await postgresQuery(
+        'insert into tms_incident_comments (id, incident_id, username, display_name, comment) values ($1, $2, $3, $4, $5)',
+        [id, incidentId, session.user.username || session.user.id, session.user.displayName || session.user.username || '', comment],
+      );
+      const result = await postgresQuery(
+        'select id, incident_id, username, display_name, comment, created_at from tms_incident_comments where id = $1',
+        [id],
+      );
+      sendJson(res, 201, { ok: true, comment: result.rows[0] });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal menambahkan komentar.');
     }
     return true;
   }

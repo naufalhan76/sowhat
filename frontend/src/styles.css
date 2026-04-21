@@ -5322,14 +5322,6 @@ textarea:focus {
   gap: 2px;
 }
 
-.trip-monitor-card-status-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .trip-monitor-card-status strong {
   display: block;
   font-size: 13px;
@@ -5337,9 +5329,22 @@ textarea:focus {
   color: var(--text-main);
 }
 
-.trip-monitor-card-status-time {
+.trip-monitor-card-location {
   font-size: 11px;
-  color: var(--text-muted);
+  line-height: 1.35;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-monitor-card-temp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
 }
 
 .trip-monitor-card-note {
@@ -5680,6 +5685,128 @@ textarea:focus {
 
 .trip-monitor-progress-step.is-pending .trip-monitor-progress-copy small {
   color: var(--text-muted);
+}
+
+.trip-monitor-progress-expand-btn {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.trip-monitor-progress-expand-btn:hover {
+  text-decoration: underline;
+}
+
+.trip-monitor-progress-stops {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.trip-monitor-progress-stop-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.trip-monitor-progress-stop-check {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.trip-monitor-progress-stop-pending {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+
+.trip-monitor-incident-actions {
+  display: grid;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.trip-monitor-incident-actions .sf-btn-xs {
+  font-size: 11px;
+  padding: 3px 8px;
+  gap: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.trip-monitor-comment-form {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.trip-monitor-comment-form textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-main);
+  color: var(--text-main);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.trip-monitor-comment-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.trip-monitor-comment-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+.trip-monitor-comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.trip-monitor-comment-meta strong {
+  font-size: 11px;
+  color: var(--text-main);
+}
+
+.trip-monitor-comment-meta span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.trip-monitor-comment-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 .trip-monitor-detail-panels {
