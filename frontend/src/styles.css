@@ -635,87 +635,6 @@ textarea:focus {
   min-width: auto;
 }
 
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 38px;
-  padding: 5px 6px 5px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-raised);
-  color: var(--text-main);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.theme-toggle:hover {
-  background: var(--surface-hover);
-  border-color: var(--button-border-strong);
-}
-
-.theme-toggle:focus-visible {
-  outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px var(--primary-glow);
-}
-
-.theme-toggle-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.theme-toggle-switch {
-  position: relative;
-  width: 52px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--theme-toggle-track);
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 7px;
-}
-
-.theme-toggle-switch-icon {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--theme-toggle-icon-muted);
-  transition: color 0.2s ease;
-}
-
-.theme-toggle-switch-icon-sun {
-  color: var(--theme-toggle-icon-muted);
-}
-
-.theme-toggle.is-light .theme-toggle-switch-icon-sun,
-.theme-toggle.is-dark .theme-toggle-switch-icon-moon {
-  color: var(--theme-toggle-icon-active);
-}
-
-.theme-toggle-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--theme-toggle-thumb);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.22);
-  transition: transform 0.2s ease;
-}
-
-.theme-toggle.is-light .theme-toggle-thumb {
-  transform: translateX(24px);
-}
-
 .account-badge {
   display: flex;
   align-items: center;
@@ -789,6 +708,30 @@ textarea:focus {
 
 .nav-item svg {
   flex-shrink: 0;
+}
+
+.theme-toggle-sidebar {
+  margin: 0 12px 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  color: var(--text-muted);
+  gap: 10px;
+}
+
+.theme-toggle-sidebar:hover {
+  color: var(--text-main);
+  background: var(--surface-hover);
+}
+
+.sidebar-collapsed .theme-toggle-sidebar span {
+  display: none;
+  opacity: 0;
+}
+
+.sidebar-collapsed .theme-toggle-sidebar {
+  justify-content: center;
+  padding: 12px;
+  margin: 0 8px 4px;
 }
 
 .sidebar-bottom {
@@ -3639,8 +3582,7 @@ textarea:focus {
     font-size: 12px;
   }
 
-  .command-center.mobile-topbar-expanded .topbar-actions>.sf-btn,
-  .command-center.mobile-topbar-expanded .topbar-actions>.theme-toggle {
+  .command-center.mobile-topbar-expanded .topbar-actions>.sf-btn {
     width: 100%;
     font-size: 12px;
   }
@@ -3749,7 +3691,6 @@ textarea:focus {
   }
 
   .topbar-actions>.sf-btn,
-  .topbar-actions>.theme-toggle,
   .topbar-actions>.account-badge,
   .topbar-actions>.control-inline-actions,
   .topbar-actions .sf-btn {
@@ -4024,8 +3965,7 @@ textarea:focus {
   font-size: 12px;
 }
 
-.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions>.sf-btn,
-.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions>.theme-toggle {
+.command-center.compact-topbar.mobile-topbar-expanded .topbar-actions>.sf-btn {
   width: 100%;
   font-size: 12px;
 }

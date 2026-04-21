@@ -3106,24 +3106,6 @@ export default function App() {
             </div>
           </div>
           <div className="topbar-actions">
-            <button
-              type="button"
-              className={`theme-toggle ${theme === 'light' ? 'is-light' : 'is-dark'}`}
-              onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
-              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-              aria-pressed={theme === 'light'}
-              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            >
-              <span className="theme-toggle-copy">
-                {theme === 'light' ? <Sun size={14} /> : <MoonStar size={14} />}
-                <span>{theme === 'light' ? 'Light mode' : 'Dark mode'}</span>
-              </span>
-              <span className="theme-toggle-switch" aria-hidden="true">
-                <span className="theme-toggle-switch-icon theme-toggle-switch-icon-sun"><Sun size={12} /></span>
-                <span className="theme-toggle-switch-icon theme-toggle-switch-icon-moon"><MoonStar size={12} /></span>
-                <span className="theme-toggle-thumb" />
-              </span>
-            </button>
             <div className="account-badge">
               <Settings size={14} />
               <span>Account</span>
@@ -3158,6 +3140,16 @@ export default function App() {
           })}
         </div>
         <div className="sidebar-bottom profile-dock">
+          <button
+            type="button"
+            className={`nav-item theme-toggle-sidebar ${theme === 'light' ? 'is-light' : 'is-dark'}`}
+            onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          >
+            {theme === 'light' ? <Sun size={18} /> : <MoonStar size={18} />}
+            <span>{theme === 'light' ? 'Light' : 'Dark'}</span>
+          </button>
           <button type="button" className="profile-summary-button" onClick={() => {
             setActivePanel(isAdmin ? 'admin' : 'overview');
             setMobileNavOpen(false);
