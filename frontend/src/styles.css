@@ -5709,6 +5709,12 @@ textarea:focus {
   gap: 4px;
   margin-top: 4px;
   text-align: left;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .trip-monitor-progress-stop-item {
@@ -5752,61 +5758,89 @@ textarea:focus {
   align-items: center;
 }
 
+.trip-monitor-comment-card {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-inner);
+  border: 1px solid var(--border-alpha);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
 .trip-monitor-comment-form {
   display: grid;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 8px;
 }
 
 .trip-monitor-comment-form textarea {
   width: 100%;
-  min-height: 48px;
-  padding: 6px 8px;
+  min-height: 64px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--surface-main);
   color: var(--text-main);
-  font-size: 12px;
+  font-size: 13px;
   resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.trip-monitor-comment-form textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.trip-monitor-comment-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.trip-monitor-comment-list-container {
+  margin-top: 4px;
 }
 
 .trip-monitor-comment-list {
   display: grid;
-  gap: 6px;
-  margin-top: 6px;
-  max-height: 200px;
+  gap: 8px;
+  max-height: 240px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .trip-monitor-comment-item {
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-alpha2);
 }
 
 .trip-monitor-comment-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .trip-monitor-comment-meta strong {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-main);
+  font-weight: 600;
 }
 
 .trip-monitor-comment-meta span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .trip-monitor-comment-text {
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .trip-monitor-detail-panels {

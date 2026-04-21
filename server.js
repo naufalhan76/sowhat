@@ -4793,38 +4793,38 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
   let changedAt = null;
   let source = 'default';
   let detail = `Menuju ${loadStop?.stop?.taskAddress || loadStop?.stop?.name || 'lokasi load'}.`;
-  let activeStopName = loadStop?.stop?.name || '';
+  let activeStopName = loadStop?.stop?.taskAddress || loadStop?.stop?.name || '';
 
   if (isClosed) {
     currentKey = 'selesai';
     changedAt = now;
     source = 'tms-status';
     detail = `Selesai di ${finalStop?.stop?.taskAddress || finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
-    activeStopName = finalStop?.stop?.name || '';
+    activeStopName = finalStop?.stop?.taskAddress || finalStop?.stop?.name || '';
   } else if (finalStop && finalStop.departedAt !== null) {
     currentKey = 'selesai';
     changedAt = finalStop.departedAt;
     source = finalStop.departedSource || 'history';
     detail = `Sudah berangkat dari ${finalStop.stop?.taskAddress || finalStop.stop?.name || 'unload terakhir'}, menunggu TMS Closed.`;
-    activeStopName = finalStop.stop?.name || '';
+    activeStopName = finalStop.stop?.taskAddress || finalStop.stop?.name || '';
   } else if (currentUnload) {
     currentKey = 'sampai-unload';
     changedAt = currentUnload.arrivedAt;
     source = currentUnload.arrivedSource || 'geofence';
     detail = `Sudah sampai di ${currentUnload.stop?.taskAddress || currentUnload.stop?.name || 'lokasi unload'}.`;
-    activeStopName = currentUnload.stop?.name || '';
+    activeStopName = currentUnload.stop?.taskAddress || currentUnload.stop?.name || '';
   } else if (lastDeparted) {
     currentKey = 'menuju-unload';
     changedAt = lastDeparted.departedAt;
     source = lastDeparted.departedSource || 'history';
     detail = `Dalam perjalanan ke ${transitTarget?.stop?.taskAddress || transitTarget?.stop?.name || 'lokasi unload'}.`;
-    activeStopName = transitTarget?.stop?.name || '';
+    activeStopName = transitTarget?.stop?.taskAddress || transitTarget?.stop?.name || '';
   } else if (loadStop?.arrivedAt !== null) {
     currentKey = 'sampai-load';
     changedAt = loadStop.arrivedAt;
     source = loadStop.arrivedSource || 'geofence';
     detail = `Sudah sampai di ${loadStop?.stop?.taskAddress || loadStop?.stop?.name || 'lokasi load'}.`;
-    activeStopName = loadStop?.stop?.name || '';
+    activeStopName = loadStop?.stop?.taskAddress || loadStop?.stop?.name || '';
   }
 
   const timelineChangedAt = {
@@ -10755,7 +10755,7 @@ async function handleApi(req, res, url) {
       return true;
     }
     try {
-      const incidentId = pathname.split('/')[4];
+      const incidentId = decodeURIComponent(pathname.split('/')[4] || '');
       if (!incidentId) {
         throw new Error('incidentId wajib diisi.');
       }
@@ -10779,10 +10779,18 @@ async function handleApi(req, res, url) {
       return true;
     }
     try {
-      const incidentId = pathname.split('/')[4];
+      const incidentId = decodeURIComponent(pathname.split('/')[4] || '');
       if (!incidentId) {
         throw new Error('incidentId wajib diisi.');
       }
+      
+      const checkResult = await postgresQuery('select id from tms_monitor_incidents where id = $1', [incidentId]);
+      if (checkResult.rows.length === 0) {
+        const err = new Error('Incident tidak ditemukan.');
+        err.statusCode = 404;
+        throw err;
+      }
+
       const body = await readRequestBody(req);
       const comment = String(body.comment || '').trim();
       if (!comment) {

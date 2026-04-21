@@ -5278,8 +5278,8 @@ function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
   const resolvedActiveIndex = activeStepIndex >= 0 ? activeStepIndex : completedStepIndex;
   const progressPercent = steps.length > 1 ? (Math.max(0, resolvedActiveIndex) / (steps.length - 1)) * 100 : 0;
   const allStops = headlineJob?.stops || [];
-  const loadStops = allStops.filter((s) => String(s.type || '').toLowerCase() === 'load');
-  const unloadStops = allStops.filter((s) => String(s.type || '').toLowerCase() === 'unload');
+  const loadStops = allStops.filter((s) => String(s.type || s.taskType || '').toLowerCase() === 'load');
+  const unloadStops = allStops.filter((s) => String(s.type || s.taskType || '').toLowerCase() === 'unload');
   const [expandedStopKey, setExpandedStopKey] = useState(null);
 
   const getMultiStops = (stepKey) => {
@@ -5390,24 +5390,51 @@ function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
     setBusy(false);
   };
 
-  return <div className="trip-monitor-incident-actions">
-    <button type="button" className="sf-btn sf-btn-light sf-btn-xs" onClick={() => { setShowForm(!showForm); if (!showForm) setShowComments(false); }}>
-      <MessageSquare size={12} /> Add
-    </button>
-    <button type="button" className="sf-btn sf-btn-light sf-btn-xs" onClick={() => { setShowComments(!showComments); if (!showComments) setShowForm(false); }}>
-      <MessageSquare size={12} /> {commentCount !== null ? commentCount : '..'}
-    </button>
-    {showForm ? <div className="trip-monitor-comment-form">
-      <textarea rows={2} placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
-      <button type="button" className="sf-btn sf-btn-primary sf-btn-xs" disabled={busy || !commentText.trim()} onClick={handleSubmit}>{busy ? 'Saving...' : 'Submit'}</button>
-    </div> : null}
-    {showComments && comments.length ? <div className="trip-monitor-comment-list">
-      {comments.map((c) => <div key={c.id} className="trip-monitor-comment-item">
-        <div className="trip-monitor-comment-meta"><strong>{c.display_name || c.username}</strong> <span>{fmtDate(c.created_at)}</span></div>
-        <div className="trip-monitor-comment-text">{c.comment}</div>
-      </div>)}
-    </div> : null}
-    {showComments && !comments.length ? <div className="trip-monitor-comment-list"><div className="empty-state">Belum ada komentar.</div></div> : null}
+  return <div className="trip-monitor-incident-comments-section">
+    <div className="trip-monitor-incident-actions">
+      <button type="button" className={`sf-btn sf-btn-xs ${showForm ? 'sf-btn-primary' : 'sf-btn-light'}`} onClick={() => { setShowForm(!showForm); if (!showForm) setShowComments(false); }}>
+        <MessageSquare size={12} /> Add
+      </button>
+      <button type="button" className={`sf-btn sf-btn-xs ${showComments ? 'sf-btn-primary' : 'sf-btn-light'}`} onClick={() => { setShowComments(!showComments); if (!showComments) setShowForm(false); }}>
+        <MessageSquare size={12} /> {commentCount !== null ? commentCount : '..'}
+      </button>
+    </div>
+    
+    {(showForm || showComments) && (
+      <div className="trip-monitor-comment-card">
+        {showForm && (
+          <div className="trip-monitor-comment-form">
+            <textarea rows={3} placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+            <div className="trip-monitor-comment-form-actions">
+              <button type="button" className="sf-btn sf-btn-light sf-btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="sf-btn sf-btn-primary sf-btn-sm" disabled={busy || !commentText.trim()} onClick={handleSubmit}>
+                {busy ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {showComments && (
+          <div className="trip-monitor-comment-list-container">
+            {comments.length ? (
+              <div className="trip-monitor-comment-list">
+                {comments.map((c) => (
+                  <div key={c.id} className="trip-monitor-comment-item">
+                    <div className="trip-monitor-comment-meta">
+                      <strong>{c.display_name || c.username}</strong>
+                      <span>{fmtDate(c.created_at)}</span>
+                    </div>
+                    <div className="trip-monitor-comment-text">{c.comment}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: '16px 0' }}>Belum ada komentar.</div>
+            )}
+          </div>
+        )}
+      </div>
+    )}
   </div>;
 }
 
