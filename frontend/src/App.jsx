@@ -5313,7 +5313,7 @@ function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
             {isExpanded && multiStops ? <div className="trip-monitor-progress-stops">
               {multiStops.map((stop, i) => <div key={i} className="trip-monitor-progress-stop-item">
                 {stop.arrived || stop.completed ? <span className="trip-monitor-progress-stop-check">{'\u2713'}</span> : <span className="trip-monitor-progress-stop-pending" />}
-                <span>{stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
+                <span>{stop.taskAddress || stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
               </div>)}
             </div> : null}
           </div>

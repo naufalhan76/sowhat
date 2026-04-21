@@ -5938,3 +5938,30 @@ textarea:focus {
     padding: 6px 10px;
   }
 }
+
+/* Trip Monitor UI Constraints */
+.trip-monitor-comment-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.trip-monitor-comment-list::-webkit-scrollbar {
+  width: 4px;
+}
+.trip-monitor-comment-list::-webkit-scrollbar-thumb {
+  background-color: var(--border-alpha);
+  border-radius: 4px;
+}
+
+.trip-monitor-progress-stops {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.trip-monitor-progress-stops::-webkit-scrollbar {
+  width: 4px;
+}
+.trip-monitor-progress-stops::-webkit-scrollbar-thumb {
+  background-color: var(--border-alpha);
+  border-radius: 4px;
+}
