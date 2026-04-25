@@ -3687,61 +3687,6 @@ export default function App() {
           })()}
         </div>
       </section> : null}
-
-      {hasOverviewAstro ? <section className="overview-widget overview-widget-full overview-astro-fullwidth">
-        <div className="overview-widget-head">
-          <div>
-            <h3>Astro KPI per Warehouse</h3>
-            <p>Enhanced Astro WH section. Tier 3 refresh: every 5 minutes.</p>
-          </div>
-          <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
-            {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
-          </Chip>
-        </div>
-        <div className="overview-wh-grid-horizontal">
-          {(() => {
-            const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
-            const kpiLines = [
-              { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
-              { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
-              { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
-            ];
-
-            return TARGET_WH.map((whKey, index) => {
-              const warehouseData = overviewAstroByWarehouse.find(wh =>
-                (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
-              );
-              const isRevealed = !overviewAstroBusy && index < revealedWhCount;
-
-              return (
-                <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`}>
-                  <h4 className="overview-wh-card-title">WH {whKey}</h4>
-                  {isRevealed ? (
-                    warehouseData ? (
-                      <OverviewMultiLineChart
-                        points={warehouseData.trend || []}
-                        busy={false}
-                        lines={kpiLines}
-                        emptyMessage="Belum ada trend WH."
-                        maxFloor={100}
-                        tooltipTitle={(point) => formatChartDayTitle(point?.day)}
-                      />
-                    ) : (
-                      <div className="overview-chart-empty">Belum ada data untuk WH {whKey}.</div>
-                    )
-                  ) : (
-                    <div className="wh-card-shimmer">
-                      <div className="wh-shimmer-bar" />
-                      <div className="wh-shimmer-bar short" />
-                      <span className="wh-loading-text">Sedang Menarik Data...</span>
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
-        </div>
-      </section> : null}
       </div>
     </CardContent>
   </Card>
@@ -5262,10 +5207,10 @@ const OverviewDonutChart = React.memo(function OverviewDonutChart({ segments, to
   const [hoveredKey, setHoveredKey] = useState(null);
   const hoveredSegment = safeSegments.find((segment) => segment.key === hoveredKey) || null;
   let offset = 0;
-  return <div className="overview-donut-chart">{hoveredSegment ? <div className="overview-chart-tooltip overview-chart-tooltip-static"><strong>{hoveredSegment.label}</strong><span>{hoveredSegment.value} unit</span><span>{chartTotal > 0 ? fmtPct((hoveredSegment.value / chartTotal) * 100, 1) : '0.0%'}</span></div> : null}<svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r={radius} className="overview-donut-track" />{safeSegments.map((segment) => {
+  return <div className="overview-donut-chart">{hoveredSegment ? <div className="overview-chart-tooltip overview-chart-tooltip-static"><strong>{hoveredSegment.label}</strong><span>{hoveredSegment.value} unit</span><span>{chartTotal > 0 ? fmtPct((hoveredSegment.value / chartTotal) * 100, 1) : '0.0%'}</span></div> : null}<svg viewBox="0 0 120 120" role="img" aria-label="Fleet composition donut chart"><circle cx="60" cy="60" r={radius} className="overview-donut-track" />{safeSegments.map((segment) => {
     const value = Number(segment.value || 0);
     const length = chartTotal > 0 ? (value / chartTotal) * circumference : 0;
-    const circle = <circle key={segment.key} cx="60" cy="60" r={radius} className={`overview-donut-ring ${segment.tone || 'default'} ${hoveredKey === segment.key ? 'is-hovered' : ''}`} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} onMouseEnter={() => setHoveredKey(segment.key)} onMouseLeave={() => setHoveredKey((current) => current === segment.key ? null : current)} />;
+    const circle = <circle key={segment.key} cx="60" cy="60" r={radius} className={`overview-donut-ring ${segment.tone || 'default'} ${hoveredKey === segment.key ? 'is-hovered' : ''}`} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} tabIndex={0} role="button" aria-label={`${segment.label}: ${segment.value} unit`} onMouseEnter={() => setHoveredKey(segment.key)} onMouseLeave={() => setHoveredKey((current) => current === segment.key ? null : current)} onFocus={() => setHoveredKey(segment.key)} onBlur={() => setHoveredKey((current) => current === segment.key ? null : current)} />;
     offset += length;
     return circle;
   })}<circle cx="60" cy="60" r="28" className="overview-donut-hole" /></svg><div className="overview-donut-center"><strong>{chartTotal}</strong><span>Configured</span></div></div>;
@@ -5299,10 +5244,10 @@ function formatChartDayTitle(dayValue) {
   return text || '-';
 }
 
-const OverviewMetricLineChart = React.memo(function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines, yAxisSuffix = '', legendLabel = null }) {
+const OverviewMetricLineChart = React.memo(function OverviewMetricLineChart({ points, busy, emptyMessage, valueKey = 'value', maxFloor = 100, tone = 'astro', tooltipTitle, tooltipLines, yAxisSuffix = '', legendLabel = null, ariaLabel = 'Overview metric trend chart' }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
-  if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
+  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading chart...</div>;
+  if (!(points || []).length) return <div className="overview-chart-empty"><span>{emptyMessage || 'Belum ada data untuk digambar.'}</span></div>;
   const width = 520;
   const height = 200;
   const paddingLeft = 40;
@@ -5322,12 +5267,12 @@ const OverviewMetricLineChart = React.memo(function OverviewMetricLineChart({ po
   const tooltipRows = hoveredPoint ? (typeof tooltipLines === 'function' ? tooltipLines(hoveredPoint) : [`Value: ${Number(hoveredPoint?.[valueKey] || 0)}`]) : [];
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
   const yGuides = [0, maxValue / 2, maxValue];
-  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}{yAxisSuffix}</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>{legendLabel ? <div className="overview-chart-legend"><div className="overview-chart-legend-item"><span className={`overview-legend-dot ${tone}`}></span><span>{legendLabel}</span></div></div> : null}</div>;
+  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{tooltipRows.map((line, index) => <span key={`${title}-${index}`}>{line}</span>)}</div> : null}<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}{yAxisSuffix}</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" /><path d={linePath} className={`overview-trend-line ${tone}`} />{points.map((point, index) => <g key={`${point.day || point.label || 'point'}-${index}`} tabIndex={0} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)} onFocus={() => setHoveredIndex(index)} onBlur={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" /><circle cx={toX(index)} cy={toY(point?.[valueKey] || 0)} r={hoveredIndex === index ? 7 : 5} className={`overview-trend-dot ${tone} ${hoveredIndex === index ? 'is-hovered' : ''}`} /><text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div>{legendLabel ? <div className="overview-chart-legend"><div className="overview-chart-legend-item"><span className={`overview-legend-dot ${tone}`}></span><span>{legendLabel}</span></div></div> : null}</div>;
 });
 
 const OverviewSparkline = React.memo(({ points = [], color = '#60a5fa', width = 120, height = 32, ariaLabel = "Trend sparkline" }) => {
   if (!points || points.length === 0) {
-    return <div style={{ width, height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '10px' }}>No data</div>;
+    return <div className="overview-chart-empty overview-sparkline-empty" style={{ width, height }}>Belum ada data.</div>;
   }
 
   const padding = 2;
@@ -5379,8 +5324,8 @@ OverviewSparkline.displayName = 'OverviewSparkline';
 
 const OverviewMultiLineChart = React.memo(function OverviewMultiLineChart({ points, busy, emptyMessage, lines, maxFloor = 100, tooltipTitle }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  if (busy) return <div className="overview-chart-empty">Loading chart...</div>;
-  if (!(points || []).length) return <div className="overview-chart-empty">{emptyMessage || 'Belum ada data untuk digambar.'}</div>;
+  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading chart...</div>;
+  if (!(points || []).length) return <div className="overview-chart-empty"><span>{emptyMessage || 'Belum ada data untuk digambar.'}</span></div>;
   const width = 520;
   const height = 200;
   const paddingLeft = 40;
@@ -5399,14 +5344,14 @@ const OverviewMultiLineChart = React.memo(function OverviewMultiLineChart({ poin
   const tooltipTop = hoveredPoint ? `${Math.max(0, Math.min(50, ((minHoveredY - 60) / height) * 100))}%` : '10%';
   const title = hoveredPoint ? (typeof tooltipTitle === 'function' ? tooltipTitle(hoveredPoint) : (hoveredPoint.day ? fmtDateOnly(hoveredPoint.day) : hoveredPoint.label || 'Detail')) : '';
   const yGuides = [0, maxValue / 2, maxValue];
-  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{lines.map((l, i) => <span key={l.key || i} style={{color: l.colorHex}}>{l.label}: {fmtPct(hoveredPoint[l.key] || 0)}</span>)}</div> : null}<svg viewBox={"0 0 " + width + " " + height} aria-hidden="true">{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}%</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" />{lines.map(l => {
+  return <div className="overview-trend-chart-container"><div className="overview-trend-chart">{hoveredPoint ? <div className="overview-chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{title}</strong>{lines.map((l, i) => <span key={l.key || i} style={{color: l.colorHex}}>{l.label}: {fmtPct(hoveredPoint[l.key] || 0)}</span>)}</div> : null}<svg viewBox={"0 0 " + width + " " + height} role="img" aria-label="Astro warehouse KPI trend chart">{yGuides.map((val, i) => <g key={`yguide-${i}`}><line x1={paddingLeft} x2={width - paddingRight} y1={toY(val)} y2={toY(val)} className="overview-axis-grid" /><text x={paddingLeft - 8} y={toY(val) + 4} className="overview-axis-label" textAnchor="end">{Math.round(val)}%</text></g>)}<line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} className="overview-axis" /><line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} className="overview-axis" />{lines.map(l => {
     const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index)} ${toY(point?.[l.key] || 0)}`).join(' ');
     return <path key={l.key} d={linePath} fill="none" stroke={l.colorHex || 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-  })}{points.map((point, index) => <g key={"point-"+index} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[lines[0]?.key] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" />{lines.map((l, lIdx) => <circle key={"dot-"+lIdx} cx={toX(index)} cy={toY(point?.[l.key] || 0)} r={hoveredIndex === index ? 5 : 3} fill={l.colorHex || 'currentColor'} stroke="none" />)}<text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div><div className="overview-chart-legend">{lines.map((l, i) => <div key={i} className="overview-chart-legend-item"><span className="overview-legend-dot-custom" style={{backgroundColor: l.colorHex}}></span><span>{l.label}</span></div>)}</div></div>;
+  })}{points.map((point, index) => <g key={"point-"+index} tabIndex={0} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex((current) => current === index ? null : current)} onFocus={() => setHoveredIndex(index)} onBlur={() => setHoveredIndex((current) => current === index ? null : current)}><circle cx={toX(index)} cy={toY(point?.[lines[0]?.key] || 0)} r="18" fill="transparent" stroke="none" className="overview-trend-hit" />{lines.map((l, lIdx) => <circle key={"dot-"+lIdx} cx={toX(index)} cy={toY(point?.[l.key] || 0)} r={hoveredIndex === index ? 5 : 3} fill={l.colorHex || 'currentColor'} stroke="none" style={{ cursor: 'pointer' }} />)}<text x={toX(index)} y={height - 8} textAnchor="middle" className="overview-trend-label">{formatChartDayLabel(point.day) || String(point.label || '').slice(0, 6)}</text></g>)}</svg></div><div className="overview-chart-legend">{lines.map((l, i) => <div key={i} className="overview-chart-legend-item"><span className="overview-legend-dot-custom" style={{backgroundColor: l.colorHex}}></span><span>{l.label}</span></div>)}</div></div>;
 });
 
 const OverviewAstroTrendChart = React.memo(function OverviewAstroTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} yAxisSuffix="%" legendLabel="Pass Rate" />;
+    return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada data Astro KPI di range ini." valueKey="passRate" maxFloor={100} tone="astro" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Pass rate: ${fmtPct(point.passRate || 0)}`, `Eligible rit: ${point.eligibleRows || 0}`, `Pass: ${point.passRows || 0}`, `Fail: ${point.failRows || 0}`]} yAxisSuffix="%" legendLabel="Pass Rate" ariaLabel="Astro pass rate trend" />;
 });
 
 const OverviewTempComplianceChart = React.memo(function OverviewTempComplianceChart({ points, busy, emptyMessage, currentCompliance, currentUnits }) {
@@ -5488,7 +5433,7 @@ const OverviewTempComplianceChart = React.memo(function OverviewTempComplianceCh
 });
 
 const OverviewTempTrendChart = React.memo(function OverviewTempTrendChart({ points, busy }) {
-  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} legendLabel="Incidents" />;
+  return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} legendLabel="Incidents" ariaLabel="Temperature incident trend" />;
 });
 
 const FLEET_HEALTH_SEVERITY = {
@@ -5548,7 +5493,7 @@ const OverviewFleetHealthHeatmap = React.memo(function OverviewFleetHealthHeatma
               const isHovered = hoveredCell?.unitIndex === unitIndex && hoveredCell?.dayIndex === dayIndex;
               const cellX = labelWidth + (dayIndex * (cellSize + cellGap));
               return (
-                <g key={`${unitLabel}-${day}`} onMouseEnter={() => setHoveredCell({ unitIndex, dayIndex, summary })} onMouseLeave={() => setHoveredCell((current) => current?.unitIndex === unitIndex && current?.dayIndex === dayIndex ? null : current)}>
+                <g key={`${unitLabel}-${day}`} tabIndex={0} onMouseEnter={() => setHoveredCell({ unitIndex, dayIndex, summary })} onMouseLeave={() => setHoveredCell((current) => current?.unitIndex === unitIndex && current?.dayIndex === dayIndex ? null : current)} onFocus={() => setHoveredCell({ unitIndex, dayIndex, summary })} onBlur={() => setHoveredCell((current) => current?.unitIndex === unitIndex && current?.dayIndex === dayIndex ? null : current)}>
                   <rect x={cellX} y={y} width={cellSize} height="18" rx="4" fill={meta.color} className={`overview-heatmap-cell ${isHovered ? 'is-hovered' : ''}`} opacity={severity === 0 ? 0.72 : 0.92} />
                   <text x={cellX + (cellSize / 2)} y={y + 13} fill="#FFFFFF" fontSize="10px" textAnchor="middle" style={{ pointerEvents: 'none' }}>{meta.code}</text>
                 </g>
@@ -5567,20 +5512,20 @@ const OverviewFleetHealthHeatmap = React.memo(function OverviewFleetHealthHeatma
 const OverviewDeliveryPerfChart = React.memo(function OverviewDeliveryPerfChart({ items, busy }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
-  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading data...</div>;
-  if (!items || items.length === 0) return <div className="overview-chart-empty">Belum ada data delivery performance.</div>;
-
   // Assuming items has `{ label: "Mon", originOntime: 85, destOntime: 92, totalTrip: 45 }` shape or similar
   // Let's generate random mock data matching `{ label, value }` if origin/dest are missing, based on value.
   const chartData = useMemo(() => {
-    return items.map(item => ({
+    return (items || []).map((item, index) => ({
       label: item.label,
-      origin: item.originOntime ?? Math.min(100, Math.max(0, (item.value || 0) + (Math.random() * 20 - 10))),
-      dest: item.destOntime ?? Math.min(100, Math.max(0, (item.value || 0) + (Math.random() * 20 - 10))),
-      total: item.totalTrip ?? Math.floor(Math.random() * 50) + 10,
-      delay: item.avgDelay ?? Math.floor(Math.random() * 120)
+      origin: item.originOntime ?? Math.min(100, Math.max(0, (item.value || 0) + ((index % 5) - 2) * 4)),
+      dest: item.destOntime ?? Math.min(100, Math.max(0, (item.value || 0) + ((index % 3) - 1) * 5)),
+      total: item.totalTrip ?? 10 + ((index + 1) * 7),
+      delay: item.avgDelay ?? (index + 1) * 12
     }));
   }, [items]);
+
+  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading data...</div>;
+  if (!items || items.length === 0) return <div className="overview-chart-empty"><span>Belum ada data delivery performance.</span></div>;
 
   const overallOrigin = Math.round(chartData.reduce((acc, curr) => acc + curr.origin, 0) / chartData.length);
   const overallDest = Math.round(chartData.reduce((acc, curr) => acc + curr.dest, 0) / chartData.length);
@@ -5645,7 +5590,10 @@ const OverviewDeliveryPerfChart = React.memo(function OverviewDeliveryPerfChart(
               <g key={i} 
                  onMouseEnter={() => setHoveredIndex(i)} 
                  onMouseLeave={() => setHoveredIndex(null)}
-                 style={{ cursor: 'pointer', opacity: hoveredIndex !== null && !isHovered ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+                 onFocus={() => setHoveredIndex(i)}
+                 onBlur={() => setHoveredIndex(null)}
+                 tabIndex={0}
+                  style={{ cursor: 'pointer', opacity: hoveredIndex !== null && !isHovered ? 0.4 : 1, transition: 'opacity 0.2s' }}>
                 {/* Hover Background */}
                 {isHovered && <rect x={centerX - groupWidth/2} y={paddingTop} width={groupWidth} height={chartHeight} fill="var(--overview-mini-row-bg)" rx="4" />}
                 
@@ -5877,7 +5825,7 @@ const OverviewStopIdleChart = React.memo(function OverviewStopIdleChart({ items,
   }, [items]);
 
   if (busy) return <div className="overview-chart-empty overview-shimmer">Loading stop/idle data...</div>;
-  if (!rows.length) return <div className="overview-chart-empty">Stop/idle data belum tersedia.</div>;
+  if (!rows.length) return <div className="overview-chart-empty"><span>Stop/idle data belum tersedia.</span></div>;
 
   // Chart dimensions
   const width = 400; // SVG viewBox width
@@ -5974,6 +5922,9 @@ const OverviewStopIdleChart = React.memo(function OverviewStopIdleChart({ items,
                 style={{ cursor: 'pointer', transition: 'opacity 0.2s ease', opacity }}
                 onMouseEnter={() => setHoveredKey(row.key)}
                 onMouseLeave={() => setHoveredKey(null)}
+                onFocus={() => setHoveredKey(row.key)}
+                onBlur={() => setHoveredKey(null)}
+                tabIndex={0}
               >
                 {/* Hitbox for easier hover */}
                 <rect x={x - 4} y={marginTop} width={barWidth + 8} height={chartHeight} fill="transparent" />
@@ -6038,7 +5989,7 @@ const OverviewIncidentBreakdownChart = React.memo(function OverviewIncidentBreak
   let cursorX = 0;
 
   if (busy) return <div className="overview-chart-empty overview-shimmer">Loading incident breakdown...</div>;
-  if (!total) return <div className="overview-chart-empty">Belum ada incident di range ini.</div>;
+  if (!total) return <div className="overview-chart-empty"><span>Belum ada incident di range ini.</span></div>;
 
   return <div className="overview-incident-breakdown">
     <div className="overview-incident-total">
