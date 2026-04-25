@@ -6404,6 +6404,455 @@ async function buildReportPayload(searchParams) {
   };
 }
 
+function overviewEmptyDeliveryPerformance(range, accountId) {
+  return {
+    ok: true,
+    now: Date.now(),
+    accountId,
+    rangeStartMs: range.rangeStartMs,
+    rangeEndMs: range.rangeEndMs,
+    total: 0,
+    onTimeOrigin: 0,
+    onTimeDestination: 0,
+    onTimeOriginRate: 0,
+    onTimeDestinationRate: 0,
+    avgDelayMinutes: 0,
+    daily: [],
+    rows: [],
+  };
+}
+
+function overviewEmptyIncidentBreakdown(range, accountId) {
+  return {
+    ok: true,
+    now: Date.now(),
+    accountId,
+    rangeStartMs: range.rangeStartMs,
+    rangeEndMs: range.rangeEndMs,
+    byType: {},
+    total: 0,
+    byDay: [],
+    rows: [],
+  };
+}
+
+function overviewEmptyStopIdleSummary(range, accountId) {
+  return {
+    ok: true,
+    now: Date.now(),
+    accountId,
+    rangeStartMs: range.rangeStartMs,
+    rangeEndMs: range.rangeEndMs,
+    totalStopDurationMinutes: 0,
+    avgIdleMinutes: 0,
+    longestStopMinutes: 0,
+    movingMinutes: 0,
+    idleMinutes: 0,
+    stoppedMinutes: 0,
+    breakdown: { moving: 0, idle: 0, stopped: 0 },
+    byUnit: [],
+    rows: [],
+    errors: [],
+  };
+}
+
+function overviewEmptyFleetHealth(range, accountId) {
+  return {
+    ok: true,
+    now: Date.now(),
+    accountId,
+    rangeStartMs: range.rangeStartMs,
+    rangeEndMs: range.rangeEndMs,
+    units: [],
+    days: [],
+    grid: [],
+    legend: { normal: 0, warning: 1, critical: 2 },
+  };
+}
+
+function getOverviewAccountIds(searchParams) {
+  const requested = String(searchParams.get('accountId') || 'all').trim() || 'all';
+  if (requested === 'all') {
+    return { requested, accountIds: getAllAccountConfigs().map(function (account) { return account.id; }) };
+  }
+  return { requested, accountIds: [requested] };
+}
+
+function overviewDayRange(range) {
+  const now = Date.now();
+  const startMs = range.rangeStartMs ?? (now - (6 * 24 * 60 * 60 * 1000));
+  const endMs = range.rangeEndMs ?? now;
+  return {
+    startDay: formatLocalDay(startMs),
+    endDay: formatLocalDay(endMs),
+  };
+}
+
+function overviewRowMatchesAccount(row, accountIds, accountId) {
+  if (accountId === 'all') return true;
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const fleetRow = metadata.fleetRow && typeof metadata.fleetRow === 'object' ? metadata.fleetRow : {};
+  const candidates = [
+    row?.accountId,
+    row?.account_id,
+    fleetRow.accountId,
+    metadata.accountId,
+  ].map(function (value) { return String(value || '').trim(); }).filter(Boolean);
+  if (candidates.some(function (candidate) { return accountIds.includes(candidate); })) return true;
+
+  const unitId = normalizeUnitKey(row?.unitId || row?.unit_id || row?.unitLabel || row?.unit_label || '');
+  if (!unitId) return false;
+  return accountIds.some(function (id) {
+    const account = getAccountConfigById(id);
+    return Boolean(account && (account.units || []).some(function (unit) {
+      return normalizeUnitKey(unit.id) === unitId || normalizeUnitKey(unit.label) === unitId;
+    }));
+  });
+}
+
+function buildOverviewTmsRowFromPostgres(row) {
+  return {
+    rowId: String(row.row_id || ''),
+    day: String(row.day || ''),
+    tenantLabel: String(row.tenant_label || ''),
+    customerName: String(row.customer_name || ''),
+    unitKey: String(row.unit_key || ''),
+    unitId: String(row.unit_id || ''),
+    unitLabel: String(row.unit_label || ''),
+    normalizedPlate: String(row.normalized_plate || ''),
+    severity: String(row.severity || 'normal'),
+    boardStatus: String(row.board_status || 'normal'),
+    jobOrderId: String(row.job_order_id || ''),
+    originName: String(row.origin_name || ''),
+    destinationName: String(row.destination_name || ''),
+    etaOrigin: row.eta_origin ? Date.parse(row.eta_origin) : null,
+    etaDestination: row.eta_destination ? Date.parse(row.eta_destination) : null,
+    incidentCodes: Array.isArray(row.incident_codes) ? row.incident_codes : [],
+    incidentSummary: String(row.incident_summary || ''),
+    metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+  };
+}
+
+async function loadOverviewTmsRows(range, accountId, accountIds) {
+  if (!getPostgresConfig().enabled) return [];
+  const days = overviewDayRange(range);
+  const result = await postgresQuery(
+    `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label,
+            normalized_plate, severity, board_status, job_order_id, origin_name, destination_name,
+            eta_origin, eta_destination, incident_codes, incident_summary, metadata
+       from tms_monitor_rows
+      where day >= $1 and day <= $2
+      order by day asc, updated_at asc
+      limit 20000`,
+    [days.startDay, days.endDay],
+  );
+  return (result.rows || [])
+    .map(buildOverviewTmsRowFromPostgres)
+    .filter(function (row) { return overviewRowMatchesAccount(row, accountIds, accountId); });
+}
+
+function getOverviewArrivalTimestamp(row, stopType) {
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const shippingSteps = Array.isArray(metadata?.shippingStatus?.steps) ? metadata.shippingStatus.steps : [];
+  const stepKey = stopType === 'origin' ? 'sampai-load' : 'sampai-unload';
+  const step = shippingSteps.find(function (item) { return item && item.key === stepKey; }) || null;
+  const stepTimestamp = toTimestampMaybe(step?.changedAt);
+  if (stepTimestamp !== null) return stepTimestamp;
+
+  const job = metadata.headlineJobOrder || (Array.isArray(metadata.jobOrders) ? metadata.jobOrders[0] : null) || {};
+  const stops = Array.isArray(job.stops) ? job.stops : [];
+  const stop = stopType === 'origin'
+    ? stops.find(function (item) { return String(item?.taskType || item?.task_type || '').toLowerCase() === 'load'; }) || stops[0]
+    : [...stops].reverse().find(function (item) { return String(item?.taskType || item?.task_type || '').toLowerCase() === 'unload'; }) || stops[stops.length - 1];
+  return toTimestampMaybe(stop?.ata || stop?.arrivedAt || stop?.inferredArrivedAt);
+}
+
+async function buildOverviewDeliveryPerformancePayload(searchParams) {
+  const range = parseDateRange(searchParams);
+  const { requested, accountIds } = getOverviewAccountIds(searchParams);
+  try {
+    const rows = await loadOverviewTmsRows(range, requested, accountIds);
+    const dailyMap = new Map();
+    let total = 0;
+    let onTimeOrigin = 0;
+    let onTimeDestination = 0;
+    let delayTotal = 0;
+    let delayCount = 0;
+    const detailRows = [];
+
+    for (const row of rows) {
+      const originActual = getOverviewArrivalTimestamp(row, 'origin');
+      const destinationActual = getOverviewArrivalTimestamp(row, 'destination');
+      if (row.etaOrigin === null && row.etaDestination === null) continue;
+      total += 1;
+      if (!dailyMap.has(row.day)) {
+        dailyMap.set(row.day, { day: row.day, total: 0, onTimeOrigin: 0, onTimeDestination: 0, delayMinutes: 0, delayCount: 0 });
+      }
+      const day = dailyMap.get(row.day);
+      day.total += 1;
+      const originDelay = row.etaOrigin !== null && originActual !== null ? Math.max(0, (originActual - row.etaOrigin) / 60000) : null;
+      const destinationDelay = row.etaDestination !== null && destinationActual !== null ? Math.max(0, (destinationActual - row.etaDestination) / 60000) : null;
+      if (originDelay !== null) {
+        delayTotal += originDelay;
+        delayCount += 1;
+        day.delayMinutes += originDelay;
+        day.delayCount += 1;
+        if (originDelay <= 0) {
+          onTimeOrigin += 1;
+          day.onTimeOrigin += 1;
+        }
+      }
+      if (destinationDelay !== null) {
+        delayTotal += destinationDelay;
+        delayCount += 1;
+        day.delayMinutes += destinationDelay;
+        day.delayCount += 1;
+        if (destinationDelay <= 0) {
+          onTimeDestination += 1;
+          day.onTimeDestination += 1;
+        }
+      }
+      detailRows.push({
+        day: row.day,
+        jobOrderId: row.jobOrderId,
+        unitId: row.unitId,
+        unitLabel: row.unitLabel,
+        customerName: row.customerName,
+        etaOrigin: row.etaOrigin,
+        actualOrigin: originActual,
+        etaDestination: row.etaDestination,
+        actualDestination: destinationActual,
+        originDelayMinutes: originDelay === null ? null : Number(originDelay.toFixed(2)),
+        destinationDelayMinutes: destinationDelay === null ? null : Number(destinationDelay.toFixed(2)),
+      });
+    }
+
+    const daily = [...dailyMap.values()].map(function (day) {
+      return {
+        ...day,
+        onTimeOriginRate: buildPercentValue(day.onTimeOrigin, day.total),
+        onTimeDestinationRate: buildPercentValue(day.onTimeDestination, day.total),
+        avgDelayMinutes: day.delayCount ? Number((day.delayMinutes / day.delayCount).toFixed(2)) : 0,
+      };
+    });
+    return {
+      ...overviewEmptyDeliveryPerformance(range, requested),
+      total,
+      onTimeOrigin,
+      onTimeDestination,
+      onTimeOriginRate: buildPercentValue(onTimeOrigin, total),
+      onTimeDestinationRate: buildPercentValue(onTimeDestination, total),
+      avgDelayMinutes: delayCount ? Number((delayTotal / delayCount).toFixed(2)) : 0,
+      daily,
+      rows: detailRows,
+    };
+  } catch (error) {
+    return { ...overviewEmptyDeliveryPerformance(range, requested), warning: error.message };
+  }
+}
+
+async function buildOverviewIncidentBreakdownPayload(searchParams) {
+  const range = parseDateRange(searchParams);
+  const { requested, accountIds } = getOverviewAccountIds(searchParams);
+  const byType = {};
+  const byDayMap = new Map();
+  const rows = [];
+  const addIncident = function (day, type, row) {
+    if (!type) return;
+    byType[type] = (byType[type] || 0) + 1;
+    if (!byDayMap.has(day)) byDayMap.set(day, { day, total: 0, byType: {} });
+    const dayRow = byDayMap.get(day);
+    dayRow.total += 1;
+    dayRow.byType[type] = (dayRow.byType[type] || 0) + 1;
+    rows.push({ day, type, ...row });
+  };
+
+  try {
+    if (getPostgresConfig().enabled) {
+      const days = overviewDayRange(range);
+      const result = await postgresQuery(
+        `select id, incident_code, incident_label, severity, event_status, opened_at, unit_id, unit_label, metadata
+           from tms_monitor_incidents
+          where opened_at >= $1 and opened_at <= $2
+          order by opened_at desc
+          limit 20000`,
+        [new Date(range.rangeStartMs ?? parseSolofleetDateInputStart(days.startDay)).toISOString(), new Date(range.rangeEndMs ?? parseSolofleetDateInputEnd(days.endDay)).toISOString()],
+      );
+      for (const item of result.rows || []) {
+        const synthetic = { ...item, unitId: item.unit_id, unitLabel: item.unit_label, metadata: item.metadata || {} };
+        if (!overviewRowMatchesAccount(synthetic, accountIds, requested)) continue;
+        addIncident(formatLocalDay(Date.parse(item.opened_at)), String(item.incident_code || 'tms-incident'), {
+          id: String(item.id || ''),
+          label: String(item.incident_label || item.incident_code || ''),
+          severity: String(item.severity || 'warning'),
+          status: String(item.event_status || 'open'),
+          openedAt: Date.parse(item.opened_at),
+          unitId: String(item.unit_id || ''),
+          unitLabel: String(item.unit_label || ''),
+          source: 'tms',
+        });
+      }
+    }
+  } catch (error) {}
+
+  try {
+    const report = await buildReportPayload(searchParams);
+    for (const row of report.tempErrorIncidents || []) {
+      if (!overviewRowMatchesAccount(row, accountIds, requested)) continue;
+      const count = Math.max(1, Number(row.incidents || 1));
+      for (let index = 0; index < count; index += 1) {
+        addIncident(row.day || formatLocalDay(row.firstStartTimestamp || Date.now()), 'temp-error', {
+          id: `${row.day}|${row.accountId}|${row.unitId}|temp|${index}`,
+          label: row.label || 'Temperature error',
+          severity: row.type === 'temp1+temp2' ? 'critical' : 'warning',
+          unitId: row.unitId,
+          unitLabel: row.unitLabel,
+          source: 'solofleet',
+        });
+      }
+    }
+  } catch (error) {}
+
+  return {
+    ...overviewEmptyIncidentBreakdown(range, requested),
+    byType,
+    total: Object.values(byType).reduce(function (sum, value) { return sum + Number(value || 0); }, 0),
+    byDay: [...byDayMap.values()].sort(function (left, right) { return String(left.day).localeCompare(String(right.day)); }),
+    rows,
+  };
+}
+
+async function buildOverviewStopIdleSummaryPayload(searchParams) {
+  const range = parseDateRange(searchParams);
+  const { requested, accountIds } = getOverviewAccountIds(searchParams);
+  const empty = overviewEmptyStopIdleSummary(range, requested);
+  if (range.rangeStartMs === null || range.rangeEndMs === null) return empty;
+
+  const byUnit = [];
+  const rows = [];
+  const errors = [];
+  const windowMinutes = Math.max(0, (range.rangeEndMs - range.rangeStartMs) / 60000);
+  for (const accountId of accountIds) {
+    const account = getAccountConfigById(accountId);
+    if (!account || !account.sessionCookie) continue;
+    for (const unit of account.units || []) {
+      try {
+        const payload = await fetchStopReport(account, unit.id, {
+          rangeStartMs: range.rangeStartMs,
+          rangeEndMs: range.rangeEndMs,
+          reportType: String(searchParams.get('reportType') || '3'),
+          minDurationMinutes: Number(searchParams.get('minDuration') || config.minDurationMinutes || 0),
+          withTrack: 'withouttrack',
+        });
+        const totalMinutes = Number(payload.summary?.totalMinutes || 0);
+        const longestMinutes = Number(payload.summary?.longestMinutes || 0);
+        const unitRows = (payload.rows || []).map(function (row) { return { ...row, accountId, accountLabel: account.label, unitLabel: unit.label }; });
+        rows.push(...unitRows);
+        byUnit.push({
+          accountId,
+          accountLabel: account.label,
+          unitId: unit.id,
+          unitLabel: unit.label,
+          incidents: unitRows.length,
+          totalStopDurationMinutes: Number(totalMinutes.toFixed(2)),
+          avgIdleMinutes: unitRows.length ? Number((totalMinutes / unitRows.length).toFixed(2)) : 0,
+          longestStopMinutes: Number(longestMinutes.toFixed(2)),
+        });
+      } catch (error) {
+        errors.push({ accountId, unitId: unit.id, message: error.message });
+      }
+    }
+  }
+
+  const totalStopDurationMinutes = rows.reduce(function (sum, row) { return sum + Number(row.durationMinutes || 0); }, 0);
+  const longestStopMinutes = rows.reduce(function (max, row) { return Math.max(max, Number(row.durationMinutes || 0)); }, 0);
+  const idleMinutes = totalStopDurationMinutes;
+  const configuredUnits = byUnit.length || accountIds.reduce(function (sum, id) { return sum + Number((getAccountConfigById(id)?.units || []).length); }, 0);
+  const stoppedMinutes = rows.filter(function (row) { return Number(row.engineDetected || 0) === 0; }).reduce(function (sum, row) { return sum + Number(row.durationMinutes || 0); }, 0);
+  const movingMinutes = Math.max(0, (configuredUnits * windowMinutes) - idleMinutes);
+  return {
+    ...empty,
+    totalStopDurationMinutes: Number(totalStopDurationMinutes.toFixed(2)),
+    avgIdleMinutes: rows.length ? Number((totalStopDurationMinutes / rows.length).toFixed(2)) : 0,
+    longestStopMinutes: Number(longestStopMinutes.toFixed(2)),
+    movingMinutes: Number(movingMinutes.toFixed(2)),
+    idleMinutes: Number(idleMinutes.toFixed(2)),
+    stoppedMinutes: Number(stoppedMinutes.toFixed(2)),
+    breakdown: {
+      moving: Number(movingMinutes.toFixed(2)),
+      idle: Number(idleMinutes.toFixed(2)),
+      stopped: Number(stoppedMinutes.toFixed(2)),
+    },
+    byUnit,
+    rows,
+    errors,
+  };
+}
+
+async function buildOverviewFleetHealthPayload(searchParams) {
+  const range = parseDateRange(searchParams);
+  const { requested, accountIds } = getOverviewAccountIds(searchParams);
+  const days = overviewDayRange(range);
+  const dayList = [];
+  for (let cursor = parseSolofleetDateInputStart(days.startDay); cursor !== null && cursor <= (parseSolofleetDateInputStart(days.endDay) ?? cursor); cursor += 24 * 60 * 60 * 1000) {
+    dayList.push(formatLocalDay(cursor));
+    if (dayList.length > 62) break;
+  }
+  const unitMap = new Map();
+  for (const accountId of accountIds) {
+    const account = getAccountConfigById(accountId);
+    for (const unit of account?.units || []) {
+      unitMap.set(`${accountId}::${unit.id}`, { accountId, accountLabel: account.label, unitId: unit.id, unitLabel: unit.label });
+    }
+  }
+  const severityByUnitDay = new Map();
+  const setSeverity = function (accountId, unitId, day, severity) {
+    if (!unitId || !day) return;
+    const key = `${accountId || 'primary'}::${unitId}`;
+    if (!unitMap.has(key)) unitMap.set(key, { accountId: accountId || 'primary', accountLabel: resolveAccountLabel(accountId || 'primary'), unitId, unitLabel: unitId });
+    const cellKey = `${key}|${day}`;
+    severityByUnitDay.set(cellKey, Math.max(Number(severityByUnitDay.get(cellKey) || 0), Number(severity || 0)));
+  };
+
+  try {
+    const tmsRows = await loadOverviewTmsRows(range, requested, accountIds);
+    for (const row of tmsRows) {
+      const metadata = row.metadata || {};
+      const rowAccountId = metadata?.fleetRow?.accountId || (accountIds.length === 1 ? accountIds[0] : 'primary');
+      const severity = row.severity === 'critical' ? 2 : (row.severity === 'warning' || (row.incidentCodes || []).length ? 1 : 0);
+      setSeverity(rowAccountId, row.unitId || row.unitLabel || row.normalizedPlate, row.day, severity);
+    }
+  } catch (error) {}
+
+  try {
+    const report = await buildReportPayload(searchParams);
+    for (const row of report.tempErrorIncidents || []) {
+      if (!overviewRowMatchesAccount(row, accountIds, requested)) continue;
+      setSeverity(row.accountId || 'primary', row.unitId || row.unitLabel, row.day, row.type === 'temp1+temp2' ? 2 : 1);
+    }
+  } catch (error) {}
+
+  for (const accountId of accountIds) {
+    const account = getAccountConfigById(accountId);
+    const accountState = ensureAccountState(accountId);
+    for (const row of buildFleetRows(account, accountState, Date.now(), buildLiveAlerts(account, accountState, Date.now()))) {
+      if (fleetRowIsCriticalError(row)) setSeverity(accountId, row.id, formatLocalDay(Date.now()), 2);
+      else if (fleetRowHasSensorError(row) || fleetRowHasGpsLate(row) || row.errGps) setSeverity(accountId, row.id, formatLocalDay(Date.now()), 1);
+    }
+  }
+
+  const units = [...unitMap.values()].sort(function (left, right) {
+    return String(left.accountLabel || left.accountId).localeCompare(String(right.accountLabel || right.accountId))
+      || String(left.unitLabel || left.unitId).localeCompare(String(right.unitLabel || right.unitId));
+  });
+  const grid = units.map(function (unit) {
+    return dayList.map(function (day) {
+      return Number(severityByUnitDay.get(`${unit.accountId}::${unit.unitId}|${day}`) || 0);
+    });
+  });
+  return { ...overviewEmptyFleetHealth(range, requested), units, days: dayList, grid };
+}
+
 function buildAstroConfigPayload() {
   const accountSummaries = getAllAccountConfigs().map(function (account) {
     return {
@@ -10978,6 +11427,26 @@ async function handleApi(req, res, url) {
 
   if (pathname === '/api/report' && method === 'GET') {
     sendJson(res, 200, await buildReportPayload(url.searchParams));
+    return true;
+  }
+
+  if (pathname === '/api/overview/delivery-performance' && method === 'GET') {
+    sendJson(res, 200, await buildOverviewDeliveryPerformancePayload(url.searchParams));
+    return true;
+  }
+
+  if (pathname === '/api/overview/incident-breakdown' && method === 'GET') {
+    sendJson(res, 200, await buildOverviewIncidentBreakdownPayload(url.searchParams));
+    return true;
+  }
+
+  if (pathname === '/api/overview/stop-idle-summary' && method === 'GET') {
+    sendJson(res, 200, await buildOverviewStopIdleSummaryPayload(url.searchParams));
+    return true;
+  }
+
+  if (pathname === '/api/overview/fleet-health' && method === 'GET') {
+    sendJson(res, 200, await buildOverviewFleetHealthPayload(url.searchParams));
     return true;
   }
 
