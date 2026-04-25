@@ -3007,7 +3007,8 @@ export default function App() {
 
   if (!loaded) {
     return <div className="login-shell">
-      <div className="login-hero">
+      <div className="login-ambient" aria-hidden="true"></div>
+      <section className="login-hero" aria-label="Workspace status">
         <div className="login-hero-content">
           <BrandLockup />
           <div className="login-hero-copy">
@@ -3025,26 +3026,27 @@ export default function App() {
             </div>
           </div>
         </div>
-      </div>
-      <div className="login-form-panel">
+      </section>
+      <main className="login-form-panel">
         <div className="login-glass-card">
           <div className="login-glass-header">
             <h2>Loading workspace</h2>
             <p>Please wait while we set up your environment.</p>
           </div>
           <div className="login-glass-content">
-            <div className="inline-buttons" style={{ justifyContent: 'center', marginBottom: '20px' }}>
+            <div className="login-spinner-wrap">
               <Spinner />
             </div>
             <div className="subtle-line text-center">If loading takes too long, the login form will appear automatically.</div>
           </div>
         </div>
-      </div>
+      </main>
     </div>;
   }
 
   if (loaded && !webSessionUser) {
     return <div className="login-shell">
+      <div className="login-ambient" aria-hidden="true"></div>
       <button 
         type="button" 
         className="login-theme-toggle" 
@@ -3054,7 +3056,7 @@ export default function App() {
         {theme === 'light' ? <MoonStar size={18} /> : <Sun size={18} />}
       </button>
       
-      <div className="login-hero">
+      <section className="login-hero" aria-label="Solofleet introduction">
         <div className="login-hero-content">
           <BrandLockup />
           <div className="login-hero-copy">
@@ -3068,9 +3070,9 @@ export default function App() {
             </div>
           </div>
         </div>
-      </div>
+      </section>
       
-      <div className="login-form-panel">
+      <main className="login-form-panel">
         <div className="login-glass-card">
           <div className="login-glass-header">
             <h2>Welcome back</h2>
@@ -3095,6 +3097,7 @@ export default function App() {
                   className="login-input"
                   value={webLoginForm.password} 
                   onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))} 
+                  onKeyDown={(event) => { if (event.key === 'Enter') loginToWeb(); }}
                   placeholder="Enter your password" 
                 />
               </label>
@@ -3109,7 +3112,7 @@ export default function App() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
 
       {busyOverlay}
       {authModal.open ? <div className="auth-modal-backdrop">
