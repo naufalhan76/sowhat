@@ -319,7 +319,7 @@ textarea:focus {
   min-height: 100vh;
   width: 100vw;
   background-color: #09090B;
-  color: #fff;
+  color: #FAFAFA;
   font-family: var(--font-sans);
   position: relative;
   overflow: hidden;
@@ -332,7 +332,7 @@ textarea:focus {
   z-index: 50;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: #FAFAFA;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -359,6 +359,7 @@ textarea:focus {
   justify-content: center;
   padding: 60px;
   z-index: 10;
+  background-color: #09090B;
 }
 
 /* Dot Grid Background */
@@ -406,11 +407,12 @@ textarea:focus {
   line-height: 1.1;
   margin-bottom: 16px;
   letter-spacing: -0.03em;
+  color: #FAFAFA;
 }
 
 .login-subtitle {
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.6);
+  color: #A1A1AA;
   line-height: 1.5;
   max-width: 90%;
 }
@@ -448,7 +450,7 @@ textarea:focus {
 
 .status-text {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: #A1A1AA;
   font-family: var(--font-mono);
 }
 
@@ -461,14 +463,15 @@ textarea:focus {
   padding: 40px;
   position: relative;
   z-index: 20;
+  background-color: #09090B;
 }
 
 /* Glass Card */
 .login-glass-card {
   width: 100%;
   max-width: 420px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 16px;
   padding: 40px;
   backdrop-filter: blur(18px);
@@ -499,10 +502,11 @@ textarea:focus {
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 8px;
+  color: #FAFAFA;
 }
 
 .login-glass-header p {
-  color: rgba(255, 255, 255, 0.5);
+  color: #A1A1AA;
   font-size: 14px;
 }
 
@@ -522,13 +526,13 @@ textarea:focus {
 .login-glass-card .field span {
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: #E4E4E7;
 }
 
 .login-glass-card .login-input {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: #FAFAFA;
   padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
@@ -543,7 +547,7 @@ textarea:focus {
 }
 
 .login-glass-card .login-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: #71717A;
 }
 
 .login-glass-card .login-submit-btn {
@@ -570,7 +574,7 @@ textarea:focus {
 }
 
 .login-glass-card .subtle-line {
-  color: rgba(255, 255, 255, 0.4);
+  color: #71717A;
   font-size: 12px;
   margin-top: 16px;
 }
