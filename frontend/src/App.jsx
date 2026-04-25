@@ -305,6 +305,13 @@ const TMS_INCIDENT_LEGEND_CODES = [
   'geofence-origin',
   'geofence-destination',
 ];
+const OVERVIEW_INCIDENT_TONE_COLORS = {
+  danger: '#ff6b7f',
+  warning: '#fb923c',
+  info: '#60a5fa',
+  success: '#34d399',
+  default: 'rgba(148, 163, 184, 0.92)',
+};
 const TMS_SHIPPING_STATUS_META = {
   'otw-load': { label: 'OTW LOAD' },
   'sampai-load': { label: 'SAMPAI LOAD' },
@@ -1438,15 +1445,14 @@ export default function App() {
   }, [errorUnitsSummary, overviewAccountId]);
 
   const overviewIncidentRows = useMemo(() => {
-    const counts = new Map();
+    const counts = new Map(TMS_INCIDENT_LEGEND_CODES.map((code) => [code, Number(tripMonitorSummary.byIncident?.[code] || 0)]));
     errorRows
       .filter((row) => overviewAccountId === 'all' || String(row.accountId || 'primary') === String(overviewAccountId || 'primary'))
       .forEach((row) => {
-        const label = row.label || row.type || 'Temp incident';
-        counts.set(label, (counts.get(label) || 0) + Number(row.incidents || 1));
+        counts.set('temp-error', (counts.get('temp-error') || 0) + Number(row.incidents || 1));
       });
-    return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((left, right) => right.value - left.value).slice(0, 5);
-  }, [errorRows, overviewAccountId]);
+    return TMS_INCIDENT_LEGEND_CODES.map((code) => ({ key: code, label: TMS_INCIDENT_META[code]?.label || code, value: counts.get(code) || 0, tone: TMS_INCIDENT_META[code]?.tone || 'default' }));
+  }, [errorRows, overviewAccountId, tripMonitorSummary.byIncident]);
   const overviewTmsDeliveryRows = useMemo(() => [
     { label: 'Critical trips', value: tripMonitorSummary.bySeverity?.critical || 0, tone: 'danger' },
     { label: 'Warning trips', value: tripMonitorSummary.bySeverity?.warning || 0, tone: 'warning' },
@@ -3454,7 +3460,7 @@ export default function App() {
 
         {hasOverviewTms ? <section className="overview-widget overview-widget-half">
           <div className="overview-widget-head"><div><h3>Incident Breakdown</h3><p>TMS + Solofleet incident categories.</p></div><Chip>60s</Chip></div>
-          <OverviewBarList items={overviewIncidentBreakdown.rows} valueKey="value" valueFormatter={(value) => `${value}`} emptyMessage="Belum ada incident di range ini." />
+          <OverviewIncidentBreakdownChart items={overviewIncidentBreakdown.rows} busy={busy} />
         </section> : null}
 
         {hasOverviewTms ? <section className="overview-widget overview-widget-half">
@@ -5242,6 +5248,84 @@ const OverviewBarList = React.memo(function OverviewBarList({ items, busy, empty
     const appliedTone = item.tone || tone;
     return <div key={item.key || item.label} className={`overview-bar-row ${hoveredKey === (item.key || item.label) ? 'is-hovered' : ''}`} onMouseEnter={() => setHoveredKey(item.key || item.label)} onMouseLeave={() => setHoveredKey((current) => current === (item.key || item.label) ? null : current)}><div className="overview-bar-copy"><strong title={item.label}>{item.label}</strong><small>{metaFormatter ? metaFormatter(item) : ''}</small></div><div className="overview-bar-track"><span className={`overview-bar-fill ${appliedTone}`} style={{ width }} /></div><div className="overview-bar-value">{valueFormatter ? valueFormatter(rawValue, item) : rawValue}</div></div>;
   })}</div>;
+});
+
+const OverviewIncidentBreakdownChart = React.memo(function OverviewIncidentBreakdownChart({ items, busy }) {
+  const [hoveredKey, setHoveredKey] = useState(null);
+  const rows = useMemo(() => {
+    const rawRows = Array.isArray(items) ? items : [];
+    const counts = new Map(TMS_INCIDENT_LEGEND_CODES.map((code) => [code, 0]));
+    rawRows.forEach((item) => {
+      const rawKey = String(item?.key || item?.code || item?.type || '').toLowerCase();
+      const rawLabel = String(item?.label || '').toLowerCase();
+      const matchedCode = TMS_INCIDENT_LEGEND_CODES.find((code) => {
+        const meta = TMS_INCIDENT_META[code];
+        return rawKey === code || rawLabel === code || rawLabel === String(meta?.label || '').toLowerCase();
+      });
+      if (!matchedCode) return;
+      counts.set(matchedCode, (counts.get(matchedCode) || 0) + Number(item?.value || item?.count || item?.incidents || 0));
+    });
+    return TMS_INCIDENT_LEGEND_CODES.map((code) => {
+      const meta = TMS_INCIDENT_META[code] || { label: code, tone: 'default' };
+      const tone = meta.tone || 'default';
+      return {
+        key: code,
+        label: meta.label,
+        tone,
+        color: OVERVIEW_INCIDENT_TONE_COLORS[tone] || OVERVIEW_INCIDENT_TONE_COLORS.default,
+        value: counts.get(code) || 0,
+      };
+    });
+  }, [items]);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const hoveredRow = hoveredKey ? rows.find((row) => row.key === hoveredKey) : null;
+  const width = 720;
+  const height = 44;
+  let cursorX = 0;
+
+  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading incident breakdown...</div>;
+  if (!total) return <div className="overview-chart-empty">Belum ada incident di range ini.</div>;
+
+  return <div className="overview-incident-breakdown">
+    <div className="overview-incident-total">
+      <span>Total incidents</span>
+      <strong>{total}</strong>
+    </div>
+    <div className="overview-incident-chart-stage">
+      {hoveredRow ? <div className="overview-chart-tooltip overview-chart-tooltip-static"><strong>{hoveredRow.label}</strong><span>{hoveredRow.value} incident</span></div> : null}
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Incident breakdown by type" className="overview-incident-stacked-bar">
+        <rect x="0" y="10" width={width} height="24" rx="12" fill="var(--overview-bar-track)" />
+        {rows.filter((row) => row.value > 0).map((row) => {
+          const segmentWidth = (row.value / total) * width;
+          const segmentX = cursorX;
+          cursorX += segmentWidth;
+          return <rect
+            key={row.key}
+            x={segmentX}
+            y="10"
+            width={Math.max(1, segmentWidth)}
+            height="24"
+            fill={row.color}
+            className={`overview-incident-segment ${hoveredKey === row.key ? 'is-hovered' : ''}`}
+            tabIndex={0}
+            role="button"
+            aria-label={`${row.label}: ${row.value} incident`}
+            onMouseEnter={() => setHoveredKey(row.key)}
+            onMouseLeave={() => setHoveredKey((current) => current === row.key ? null : current)}
+            onFocus={() => setHoveredKey(row.key)}
+            onBlur={() => setHoveredKey((current) => current === row.key ? null : current)}
+          />;
+        })}
+      </svg>
+    </div>
+    <div className="overview-incident-legend" aria-label="Incident type counts">
+      {rows.map((row) => <div key={row.key} className={`overview-incident-legend-row ${hoveredKey === row.key ? 'is-hovered' : ''}`} onMouseEnter={() => setHoveredKey(row.key)} onMouseLeave={() => setHoveredKey((current) => current === row.key ? null : current)}>
+        <span className="overview-incident-legend-dot" style={{ backgroundColor: row.color }} />
+        <span className="overview-incident-legend-label">{row.label}</span>
+        <strong>{row.value}</strong>
+      </div>)}
+    </div>
+  </div>;
 });
 
 const TemperatureChart = React.memo(function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
