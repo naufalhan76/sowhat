@@ -3044,7 +3044,7 @@ export default function App() {
   }
 
   if (loaded && !webSessionUser) {
-    return <div className="login-shell" data-theme="dark">
+    return <div className="login-shell">
       <button 
         type="button" 
         className="login-theme-toggle" 
