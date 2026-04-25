@@ -9,10 +9,9 @@ Panduan ini buat menjalankan dashboard di VPS Linux dengan:
 
 App sekarang mendukung mode storage prioritas:
 1. `PostgreSQL`
-2. `Supabase`
-3. file lokal `.json`
+2. file lokal `.json`
 
-Kalau `DATABASE_URL` tersedia, app akan otomatis pakai PostgreSQL sebagai storage utama dan mencoba migrasi data lama dari JSON/Supabase saat startup pertama.
+Kalau `DATABASE_URL` tersedia, app akan otomatis pakai PostgreSQL sebagai storage utama dan mencoba migrasi data lama dari JSON saat startup pertama.
 
 ## 1. Install dependency dasar di VPS
 
@@ -73,16 +72,10 @@ Isi minimal:
 PORT=3001
 HOST=127.0.0.1
 DATABASE_URL=postgresql://solofleet_app:GANTI_PASSWORD_DB@127.0.0.1:5432/solofleet
-
-# Optional: kalau masih mau dipakai sebagai sumber migrasi lama
-SUPABASE_URL=https://unwcleokcopodhhbsyrx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=ISI_SERVICE_ROLE_KEY
 ```
 
 Catatan:
 - `DATABASE_URL` membuat app pindah ke PostgreSQL.
-- `SUPABASE_*` boleh tetap diisi sementara kalau kamu mau auto-migrate data lama dari Supabase ke PostgreSQL.
-- Setelah migrasi sudah aman, `SUPABASE_*` boleh dihapus.
 
 ## 5. Build frontend
 
@@ -107,7 +100,7 @@ pm2 logs sowhat
 Saat boot pertama, cek log untuk pesan seperti:
 - `Migrating config to PostgreSQL...`
 - `Migrating state to PostgreSQL...`
-- `Completed auto-migration of local/Supabase data to PostgreSQL.`
+- `Completed auto-migration of local data to PostgreSQL.`
 
 ## 7. Setup Nginx reverse proxy
 
@@ -191,10 +184,6 @@ select count(*) from dashboard_web_users;
 select count(*) from daily_temp_rollups;
 select count(*) from pod_snapshots;
 ```
-
-Kalau semua sudah masuk dan UI normal, kamu bisa stop ketergantungan ke Supabase dengan menghapus:
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
 
 ## 12. Tabel yang dipakai di PostgreSQL
 

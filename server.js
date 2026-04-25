@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('dotenv').config({ path: '.env.local' });
 const http = require('http');
 const crypto = require('node:crypto');
 const fs = require('fs');
@@ -147,7 +148,6 @@ const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS
 const WEB_LOGIN_RATE_LIMIT_MAX = Number(process.env.WEB_LOGIN_RATE_LIMIT_MAX || 10);
 const SOLOFLEET_LOGIN_RATE_LIMIT_MAX = Number(process.env.SOLOFLEET_LOGIN_RATE_LIMIT_MAX || 8);
 const REMOTE_RESET_DEFAULT_LOG_LIMIT = 20;
-const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 5000);
 const POSTGRES_CONNECT_TIMEOUT_MS = Number(process.env.POSTGRES_CONNECT_TIMEOUT_MS || 5000);
 const POSTGRES_QUERY_TIMEOUT_MS = Number(process.env.POSTGRES_QUERY_TIMEOUT_MS || 8000);
 const TMS_REQUEST_TIMEOUT_MS = Number(process.env.TMS_REQUEST_TIMEOUT_MS || 20000);
@@ -801,19 +801,8 @@ async function saveConfig() {
           console.error('Failed to save config to PostgreSQL:', error.message);
         }
       }
-      if (!getSupabaseWebAuthConfig().enabled) {
-        saveJsonFile(CONFIG_FILE, configSnapshot);
-        continue;
-      }
-      try {
-        await supabaseRestRequest('POST', 'app_settings', {
-          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-          body: [{ id: 'default', config_data: configSnapshot, updated_at: new Date().toISOString() }],
-        });
-      } catch (error) {
-        console.error('Failed to save config to Supabase:', error.message);
-        saveJsonFile(CONFIG_FILE, configSnapshot);
-      }
+      saveJsonFile(CONFIG_FILE, configSnapshot);
+      continue;
     }
   })().finally(function () {
     saveConfigInFlight = null;
@@ -832,16 +821,6 @@ function getPostgresConfig() {
   return {
     connectionString,
     enabled: Boolean(connectionString),
-  };
-}
-
-function getSupabaseWebAuthConfig() {
-  const url = String(process.env.SUPABASE_URL || config?.supabaseUrl || '').trim().replace(/\/+$/, '');
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || config?.supabaseServiceRoleKey || '').trim();
-  return {
-    url,
-    serviceRoleKey,
-    enabled: Boolean(url && serviceRoleKey),
   };
 }
 
@@ -888,69 +867,7 @@ function verifyPassword(password, passwordHash) {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(value));
 }
 
-async function supabaseRestRequest(method, resource, options) {
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
-    throw new Error('Supabase web auth is not configured.');
-  }
-
-  const requestOptions = options && typeof options === 'object' ? options : {};
-  const headers = {
-    apikey: runtime.serviceRoleKey,
-    Authorization: `Bearer ${runtime.serviceRoleKey}`,
-    'Content-Type': 'application/json',
-    ...(requestOptions.headers || {}),
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(function () {
-    controller.abort(new Error('Supabase request timeout'));
-  }, Math.max(1000, SUPABASE_REQUEST_TIMEOUT_MS));
-
-  let response;
-  try {
-    response = await fetch(`${runtime.url}/rest/v1/${resource}`, {
-      method,
-      headers,
-      body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (error && (error.name === 'AbortError' || /timeout/i.test(String(error.message || '')))) {
-      throw new Error(`Supabase web auth request timed out after ${Math.max(1000, SUPABASE_REQUEST_TIMEOUT_MS)}ms.`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Supabase web auth request failed. HTTP ${response.status}: ${text.slice(0, 180)}`);
-  }
-  return text ? JSON.parse(text) : [];
-}
-
-async function supabaseFetchAll(resource, pageSize) {
-  const limit = Math.max(100, Number(pageSize || 1000));
-  const rows = [];
-  let offset = 0;
-
-  while (true) {
-    const separator = resource.includes('?') ? '&' : '?';
-    const page = await supabaseRestRequest('GET', `${resource}${separator}limit=${limit}&offset=${offset}`);
-    if (!Array.isArray(page) || !page.length) {
-      break;
-    }
-    rows.push(...page);
-    if (page.length < limit) {
-      break;
-    }
-    offset += page.length;
-  }
-
-  return rows;
-}
-function mapSupabaseWebUser(record) {
+function mapPostgresWebUser(record) {
   return normalizeWebUser({
     id: record.id,
     username: record.username,
@@ -971,7 +888,7 @@ async function listWebUsers() {
          from dashboard_web_users
          order by username asc`,
       );
-      return result.rows.map(mapSupabaseWebUser).filter(Boolean);
+      return result.rows.map(mapPostgresWebUser).filter(Boolean);
     } catch (error) {
       return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
         return left.username.localeCompare(right.username);
@@ -979,20 +896,9 @@ async function listWebUsers() {
     }
   }
 
-  if (!getSupabaseWebAuthConfig().enabled) {
-    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
-      return left.username.localeCompare(right.username);
-    });
-  }
-
-  try {
-    const rows = await supabaseRestRequest('GET', 'dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&order=username.asc');
-    return rows.map(mapSupabaseWebUser).filter(Boolean);
-  } catch (error) {
-    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
-      return left.username.localeCompare(right.username);
-    });
-  }
+  return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).sort(function (left, right) {
+    return left.username.localeCompare(right.username);
+  });
 }
 
 async function findWebUserById(userId) {
@@ -1009,17 +915,12 @@ async function findWebUserById(userId) {
        limit 1`,
       [resolvedId],
     );
-    return result.rows.length ? mapSupabaseWebUser(result.rows[0]) : null;
+    return result.rows.length ? mapPostgresWebUser(result.rows[0]) : null;
   }
 
-  if (!getSupabaseWebAuthConfig().enabled) {
-    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
-      return user.id === resolvedId;
-    }) || null;
-  }
-
-  const rows = await supabaseRestRequest('GET', `dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&id=eq.${encodeURIComponent(resolvedId)}&limit=1`);
-  return rows.length ? mapSupabaseWebUser(rows[0]) : null;
+  return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
+    return user.id === resolvedId;
+  }) || null;
 }
 
 async function findWebUserByUsername(username) {
@@ -1036,17 +937,12 @@ async function findWebUserByUsername(username) {
        limit 1`,
       [normalized],
     );
-    return result.rows.length ? mapSupabaseWebUser(result.rows[0]) : null;
+    return result.rows.length ? mapPostgresWebUser(result.rows[0]) : null;
   }
 
-  if (!getSupabaseWebAuthConfig().enabled) {
-    return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
-      return user.username === normalized;
-    }) || null;
-  }
-
-  const rows = await supabaseRestRequest('GET', `dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&username=eq.${encodeURIComponent(normalized)}&limit=1`);
-  return rows.length ? mapSupabaseWebUser(rows[0]) : null;
+  return (config.webUsers || []).map(normalizeWebUser).filter(Boolean).find(function (user) {
+    return user.username === normalized;
+  }) || null;
 }
 
 async function countOtherActiveAdmins(excludedUserId) {
@@ -1123,38 +1019,21 @@ async function saveWebUser(input) {
     return nextUser;
   }
 
-  if (!getSupabaseWebAuthConfig().enabled) {
-    const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
-    const index = users.findIndex(function (user) {
-      return user.id === nextUser.id || user.username === nextUser.username;
-    });
-    if (index >= 0) {
-      users[index] = nextUser;
-    } else {
-      users.push(nextUser);
-    }
-    config.webUsers = users.sort(function (left, right) {
-      return left.username.localeCompare(right.username);
-    });
-    config = normalizeConfig(config);
-    saveConfig();
-    return nextUser;
-  }
-
-  const rows = await supabaseRestRequest('POST', 'dashboard_web_users', {
-    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-    body: [{
-      id: nextUser.id,
-      username: nextUser.username,
-      display_name: nextUser.displayName,
-      password_hash: nextUser.passwordHash,
-      role: nextUser.role,
-      is_active: nextUser.isActive,
-      created_at: nextUser.createdAt,
-      updated_at: nextUser.updatedAt,
-    }],
+  const users = (config.webUsers || []).map(normalizeWebUser).filter(Boolean);
+  const index = users.findIndex(function (user) {
+    return user.id === nextUser.id || user.username === nextUser.username;
   });
-  return rows.length ? mapSupabaseWebUser(rows[0]) : nextUser;
+  if (index >= 0) {
+    users[index] = nextUser;
+  } else {
+    users.push(nextUser);
+  }
+  config.webUsers = users.sort(function (left, right) {
+    return left.username.localeCompare(right.username);
+  });
+  config = normalizeConfig(config);
+  saveConfig();
+  return nextUser;
 }
 
 async function deleteWebUser(userId) {
@@ -1179,18 +1058,11 @@ async function deleteWebUser(userId) {
     return true;
   }
 
-  if (!getSupabaseWebAuthConfig().enabled) {
-    config.webUsers = (config.webUsers || []).map(normalizeWebUser).filter(Boolean).filter(function (user) {
-      return user.id !== resolvedId;
-    });
-    config = normalizeConfig(config);
-    saveConfig();
-    return true;
-  }
-
-  await supabaseRestRequest('DELETE', `dashboard_web_users?id=eq.${encodeURIComponent(resolvedId)}`, {
-    headers: { Prefer: 'return=minimal' },
+  config.webUsers = (config.webUsers || []).map(normalizeWebUser).filter(Boolean).filter(function (user) {
+    return user.id !== resolvedId;
   });
+  config = normalizeConfig(config);
+  saveConfig();
   return true;
 }
 function parseCookieHeader(cookieHeader) {
@@ -1673,19 +1545,8 @@ async function saveState() {
           console.error('Failed to save state to PostgreSQL:', error.message);
         }
       }
-      if (!getSupabaseWebAuthConfig().enabled) {
-        saveJsonFile(STATE_FILE, payload);
-        continue;
-      }
-      try {
-        await supabaseRestRequest('POST', 'app_state', {
-          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-          body: [{ id: 'default', state_data: payload, updated_at: new Date().toISOString() }],
-        });
-      } catch (error) {
-        console.error('Failed to save state to Supabase:', error.message);
-        saveJsonFile(STATE_FILE, payload);
-      }
+      saveJsonFile(STATE_FILE, payload);
+      continue;
     }
   })().finally(function () {
     saveStateInFlight = null;
@@ -2144,8 +2005,6 @@ async function initializeStorage() {
   let rawState = loadJsonFile(STATE_FILE, DEFAULT_STATE);
   let postgresHasConfig = false;
   let postgresHasState = false;
-  let supabaseHasConfig = false;
-  let supabaseHasState = false;
 
   if (getPostgresConfig().enabled) {
     try {
@@ -2162,27 +2021,6 @@ async function initializeStorage() {
       }
     } catch (error) {
       console.error('Failed to load storage from PostgreSQL:', error.message);
-    }
-  }
-
-  if ((!postgresHasConfig || !postgresHasState) && getSupabaseWebAuthConfig().enabled) {
-    try {
-      if (!postgresHasConfig) {
-        const configRows = await supabaseRestRequest('GET', `app_settings?id=eq.default&limit=1`);
-        if (configRows && configRows.length > 0 && configRows[0].config_data) {
-          rawConfig = configRows[0].config_data;
-          supabaseHasConfig = true;
-        }
-      }
-      if (!postgresHasState) {
-        const stateRows = await supabaseRestRequest('GET', `app_state?id=eq.default&limit=1`);
-        if (stateRows && stateRows.length > 0 && stateRows[0].state_data) {
-          rawState = stateRows[0].state_data;
-          supabaseHasState = true;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load storage from Supabase:', e.message);
     }
   }
 
@@ -2217,8 +2055,15 @@ async function initializeStorage() {
   state.runtime.nextRunAt = null;
   isStorageInitialized = true;
 
-  if (getPostgresConfig().enabled) {
-    await migrateSupabaseDataToPostgres();
+  const seedUsername = String(process.env.LOCAL_ADMIN_USERNAME || '').trim().toLowerCase();
+  const seedPassword = String(process.env.LOCAL_ADMIN_PASSWORD || '').trim();
+  if (seedUsername && seedPassword) {
+    try {
+      if (!(await findWebUserByUsername(seedUsername))) {
+        await saveWebUser({ username: seedUsername, password: seedPassword, displayName: seedUsername, role: 'admin', isActive: true });
+        console.log(`Seeded local admin user: ${seedUsername}`);
+      }
+    } catch (error) { console.error('Failed to seed local admin user:', error.message); }
   }
   
   const migrationTasks = [];
@@ -2230,12 +2075,12 @@ async function initializeStorage() {
     captureDailyErrorSnapshots(accountConfig, accountState);
     capturePodSnapshots(accountConfig, accountState, buildFleetRows(accountConfig, accountState, Date.now(), buildLiveAlerts(accountConfig, accountState, Date.now())));
     
-    if (getPostgresConfig().enabled || getSupabaseWebAuthConfig().enabled) {
+    if (getPostgresConfig().enabled) {
       if (accountState.dailySnapshots && accountState.dailySnapshots.length > 0) {
-        migrationTasks.push(upsertDailyTempSnapshotsToSupabase(accountConfig, accountState));
+        migrationTasks.push(upsertDailyTempSnapshots(accountConfig, accountState));
       }
       if (accountState.podSnapshots && accountState.podSnapshots.length > 0) {
-        migrationTasks.push(upsertPodSnapshotsToSupabase(accountConfig, accountState));
+        migrationTasks.push(upsertPodSnapshots(accountConfig, accountState));
       }
     }
   }
@@ -2257,25 +2102,9 @@ async function initializeStorage() {
 
       if (migrationTasks.length > 0) {
         await Promise.allSettled(migrationTasks);
-        console.log('Completed auto-migration of local/Supabase data to PostgreSQL.');
+        console.log('Completed auto-migration of local data to PostgreSQL.');
       } else {
         await saveState();
-      }
-    } else if (getSupabaseWebAuthConfig().enabled) {
-      if (!supabaseHasConfig) {
-        console.log('Migrating local config to Supabase...');
-        migrationTasks.push(saveConfig());
-      }
-      if (!supabaseHasState) {
-        console.log('Migrating local state to Supabase...');
-        migrationTasks.push(saveState());
-      }
-      
-      if (migrationTasks.length > 0) {
-        await Promise.allSettled(migrationTasks);
-        console.log('Completed auto-migration of local data to Supabase.');
-      } else {
-        await saveState(); 
       }
     } else {
       saveState();
@@ -2402,7 +2231,7 @@ function isSafePublicErrorMessage(message) {
   if (!value || value.length > 220 || /[<>]/.test(value)) {
     return false;
   }
-  return !/(<!doctype|<html|cloudflare|upstream request timeout|object reference not set|supabase|typeerror|referenceerror|syntaxerror|rangeerror|fetch failed|econn|enotfound|etimedout|session cookie is empty|returned html instead of json|http 5\d{2})/i.test(value);
+  return !/(<!doctype|<html|cloudflare|upstream request timeout|object reference not set|typeerror|referenceerror|syntaxerror|rangeerror|fetch failed|econn|enotfound|etimedout|session cookie is empty|returned html instead of json|http 5\d{2})/i.test(value);
 }
 
 function getPublicErrorMessage(error, fallbackMessage) {
@@ -6512,8 +6341,8 @@ async function buildReportPayload(searchParams) {
     syncFleetSnapshotRecords(accountConfig, accountState, Date.now());
     captureDailyErrorSnapshots(accountConfig, accountState);
     try {
-      await upsertDailyTempSnapshotsToSupabase(accountConfig, accountState);
-      await upsertPodSnapshotsToSupabase(accountConfig, accountState);
+      await upsertDailyTempSnapshots(accountConfig, accountState);
+      await upsertPodSnapshots(accountConfig, accountState);
     } catch (error) {
       accountState.runtime.lastSnapshotError = error.message;
     }
@@ -6542,16 +6371,16 @@ async function buildReportPayload(searchParams) {
   let snapshotRows = localSnapshotRows;
   let snapshotAnalytics = buildSnapshotReportAggregates(localSnapshotRows);
   try {
-    const supabaseRows = await loadDailyTempSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
-    if (supabaseRows.length) {
-      const mergedCompactRows = mergeCompactTempErrorRows(supabaseRows, snapshotAnalytics.tempErrorIncidents);
+    const persistedRows = await loadDailyTempSnapshots(range.rangeStartMs, range.rangeEndMs);
+    if (persistedRows.length) {
+      const mergedCompactRows = mergeCompactTempErrorRows(persistedRows, snapshotAnalytics.tempErrorIncidents);
       snapshotAnalytics = buildSnapshotReportAggregatesFromCompactRows(mergedCompactRows);
       snapshotRows = snapshotAnalytics.tempErrorIncidents;
     }
-    const supabasPodRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
-    if (supabasPodRows.length) {
+    const persistedPodRows = await loadPodSnapshots(range.rangeStartMs, range.rangeEndMs);
+    if (persistedPodRows.length) {
       podRows.length = 0;
-      safePushAll(podRows, supabasPodRows);
+      safePushAll(podRows, persistedPodRows);
     }
   } catch (error) {
     state.runtime.lastSnapshotError = error.message;
@@ -6719,79 +6548,7 @@ async function countRowsInPostgres(tableName) {
   return result.rows[0] ? Number(result.rows[0].count || 0) : 0;
 }
 
-async function migrateSupabaseDataToPostgres() {
-  if (!getPostgresConfig().enabled || !getSupabaseWebAuthConfig().enabled) {
-    return;
-  }
-
-  try {
-    if ((await countRowsInPostgres('dashboard_web_users')) === 0) {
-      const users = await supabaseFetchAll('dashboard_web_users?select=id,username,display_name,password_hash,role,is_active,created_at,updated_at&order=username.asc', 500);
-      await migrateWebUsersToPostgres(users.map(mapSupabaseWebUser));
-    }
-
-    if ((await countRowsInPostgres('pod_snapshots')) === 0) {
-      const podRows = await supabaseFetchAll('pod_snapshots?select=id,day,snapshot_timestamp,snapshot_time,unit_id,unit_label,customer_name,pod_id,pod_name,latitude,longitude,speed,distance_meters,location_summary&order=day.desc', 1000);
-      if (podRows.length) {
-        await postgresUpsertRows(
-          'pod_snapshots',
-          podRows,
-          [
-            'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
-            'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
-            'speed', 'distance_meters', 'location_summary',
-          ],
-          ['id'],
-        );
-      }
-    }
-
-    if ((await countRowsInPostgres('daily_temp_rollups')) === 0) {
-      const rollupRows = await supabaseFetchAll('daily_temp_rollups?select=id,day,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,incidents,temp1_incidents,temp2_incidents,both_incidents,first_start_timestamp,last_end_timestamp,duration_minutes,total_minutes,longest_minutes,temp1_min,temp1_max,temp2_min,temp2_max,min_speed,max_speed,latitude,longitude,location_summary,zone_name&order=day.desc', 1000);
-      if (rollupRows.length) {
-        await postgresUpsertRows(
-          'daily_temp_rollups',
-          rollupRows,
-          [
-            'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
-            'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
-            'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
-            'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
-            'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
-          ],
-          ['id'],
-          { touchUpdatedAt: true },
-        );
-      } else {
-        const legacyRows = await supabaseFetchAll('daily_temp_snapshots?select=id,day,error_timestamp,error_time,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,duration_minutes,temp1,temp2,speed,latitude,longitude,location_summary,zone_name&order=day.desc', 1000);
-        if (legacyRows.length) {
-          const compactRows = buildDailyTempCompactRows(
-            { id: 'migration', label: 'migration' },
-            { dailySnapshots: legacyRows.map(mapSupabaseDailySnapshotRecord) },
-          );
-          const mappedRows = compactRows.map(mapDailySnapshotToSupabaseRow);
-          await postgresUpsertRows(
-            'daily_temp_rollups',
-            mappedRows,
-            [
-              'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
-              'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
-              'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
-              'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
-              'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
-            ],
-            ['id'],
-            { touchUpdatedAt: true },
-          );
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to migrate Supabase data to PostgreSQL:', error.message);
-  }
-}
-
-function mapDailySnapshotToSupabaseRow(snapshot) {
+function mapDailySnapshotToPostgresRow(snapshot) {
   return {
     id: snapshot.id,
     day: snapshot.day,
@@ -6828,9 +6585,6 @@ function getStorageProvider() {
   if (getPostgresConfig().enabled) {
     return 'postgres';
   }
-  if (getSupabaseWebAuthConfig().enabled) {
-    return 'supabase';
-  }
   return 'local-bootstrap';
 }
 
@@ -6842,7 +6596,7 @@ function getPostgresPool() {
   if (!postgresPool) {
     postgresPool = new Pool({
       connectionString: runtime.connectionString,
-      ssl: /supabase|render|railway|neon/i.test(runtime.connectionString) ? { rejectUnauthorized: false } : false,
+      ssl: /render|railway|neon/i.test(runtime.connectionString) ? { rejectUnauthorized: false } : false,
       connectionTimeoutMillis: Math.max(1000, POSTGRES_CONNECT_TIMEOUT_MS),
       query_timeout: Math.max(1000, POSTGRES_QUERY_TIMEOUT_MS),
       statement_timeout: Math.max(1000, POSTGRES_QUERY_TIMEOUT_MS),
@@ -7238,7 +6992,7 @@ async function postgresUpsertRows(tableName, rows, columns, conflictColumns, opt
   return rows.length;
 }
 
-function mapSupabaseDailySnapshotRecord(record) {
+function mapDailySnapshotRecord(record) {
   const legacyErrorTimestamp = Date.parse(record.error_timestamp || '');
   const firstStartTimestamp = Date.parse(record.first_start_timestamp || record.error_timestamp || '');
   const lastEndTimestamp = Date.parse(record.last_end_timestamp || '');
@@ -7283,48 +7037,38 @@ function mapSupabaseDailySnapshotRecord(record) {
   };
 }
 
-async function upsertDailyTempSnapshotsToSupabase(accountConfig, accountState) {
+async function upsertDailyTempSnapshots(accountConfig, accountState) {
   const compactRows = buildDailyTempCompactRows(accountConfig, accountState);
   if (!compactRows.length) {
     return 0;
   }
 
-  const rows = compactRows.map(mapDailySnapshotToSupabaseRow).filter(function (row) {
+  const rows = compactRows.map(mapDailySnapshotToPostgresRow).filter(function (row) {
     return row.id && row.day && row.unit_id;
   });
   if (!rows.length) {
     return 0;
   }
 
-  if (getPostgresConfig().enabled) {
-    return postgresUpsertRows(
-      'daily_temp_rollups',
-      rows,
-      [
-        'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
-        'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
-        'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
-        'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
-        'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
-      ],
-      ['id'],
-      { touchUpdatedAt: true },
-    );
-  }
-
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
+  if (!getPostgresConfig().enabled) {
     return 0;
   }
-
-  await supabaseRestRequest('POST', 'daily_temp_rollups', {
-    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-    body: rows,
-  });
-  return rows.length;
+  return postgresUpsertRows(
+    'daily_temp_rollups',
+    rows,
+    [
+      'id', 'day', 'account_id', 'account_label', 'unit_id', 'unit_label', 'vehicle',
+      'error_type', 'error_label', 'incidents', 'temp1_incidents', 'temp2_incidents',
+      'both_incidents', 'first_start_timestamp', 'last_end_timestamp', 'duration_minutes',
+      'total_minutes', 'longest_minutes', 'temp1_min', 'temp1_max', 'temp2_min', 'temp2_max',
+      'min_speed', 'max_speed', 'latitude', 'longitude', 'location_summary', 'zone_name',
+    ],
+    ['id'],
+    { touchUpdatedAt: true },
+  );
 }
 
-function mapPodSnapshotToSupabaseRow(snapshot) {
+function mapPodSnapshotToPostgresRow(snapshot) {
   return {
     id: snapshot.id,
     day: snapshot.day,
@@ -7343,7 +7087,7 @@ function mapPodSnapshotToSupabaseRow(snapshot) {
   };
 }
 
-function mapSupabasePodSnapshotRecord(record) {
+function mapPodSnapshotRecord(record) {
   const accountId = 'primary';
   const timestamp = Date.parse(record.snapshot_timestamp || '');
   return {
@@ -7454,7 +7198,7 @@ async function listAdminTempRollups(limit) {
        limit $1`,
       [resolvedLimit],
     );
-    return result.rows.map(mapSupabaseDailySnapshotRecord);
+    return result.rows.map(mapDailySnapshotRecord);
   }
 
   const rows = buildSnapshotReportAggregates(
@@ -7507,7 +7251,7 @@ async function listAdminPodSnapshots(limit) {
        limit $1`,
       [resolvedLimit],
     );
-    return result.rows.map(mapSupabasePodSnapshotRecord);
+    return result.rows.map(mapPodSnapshotRecord);
   }
   return [];
 }
@@ -7542,111 +7286,79 @@ async function deleteAdminPodSnapshot(id) {
   throw new Error('POD snapshot editor saat ini hanya diaktifkan untuk PostgreSQL.');
 }
 
-async function upsertPodSnapshotsToSupabase(accountConfig, accountState) {
+async function upsertPodSnapshots(accountConfig, accountState) {
   const sourceRows = Array.isArray(accountState?.podSnapshots) ? accountState.podSnapshots : [];
   if (!sourceRows.length) {
     return 0;
   }
 
-  const rows = sourceRows.map(mapPodSnapshotToSupabaseRow).filter(function (row) {
+  const rows = sourceRows.map(mapPodSnapshotToPostgresRow).filter(function (row) {
     return row.id && row.day && row.snapshot_timestamp && row.unit_id && row.pod_id;
   });
   if (!rows.length) {
     return 0;
   }
 
-  if (getPostgresConfig().enabled) {
-    return postgresUpsertRows(
-      'pod_snapshots',
-      rows,
-      [
-        'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
-        'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
-        'speed', 'distance_meters', 'location_summary',
-      ],
-      ['id'],
-    );
-  }
-
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
+  if (!getPostgresConfig().enabled) {
     return 0;
   }
-
-  await supabaseRestRequest('POST', 'pod_snapshots', {
-    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-    body: rows,
-  });
-  return rows.length;
+  return postgresUpsertRows(
+    'pod_snapshots',
+    rows,
+    [
+      'id', 'day', 'snapshot_timestamp', 'snapshot_time', 'unit_id', 'unit_label',
+      'customer_name', 'pod_id', 'pod_name', 'latitude', 'longitude',
+      'speed', 'distance_meters', 'location_summary',
+    ],
+    ['id'],
+  );
 }
 
-async function loadPodSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
+async function loadPodSnapshots(rangeStartMs, rangeEndMs) {
   if (rangeStartMs === null || rangeEndMs === null) {
     return [];
   }
 
   const startDay = formatLocalDay(rangeStartMs);
   const endDay = formatLocalDay(rangeEndMs);
-  if (getPostgresConfig().enabled) {
-    const result = await postgresQuery(
-      `select id, day, snapshot_timestamp, snapshot_time, unit_id, unit_label, customer_name, pod_id, pod_name, latitude, longitude, speed, distance_meters, location_summary
-       from pod_snapshots
-       where day >= $1 and day <= $2
-       order by snapshot_timestamp desc
-       limit 20000`,
-      [startDay, endDay],
-    );
-    return result.rows.map(mapSupabasePodSnapshotRecord).filter(function (row) {
-      return row.timestamp !== null;
-    });
-  }
-
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
+  if (!getPostgresConfig().enabled) {
     return [];
   }
-
-  const rows = await supabaseRestRequest(
-    'GET',
-    `pod_snapshots?select=id,day,snapshot_timestamp,snapshot_time,unit_id,unit_label,customer_name,pod_id,pod_name,latitude,longitude,speed,distance_meters,location_summary&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=snapshot_timestamp.desc&limit=20000`,
+  const result = await postgresQuery(
+    `select id, day, snapshot_timestamp, snapshot_time, unit_id, unit_label, customer_name, pod_id, pod_name, latitude, longitude, speed, distance_meters, location_summary
+     from pod_snapshots
+     where day >= $1 and day <= $2
+     order by snapshot_timestamp desc
+     limit 20000`,
+    [startDay, endDay],
   );
-  return rows.map(mapSupabasePodSnapshotRecord).filter(function (row) {
+  return result.rows.map(mapPodSnapshotRecord).filter(function (row) {
     return row.timestamp !== null;
   });
 }
 
-async function loadDailyTempSnapshotsFromSupabase(rangeStartMs, rangeEndMs) {
+async function loadDailyTempSnapshots(rangeStartMs, rangeEndMs) {
   if (rangeStartMs === null || rangeEndMs === null) {
     return [];
   }
 
   const startDay = formatLocalDay(rangeStartMs);
   const endDay = formatLocalDay(rangeEndMs);
-  if (getPostgresConfig().enabled) {
-    const result = await postgresQuery(
-      `select id, day, account_id, account_label, unit_id, unit_label, vehicle, error_type, error_label,
-              incidents, temp1_incidents, temp2_incidents, both_incidents, first_start_timestamp,
-              last_end_timestamp, duration_minutes, total_minutes, longest_minutes, temp1_min, temp1_max,
-              temp2_min, temp2_max, min_speed, max_speed, latitude, longitude, location_summary, zone_name
-       from daily_temp_rollups
-       where day >= $1 and day <= $2
-       order by day desc, first_start_timestamp desc nulls last
-       limit 20000`,
-      [startDay, endDay],
-    );
-    return result.rows.map(mapSupabaseDailySnapshotRecord);
-  }
-
-  const runtime = getSupabaseWebAuthConfig();
-  if (!runtime.enabled) {
+  if (!getPostgresConfig().enabled) {
     return [];
   }
-
-  const rows = await supabaseRestRequest(
-    'GET',
-    `daily_temp_rollups?select=id,day,account_id,account_label,unit_id,unit_label,vehicle,error_type,error_label,incidents,temp1_incidents,temp2_incidents,both_incidents,first_start_timestamp,last_end_timestamp,duration_minutes,total_minutes,longest_minutes,temp1_min,temp1_max,temp2_min,temp2_max,min_speed,max_speed,latitude,longitude,location_summary,zone_name&day=gte.${encodeURIComponent(startDay)}&day=lte.${encodeURIComponent(endDay)}&order=day.desc&limit=20000`,
+  const result = await postgresQuery(
+    `select id, day, account_id, account_label, unit_id, unit_label, vehicle, error_type, error_label,
+            incidents, temp1_incidents, temp2_incidents, both_incidents, first_start_timestamp,
+            last_end_timestamp, duration_minutes, total_minutes, longest_minutes, temp1_min, temp1_max,
+            temp2_min, temp2_max, min_speed, max_speed, latitude, longitude, location_summary, zone_name
+     from daily_temp_rollups
+     where day >= $1 and day <= $2
+     order by day desc, first_start_timestamp desc nulls last
+     limit 20000`,
+    [startDay, endDay],
   );
-  return rows.map(mapSupabaseDailySnapshotRecord);
+  return result.rows.map(mapDailySnapshotRecord);
 }
 
 function buildTempErrorIncidentsFromSnapshotRows(snapshotRows) {
@@ -11278,9 +10990,9 @@ async function handleApi(req, res, url) {
     const range = parseDateRange(url.searchParams);
     let rows = [];
     try {
-      const supabaseRows = await loadPodSnapshotsFromSupabase(range.rangeStartMs, range.rangeEndMs);
-      if (supabaseRows.length) {
-        rows = supabaseRows;
+      const persistedRows = await loadPodSnapshots(range.rangeStartMs, range.rangeEndMs);
+      if (persistedRows.length) {
+        rows = persistedRows;
       }
     } catch (e) {}
     

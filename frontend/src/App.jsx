@@ -3007,55 +3007,110 @@ export default function App() {
 
   if (!loaded) {
     return <div className="login-shell">
-      <div className="login-backdrop" />
-      <Card className="login-card">
-        <CardHeader className="panel-card-header">
-          <div className="brand-lockup-login-shell">
-            <BrandLockup />
-            <div className="login-copy">
-              <p className="eyebrow local-eyebrow">Ops dashboard</p>
-              <h2>Loading dashboard</h2>
-              <p>Sedang cek status backend dan session web...</p>
+      <div className="login-hero">
+        <div className="login-hero-content">
+          <BrandLockup />
+          <div className="login-hero-copy">
+            <h1>Solofleet Ops</h1>
+            <p className="login-subtitle">Intelligent fleet tracking and temperature monitoring</p>
+          </div>
+          <div className="login-hero-status">
+            <div className="status-indicator">
+              <span className="status-dot"></span>
+              <span className="status-text">Backend connection checking...</span>
+            </div>
+            <div className="status-indicator">
+              <span className="status-dot"></span>
+              <span className="status-text">Web session verifying...</span>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="settings-stack">
-            <div className="inline-buttons">
+        </div>
+      </div>
+      <div className="login-form-panel">
+        <div className="login-glass-card">
+          <div className="login-glass-header">
+            <h2>Loading workspace</h2>
+            <p>Please wait while we set up your environment.</p>
+          </div>
+          <div className="login-glass-content">
+            <div className="inline-buttons" style={{ justifyContent: 'center', marginBottom: '20px' }}>
               <Spinner />
             </div>
-            <div className="subtle-line">Kalau loading lama atau gagal, halaman login akan tampil otomatis.</div>
+            <div className="subtle-line text-center">If loading takes too long, the login form will appear automatically.</div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>;
   }
 
   if (loaded && !webSessionUser) {
     return <div className="login-shell">
-      <div className="login-backdrop" />
-      <Card className="login-card">
-        <CardHeader className="panel-card-header">
-          <div className="brand-lockup-login-shell">
-            <BrandLockup />
-            <div className="login-copy">
-              <p className="eyebrow local-eyebrow">Ops dashboard</p>
-              <h2>Login web dashboard</h2>
-              <p>Login web sekarang dipisah dari login Solofleet. Gunakan akun dashboard yang sudah dibuat oleh admin.</p>
+      <button 
+        type="button" 
+        className="login-theme-toggle" 
+        onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+        aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+      >
+        {theme === 'light' ? <MoonStar size={18} /> : <Sun size={18} />}
+      </button>
+      
+      <div className="login-hero">
+        <div className="login-hero-content">
+          <BrandLockup />
+          <div className="login-hero-copy">
+            <h1>Ops Dashboard</h1>
+            <p className="login-subtitle">Centralized fleet command center. Real-time temperature alerts, history, and route tracking.</p>
+          </div>
+          <div className="login-hero-status">
+            <div className="status-indicator active">
+              <span className="status-dot"></span>
+              <span className="status-text">System operational</span>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="settings-stack">
-            <label className="field"><span>Username</span><input type="text" value={webLoginForm.username} onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))} placeholder="admin" /></label>
-            <label className="field"><span>Password</span><input type="password" value={webLoginForm.password} onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password dashboard" /></label>
-            <div className="inline-buttons">
-              <Button color="primary" onPress={loginToWeb}>Login dashboard</Button>
-            </div>
-            <div className="subtle-line">Solofleet account tetap diatur dari page Config sesudah login web berhasil.</div>
+        </div>
+      </div>
+      
+      <div className="login-form-panel">
+        <div className="login-glass-card">
+          <div className="login-glass-header">
+            <h2>Welcome back</h2>
+            <p>Sign in to your Solofleet dashboard account</p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="login-glass-content">
+            <div className="settings-stack">
+              <label className="field">
+                <span>Username</span>
+                <input 
+                  type="text" 
+                  className="login-input"
+                  value={webLoginForm.username} 
+                  onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))} 
+                  placeholder="admin" 
+                />
+              </label>
+              <label className="field">
+                <span>Password</span>
+                <input 
+                  type="password" 
+                  className="login-input"
+                  value={webLoginForm.password} 
+                  onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))} 
+                  placeholder="Enter your password" 
+                />
+              </label>
+              <button 
+                type="button" 
+                className="sf-btn sf-btn-primary login-submit-btn" 
+                onClick={loginToWeb}
+              >
+                Sign in to workspace
+              </button>
+              <div className="subtle-line text-center">Solofleet API connections are managed in the Config panel after login.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {busyOverlay}
       {authModal.open ? <div className="auth-modal-backdrop">
         <Card className="auth-modal-card">
