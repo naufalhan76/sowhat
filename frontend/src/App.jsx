@@ -878,7 +878,8 @@ export default function App() {
   const [overviewDeliveryPerf, setOverviewDeliveryPerf] = useState({ updatedAt: null, rows: [] });
   const [overviewIncidentBreakdown, setOverviewIncidentBreakdown] = useState({ updatedAt: null, rows: [] });
   const [overviewStopIdle, setOverviewStopIdle] = useState({ updatedAt: null, rows: [] });
-  const [overviewFleetHealth, setOverviewFleetHealth] = useState({ updatedAt: null, rows: [] });
+  const [overviewFleetHealth, setOverviewFleetHealth] = useState({ updatedAt: null, units: [], days: [], grid: [], summaries: [] });
+  const [overviewFleetHealthBusy, setOverviewFleetHealthBusy] = useState(false);
   const [revealedWhCount, setRevealedWhCount] = useState(0);
   const [astroSnapshotLogs, setAstroSnapshotLogs] = useState([]);
   const [astroSnapshotLogsBusy, setAstroSnapshotLogsBusy] = useState(false);
@@ -1446,7 +1447,6 @@ export default function App() {
       });
     return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((left, right) => right.value - left.value).slice(0, 5);
   }, [errorRows, overviewAccountId]);
-  const overviewFleetHealthRows = useMemo(() => overviewDonutSegments.map((segment) => ({ label: segment.label, value: segment.value, tone: segment.tone })), [overviewDonutSegments]);
   const overviewTmsDeliveryRows = useMemo(() => [
     { label: 'Critical trips', value: tripMonitorSummary.bySeverity?.critical || 0, tone: 'danger' },
     { label: 'Warning trips', value: tripMonitorSummary.bySeverity?.warning || 0, tone: 'warning' },
@@ -1560,16 +1560,52 @@ export default function App() {
     setOverviewIncidentBreakdown({ updatedAt: Date.now(), rows: overviewIncidentRows });
     setOverviewDeliveryPerf({ updatedAt: Date.now(), rows: overviewTmsDeliveryRows });
     setOverviewStopIdle({ updatedAt: Date.now(), rows: overviewStopIdleRows });
-    setOverviewFleetHealth({ updatedAt: Date.now(), rows: overviewFleetHealthRows });
     const timer = window.setInterval(() => {
       loadDashboard(false, true).catch(() => {});
       setOverviewIncidentBreakdown({ updatedAt: Date.now(), rows: overviewIncidentRows });
       setOverviewDeliveryPerf({ updatedAt: Date.now(), rows: overviewTmsDeliveryRows });
       setOverviewStopIdle({ updatedAt: Date.now(), rows: overviewStopIdleRows });
-      setOverviewFleetHealth({ updatedAt: Date.now(), rows: overviewFleetHealthRows });
     }, 300000);
     return () => window.clearInterval(timer);
-  }, [activePanel, overviewIncidentRows, overviewTmsDeliveryRows, overviewStopIdleRows, overviewFleetHealthRows]);
+  }, [activePanel, overviewIncidentRows, overviewTmsDeliveryRows, overviewStopIdleRows]);
+
+  useEffect(() => {
+    if (activePanel !== 'overview' || !overviewAccountId || !range.startDate || !range.endDate) return undefined;
+    let cancelled = false;
+    const loadFleetHealthHeatmap = () => {
+      setOverviewFleetHealthBusy(true);
+      return api(`/api/overview/fleet-health?${new URLSearchParams({
+        startDate: range.startDate,
+        endDate: range.endDate,
+        accountId: overviewAccountId,
+      }).toString()}`)
+        .then((payload) => {
+          if (!cancelled) {
+            setOverviewFleetHealth({
+              updatedAt: payload.updatedAt || Date.now(),
+              units: Array.isArray(payload.units) ? payload.units : [],
+              days: Array.isArray(payload.days) ? payload.days : [],
+              grid: Array.isArray(payload.grid) ? payload.grid : [],
+              summaries: Array.isArray(payload.summaries) ? payload.summaries : [],
+            });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOverviewFleetHealth({ updatedAt: Date.now(), units: [], days: [], grid: [], summaries: [] });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setOverviewFleetHealthBusy(false);
+        });
+    };
+    loadFleetHealthHeatmap();
+    const timer = window.setInterval(loadFleetHealthHeatmap, 300000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activePanel, overviewAccountId, range.startDate, range.endDate]);
 
   useEffect(() => {
     if (!prioritizedFleet.length) return;
@@ -3410,10 +3446,10 @@ export default function App() {
 
         <section className="overview-widget overview-widget-full">
           <div className="overview-widget-head">
-            <div><h3>Fleet Health Heatmap</h3><p>Placeholder for unit health by status, account, and freshness.</p></div>
-            <Chip>5min</Chip>
+            <div><h3>Fleet Health Heatmap</h3><p>Unit severity by day from Solofleet + TMS incident signals.</p></div>
+            <Chip color={overviewFleetHealthBusy ? 'warning' : 'default'}>{overviewFleetHealthBusy ? 'Loading...' : `5min | ${overviewFleetHealth.days.length} day(s)`}</Chip>
           </div>
-          <OverviewBarList items={overviewFleetHealth.rows} valueKey="value" valueFormatter={(value) => `${value} unit`} metaFormatter={(item) => `Status: ${item.label}`} emptyMessage="Fleet health belum tersedia." />
+          <OverviewFleetHealthHeatmap data={overviewFleetHealth} busy={overviewFleetHealthBusy} />
         </section>
 
         {hasOverviewTms ? <section className="overview-widget overview-widget-half">
@@ -5117,6 +5153,79 @@ const OverviewAstroTrendChart = React.memo(function OverviewAstroTrendChart({ po
 
 const OverviewTempTrendChart = React.memo(function OverviewTempTrendChart({ points, busy }) {
   return <OverviewMetricLineChart points={points} busy={busy} emptyMessage="Belum ada temp error di range ini." valueKey="incidents" maxFloor={1} tone="danger" tooltipTitle={(point) => formatChartDayTitle(point.day)} tooltipLines={(point) => [`Incidents: ${point.incidents || 0}`, `Affected units: ${point.affectedUnits || 0}`, `Total duration: ${formatMinutesText(point.totalMinutes || 0)}`]} legendLabel="Incidents" />;
+});
+
+const FLEET_HEALTH_SEVERITY = {
+  0: { label: 'Normal', color: '#10B981', summary: 'No incident recorded.', code: 'N' },
+  1: { label: 'Warning', color: '#F59E0B', summary: 'Warning signal recorded.', code: 'W' },
+  2: { label: 'Critical', color: '#EF4444', summary: 'Critical incident recorded.', code: 'C' },
+};
+
+const OverviewFleetHealthHeatmap = React.memo(function OverviewFleetHealthHeatmap({ data, busy }) {
+  const [hoveredCell, setHoveredCell] = useState(null);
+  if (busy) return <div className="overview-chart-empty overview-shimmer">Loading heatmap...</div>;
+  const units = Array.isArray(data?.units) ? data.units : [];
+  const days = Array.isArray(data?.days) ? data.days.slice(-14) : [];
+  const grid = Array.isArray(data?.grid) ? data.grid : [];
+  if (!units.length || !days.length || !grid.length) {
+    return <div className="overview-chart-empty">Fleet health belum tersedia.</div>;
+  }
+
+  const allDays = Array.isArray(data?.days) ? data.days : [];
+  const dayOffset = Math.max(0, allDays.length - days.length);
+  const summaries = Array.isArray(data?.summaries) ? data.summaries : [];
+  const width = 760;
+  const labelWidth = 138;
+  const topPad = 26;
+  const bottomPad = 8;
+  const cellGap = 4;
+  const rowHeight = 24;
+  const cellSize = Math.max(16, Math.min(34, (width - labelWidth - ((days.length - 1) * cellGap)) / Math.max(1, days.length)));
+  const height = topPad + bottomPad + (units.length * rowHeight);
+  const hoveredUnit = hoveredCell ? units[hoveredCell.unitIndex] : null;
+  const hoveredDay = hoveredCell ? days[hoveredCell.dayIndex] : null;
+  const hoveredSeverity = hoveredCell ? Number(grid[hoveredCell.unitIndex]?.[hoveredCell.dayIndex + dayOffset] || 0) : 0;
+  const hoveredMeta = FLEET_HEALTH_SEVERITY[hoveredSeverity] || FLEET_HEALTH_SEVERITY[0];
+  const hoveredSummary = hoveredCell
+    ? (summaries[hoveredCell.unitIndex]?.[hoveredCell.dayIndex + dayOffset]
+      || hoveredCell.summary
+      || hoveredMeta.summary)
+    : '';
+  const tooltipLeft = hoveredCell ? `${Math.min(88, Math.max(18, ((labelWidth + (hoveredCell.dayIndex * (cellSize + cellGap)) + (cellSize / 2)) / width) * 100))}%` : '50%';
+  const tooltipTop = hoveredCell ? `${Math.min(72, Math.max(6, ((topPad + (hoveredCell.unitIndex * rowHeight) - 8) / height) * 100))}%` : '10%';
+
+  return <div className="overview-heatmap-shell">
+    <div className="overview-heatmap-stage">
+      {hoveredCell ? <div className="overview-chart-tooltip overview-heatmap-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}><strong>{hoveredUnit?.unitLabel || hoveredUnit?.label || hoveredUnit?.unitId || '-'}</strong><span>{formatChartDayTitle(hoveredDay)}</span><span>Severity: {hoveredMeta.label}</span><span>{hoveredSummary}</span></div> : null}
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Fleet health severity heatmap">
+        {days.map((day, dayIndex) => <text key={`day-${day}`} x={labelWidth + (dayIndex * (cellSize + cellGap)) + (cellSize / 2)} y="15" textAnchor="middle" className="overview-heatmap-day">{formatChartDayLabel(day)}</text>)}
+        {units.map((unit, unitIndex) => {
+          const unitLabel = unit.unitLabel || unit.label || unit.unitId || `Unit ${unitIndex + 1}`;
+          const y = topPad + (unitIndex * rowHeight);
+          return <g key={`${unit.accountId || 'primary'}::${unit.unitId || unitLabel}`}>
+            <text x={labelWidth - 10} y={y + 14} textAnchor="end" className="overview-heatmap-unit">{unitLabel}</text>
+            {days.map((day, dayIndex) => {
+              const sourceDayIndex = dayIndex + dayOffset;
+              const severity = Math.max(0, Math.min(2, Number(grid[unitIndex]?.[sourceDayIndex] || 0)));
+              const meta = FLEET_HEALTH_SEVERITY[severity] || FLEET_HEALTH_SEVERITY[0];
+              const summary = summaries[unitIndex]?.[sourceDayIndex] || meta.summary;
+              const isHovered = hoveredCell?.unitIndex === unitIndex && hoveredCell?.dayIndex === dayIndex;
+              const cellX = labelWidth + (dayIndex * (cellSize + cellGap));
+              return (
+                <g key={`${unitLabel}-${day}`} onMouseEnter={() => setHoveredCell({ unitIndex, dayIndex, summary })} onMouseLeave={() => setHoveredCell((current) => current?.unitIndex === unitIndex && current?.dayIndex === dayIndex ? null : current)}>
+                  <rect x={cellX} y={y} width={cellSize} height="18" rx="4" fill={meta.color} className={`overview-heatmap-cell ${isHovered ? 'is-hovered' : ''}`} opacity={severity === 0 ? 0.72 : 0.92} />
+                  <text x={cellX + (cellSize / 2)} y={y + 13} fill="#FFFFFF" fontSize="10px" textAnchor="middle" style={{ pointerEvents: 'none' }}>{meta.code}</text>
+                </g>
+              );
+            })}
+          </g>;
+        })}
+      </svg>
+    </div>
+    <div className="overview-heatmap-legend">
+      {[0, 1, 2].map((severity) => <span key={severity}><i style={{ backgroundColor: FLEET_HEALTH_SEVERITY[severity].color }} />{FLEET_HEALTH_SEVERITY[severity].label}</span>)}
+    </div>
+  </div>;
 });
 
 const OverviewBarList = React.memo(function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueFormatter, metaFormatter, tone = 'default', tooltipTitle, tooltipLines }) {
