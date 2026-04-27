@@ -5551,17 +5551,27 @@ textarea:focus {
 }
 
 .trip-monitor-detail-summary {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
 }
 
 .trip-monitor-detail-summary .mini-metric {
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
 }
 
 .trip-monitor-detail-summary .mini-metric strong {
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.trip-monitor-detail-summary .mini-metric > span {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.trip-monitor-detail-summary .mini-metric .subtle-line {
+  font-size: 11px;
 }
 
 .trip-monitor-driver-metric strong,
@@ -10633,9 +10643,9 @@ body.fleet-workspace-resizing * {
 .trip-monitor-kanban {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
   align-items: stretch;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .trip-monitor-kanban-column {
@@ -10654,7 +10664,7 @@ body.fleet-workspace-resizing * {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-raised);
   position: sticky;
@@ -10705,10 +10715,10 @@ body.fleet-workspace-resizing * {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 360px);
+  max-height: calc(100vh - 260px);
   min-height: 240px;
 }
 
@@ -10736,12 +10746,12 @@ body.fleet-workspace-resizing * {
   position: relative;
   flex: 0 0 auto;
   min-height: auto;
-  padding: 10px 12px 10px 14px;
+  padding: 7px 10px 7px 12px;
   border: 1px solid var(--border);
   background: var(--surface) !important;
-  border-radius: 10px;
+  border-radius: 8px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
@@ -10757,6 +10767,24 @@ body.fleet-workspace-resizing * {
 .trip-monitor-kanban .trip-monitor-card-titleblock,
 .trip-monitor-kanban .trip-monitor-card-status {
   min-width: 0;
+}
+
+.trip-monitor-kanban .trip-monitor-card-titleblock strong {
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+
+.trip-monitor-kanban .trip-monitor-card-status strong {
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.trip-monitor-kanban .trip-monitor-card-subline,
+.trip-monitor-kanban .trip-monitor-card-location,
+.trip-monitor-kanban .trip-monitor-card-temp,
+.trip-monitor-kanban .trip-monitor-card-note {
+  font-size: 10.5px;
+  line-height: 1.3;
 }
 
 .trip-monitor-kanban .trip-monitor-card::before {
@@ -11222,8 +11250,8 @@ body.fleet-workspace-resizing * {
 }
 
 .tm-drawer-panel {
-  width: min(720px, 92vw);
-  max-width: 720px;
+  width: min(840px, 94vw);
+  max-width: 840px;
   height: 100vh;
   border-radius: 0;
   border-left: 1px solid var(--border-color);
@@ -11336,6 +11364,73 @@ body.fleet-workspace-resizing * {
 
 @media (max-width: 720px) {
   .tm-drawer-panel { width: 100vw; max-width: 100vw; }
+}
+
+/* Drawer rebalance: shrink low-value sections, gede-in high-value */
+.tm-drawer-panel:not(.is-fullscreen) .trip-monitor-detail-history {
+  display: none;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-card .panel-card-header > div > p,
+.tm-drawer-panel .trip-monitor-progress-panel .panel-card-header > div > p,
+.tm-drawer-panel .trip-monitor-detail-panel .panel-card-header > div > p,
+.tm-drawer-panel .trip-monitor-detail-graphic-panel .panel-card-header > div > p,
+.tm-drawer-panel .trip-monitor-detail-history .panel-card-header > div > p {
+  display: none;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-card .panel-card-header,
+.tm-drawer-panel .trip-monitor-progress-panel .panel-card-header,
+.tm-drawer-panel .trip-monitor-detail-panel .panel-card-header,
+.tm-drawer-panel .trip-monitor-detail-graphic-panel .panel-card-header,
+.tm-drawer-panel .trip-monitor-detail-history .panel-card-header {
+  padding-top: 12px;
+  padding-bottom: 8px;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-card .panel-card-header h3,
+.tm-drawer-panel .trip-monitor-progress-panel .panel-card-header h3,
+.tm-drawer-panel .trip-monitor-detail-panel .panel-card-header h3,
+.tm-drawer-panel .trip-monitor-detail-graphic-panel .panel-card-header h3,
+.tm-drawer-panel .trip-monitor-detail-history .panel-card-header h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-strip {
+  gap: 6px;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-strip .mini-metric {
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-strip .mini-metric strong {
+  font-size: 14px;
+}
+
+.tm-drawer-panel .trip-monitor-incident-history-strip .mini-metric > span {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* Drawer high-value sections: lebih lega */
+.tm-drawer-panel .trip-monitor-detail-panel {
+  min-height: 320px;
+}
+
+.tm-drawer-panel .trip-monitor-detail-graphic-panel {
+  min-height: 360px;
+}
+
+.tm-drawer-panel:not(.is-fullscreen) .trip-monitor-detail-panels {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.tm-drawer-panel .settings-stack {
+  gap: 12px;
 }
 
 .chart-svg .chart-axis-tick,
