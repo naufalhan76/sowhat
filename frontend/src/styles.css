@@ -10517,3 +10517,241 @@ html, body {
   color: var(--text-main);
 }
 
+
+/* =====================================================================
+   Notion-grade polish layer — final touch
+   ===================================================================== */
+
+/* Page title (h2) — Notion treats page heading large + bold */
+.bridge-shell main.workspace > h2:first-of-type,
+.bridge-shell main.workspace > .panel-card:first-of-type > .panel-card-header h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+}
+
+/* Panel card body padding — more breathable */
+.bridge-shell .panel-card,
+.bridge-shell .sf-card {
+  padding: 0 !important;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  overflow: visible;
+  margin-bottom: 16px;
+  transition: border-color 120ms ease;
+}
+.bridge-shell .panel-card:hover,
+.bridge-shell .sf-card:hover {
+  border-color: var(--border-strong);
+}
+
+.bridge-shell .panel-card-header,
+.bridge-shell .sf-card-header {
+  padding: 16px 20px 0 20px;
+  background: transparent;
+  border-bottom: none;
+  position: static;
+}
+.bridge-shell .panel-card-header::before,
+.bridge-shell .sf-card-header::before {
+  display: none !important;
+}
+
+.bridge-shell .panel-card-body,
+.bridge-shell .sf-card-content {
+  padding: 14px 20px 18px 20px;
+}
+
+.bridge-shell .panel-card-header h2,
+.bridge-shell .panel-card-header h3,
+.bridge-shell .sf-card-header h2,
+.bridge-shell .sf-card-header h3 {
+  font-family: 'Inter', sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.bridge-shell .panel-card-header > p,
+.bridge-shell .sf-card-header > p {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+  font-weight: 400;
+}
+
+/* Action / sf-btn focus ring */
+.bridge-shell .action:focus-visible,
+.bridge-shell .sf-btn:focus-visible,
+.bridge-shell button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Input + select focus ring */
+.bridge-shell input:focus-visible,
+.bridge-shell select:focus-visible,
+.bridge-shell textarea:focus-visible {
+  outline: 0;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+/* Icon-button hover (refresh, polling, etc.) */
+.bridge-shell .command-bar-icon-btn,
+.bridge-shell .command-bar-actions > button {
+  border-radius: 5px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.bridge-shell .command-bar-icon-btn:hover,
+.bridge-shell .command-bar-actions > button:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+
+/* Search field — softer, feels like Notion */
+.bridge-shell .command-bar-search {
+  background: var(--surface-hover);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.bridge-shell .command-bar-search:hover {
+  background: var(--surface-raised);
+}
+.bridge-shell .command-bar-search:focus-within {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.12);
+}
+.bridge-shell .command-bar-search input {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 6px 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+}
+
+/* Date range — subtle, matches search */
+.bridge-shell .command-bar-range {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  transition: border-color 120ms ease;
+}
+.bridge-shell .command-bar-range:hover {
+  border-color: var(--border-strong);
+}
+.bridge-shell .command-bar-range input[type='date'] {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  color: var(--text-main) !important;
+  padding: 0 !important;
+}
+
+/* Empty states — Notion-like soft */
+.bridge-shell .empty-state,
+.bridge-shell .panel-empty,
+.bridge-shell .table-empty,
+.bridge-shell [class*='empty-state'] {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 400;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* Generic "Belum ada ..." text (used as inline empty state in many panels) */
+.bridge-shell .panel-empty-text {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Sidebar active state — subtle gray instead of emerald glow */
+.bridge-shell .navrail-item-active {
+  background: var(--surface-hover) !important;
+  color: var(--text-dark) !important;
+}
+.bridge-shell .navrail-item-active .navrail-item-glyph,
+.bridge-shell .navrail-item-active .navrail-item-label {
+  color: var(--text-dark) !important;
+  font-weight: 500 !important;
+}
+
+/* Sidebar collapse btn at top */
+.bridge-shell .navrail-collapse-btn {
+  border-radius: 4px;
+  padding: 4px;
+  color: var(--text-muted);
+}
+.bridge-shell .navrail-collapse-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+
+/* Filter chip-bar (e.g. "All Fleet / Temp error / Setpoint mismatch") */
+.bridge-shell .filter-chip,
+.bridge-shell .panel-tab,
+.bridge-shell button[class*='-tab'] {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+/* Severity tags inside trip cards — softer */
+.bridge-shell .severity-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Generic "Belum ada ..." centered messages */
+.bridge-shell main.workspace .panel-card .panel-card-body > [data-empty='true'],
+.bridge-shell main.workspace .sf-card .sf-card-content > [data-empty='true'] {
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Active checkbox label — keep flex row instead of column */
+.bridge-shell label > input[type='checkbox'] {
+  margin-right: 8px;
+  margin-bottom: 0 !important;
+}
+
+/* Brand mark in sidebar — Notion uses a colored small icon, not a giant logo */
+.bridge-shell .navrail-brand-button {
+  padding: 6px 8px;
+  border-radius: 5px;
+  transition: background 120ms ease;
+}
+.bridge-shell .navrail-brand-button:hover {
+  background: var(--surface-hover);
+}
+
