@@ -5879,6 +5879,17 @@ function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
 }
 
 function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
+  useEffect(() => {
+    if (!detail) return undefined;
+    const handleKey = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [detail, onClose]);
   if (!detail) return null;
   const fleetRow = detail?.metadata?.fleetRow || null;
   const jobOrders = detail?.metadata?.jobOrders || [];
@@ -5912,10 +5923,15 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   return <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
     <Card className="tm-drawer-panel trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header tm-drawer-header">
-        <div>
-          <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
-          <h2>{displayUnitLabel}</h2>
-          <p>{detail.customerName || '-'} | {routeSummary}</p>
+        <div className="tm-drawer-header-inner">
+          <div>
+            <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
+            <h2>{displayUnitLabel}</h2>
+            <p>{detail.customerName || '-'} | {routeSummary}</p>
+          </div>
+          <button type="button" className="tm-drawer-close" onClick={onClose} aria-label="Close drawer" title="Close (Esc)">
+            <X size={18} />
+          </button>
         </div>
       </CardHeader>
       <CardContent>
@@ -5927,7 +5943,6 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
                 <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
                 <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
               </> : null}
-              <button type="button" className="trip-monitor-detail-close-x" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
             </div>
           </div>
           <div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary">

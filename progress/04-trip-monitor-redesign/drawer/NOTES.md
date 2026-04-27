@@ -8,7 +8,10 @@ Kanban board tetap visible di kiri (di-dim oleh backdrop blur), jadi user gak ke
 - **Backdrop**: fixed inset 0, soft dim + 2px blur, fade-in 200ms.
 - **Panel**: flex column, sticky header (Trip Monitor Detail eyebrow + nopol + customer + route),
   body scrollable, slide-in 260ms `cubic-bezier(0.22, 0.61, 0.36, 1)`.
-- **Close**: backdrop click, button X di header. (Esc handler menyusul.)
+- **Close**:
+  - `Esc` keyboard (handler di `useEffect` listening `keydown`)
+  - Tombol X di pojok kanan-atas sticky header (`.tm-drawer-close`, 32×32, focus ring emerald)
+  - Klik backdrop di luar panel
 - **Mobile**: ≤720px → 100vw full-screen.
 
 ## Animations (CSS-only, lightweight)
@@ -19,9 +22,10 @@ Kanban board tetap visible di kiri (di-dim oleh backdrop blur), jadi user gak ke
 ## Screenshots
 - `01-drawer-critical-dark.png` — drawer open dari card B 9500 CXU (Critical column)
 - `02-drawer-scrolled-stops-dark.png` — scrolled state, status pengiriman timeline + map + graphic visible
+- `03-drawer-warning-light.png` — drawer di light mode, sticky header + close button visible
+- `04-drawer-warning-dark-with-close.png` — dark mode dengan sticky close X di header
 
 ## Belum
 - Open-as-page escape (button → `/trips/:rowId` full canvas)
-- Esc keyboard handler
 - Hover sync stops timeline ↔ map markers
 - Strip old `.fleet-detail-modal-*` CSS

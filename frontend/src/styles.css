@@ -11223,8 +11223,46 @@ body.fleet-workspace-resizing * {
   position: sticky;
   top: 0;
   background: var(--surface-color);
-  z-index: 1;
+  z-index: 2;
   border-bottom: 1px solid var(--border-color);
+}
+
+.tm-drawer-header-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.tm-drawer-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, var(--muted-foreground, #6b7280));
+  cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out, border-color 140ms ease-out, transform 140ms ease-out;
+}
+
+.tm-drawer-close:hover {
+  background: var(--hover-bg, rgba(127, 127, 127, 0.08));
+  color: var(--text-primary, inherit);
+  border-color: var(--border-strong, var(--border-color));
+}
+
+.tm-drawer-close:active {
+  transform: scale(0.96);
+}
+
+.tm-drawer-close:focus-visible {
+  outline: 2px solid var(--primary, #10B981);
+  outline-offset: 2px;
 }
 
 @keyframes tmDrawerBackdropFade {
