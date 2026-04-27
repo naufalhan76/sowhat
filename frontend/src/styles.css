@@ -1751,26 +1751,6 @@ textarea:focus {
   text-decoration: none;
 }
 
-.fleet-detail-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay-scrim-strong);
-  backdrop-filter: blur(8px);
-  z-index: 140;
-}
-
-.fleet-detail-modal-card {
-  width: min(1180px, 100%);
-  max-height: min(88vh, 980px);
-  overflow: auto;
-  border: 1px solid var(--border);
-  box-shadow: var(--modal-shadow);
-}
-
 .fleet-expand-shell-modal {
   padding: 0;
 }
@@ -1879,10 +1859,6 @@ textarea:focus {
 }
 
 @media (max-width: 1200px) {
-  .fleet-detail-modal-card {
-    width: min(100%, 1000px);
-  }
-
   .chart-meta {
     flex-direction: column;
   }
@@ -6631,7 +6607,6 @@ textarea:focus {
 
 /* ------------- Modals / overlays ------------- */
 .auth-modal-backdrop,
-.fleet-detail-modal-backdrop,
 .loading-overlay {
   background: var(--backdrop-scrim);
   backdrop-filter: blur(8px);
@@ -6639,7 +6614,6 @@ textarea:focus {
 }
 
 .auth-modal-card,
-.fleet-detail-modal-card,
 .diagnostic-modal-card,
 .loading-overlay-card {
   background: var(--surface);
