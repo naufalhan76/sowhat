@@ -5945,11 +5945,9 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const mapStops = headlineJob?.stops || [];
   const [hoveredStopKey, setHoveredStopKey] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [expandedNoteId, setExpandedNoteId] = useState(null);
-  useEffect(() => { if (!detail) { setIsFullscreen(false); setExpandedNoteId(null); } }, [detail]);
+  useEffect(() => { if (!detail) { setIsFullscreen(false); } }, [detail]);
   const rawSeverity = String(detail?.severity || '').toLowerCase();
   const severityKey = rawSeverity === 'critical' ? 'critical' : rawSeverity === 'warning' ? 'warning' : 'normal';
-  const toggleNote = (id) => setExpandedNoteId((current) => current === id ? null : id);
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const shippingStatus = detail?.metadata?.shippingStatus || {
     label: detail?.shippingStatusLabel || '-',
@@ -5968,14 +5966,36 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const incidentHistoryResolvedCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() === 'resolved').length;
   const incidentHistoryTotalMinutes = incidentHistory.reduce((total, item) => total + Number(item?.durationMinutes || 0), 0);
 
+  const incidentsByLevel = {
+    critical: incidentHistory.filter((i) => String(i?.severity || '').toLowerCase() === 'critical'),
+    warning: incidentHistory.filter((i) => String(i?.severity || '').toLowerCase() === 'warning'),
+    normal: incidentHistory.filter((i) => {
+      const s = String(i?.severity || '').toLowerCase();
+      return s !== 'critical' && s !== 'warning';
+    }),
+  };
+  const totalIncidents = incidentHistory.length;
+  const formatAlertTime = (value) => {
+    if (!value) return '--:--';
+    try {
+      const d = new Date(value);
+      return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':');
+    } catch { return '--:--'; }
+  };
+
   return <div className={`tm-drawer-backdrop ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-    <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-stickynotes severity-${severityKey} ${isFullscreen ? 'is-fullscreen' : ''} ${expandedNoteId ? 'has-expanded-note' : ''}`} onClick={(event) => event.stopPropagation()}>
+    <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey} ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header tm-drawer-header">
         <div className="tm-drawer-header-inner">
-          <div>
-            <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
-            <h2>{displayUnitLabel}</h2>
-            <p>{detail.customerName || '-'} | {routeSummary}</p>
+          <div className="tm-drawer-title-block">
+            <div className="tm-drawer-title-row">
+              <h2>{displayUnitLabel}</h2>
+              <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail.severity)}</span>
+            </div>
+            <div className="tm-drawer-meta-row">
+              <span className="tm-brand-chip">{detail.customerName || 'No customer'}</span>
+              {headlineJob?.name ? <span className="tm-jo-chip">{headlineJob.name}</span> : null}
+            </div>
           </div>
           <div className="tm-drawer-header-actions">
             <button
@@ -5994,146 +6014,191 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
         </div>
       </CardHeader>
       <CardContent>
-        {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-drawer-stickynotes-body">
-          <div className="tm-drawer-map-section">
-            {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+        {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-stack">
+
+          <div className="tm-stack-section tm-driver-section">
+            <div className="tm-driver-row">
+              <div className="tm-driver-info">
+                <span className="tm-stack-label">Drivers</span>
+                <strong className="tm-driver-names">
+                  {driver1Name}{driver2Name && driver2Name !== '-' ? <> <span className="tm-divider-dot">·</span> {driver2Name}</> : null}
+                </strong>
+              </div>
+              <span className={`tm-status-pill status-${String(shippingStatus?.label || '').toLowerCase().replace(/\s+/g, '-')}`}>
+                {shippingStatus?.label || 'Unknown'}
+              </span>
+            </div>
+            <p className="tm-route-line">{routeSummary}</p>
           </div>
-          <div className="tm-sticky-wall">
-            <article className={`tm-note severity-${severityKey} note-severity`} style={{ '--rotation': '-0.4deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />Severity</header>
-              <div className="tm-note-body">
-                <strong className="tm-note-strong">{tmsSeverityLabel(detail.severity)}</strong>
-                {incidentCodes.length ? <div className="tm-note-incident-icons"><TripMonitorIncidentIcons codes={incidentCodes} size={12} /></div> : null}
-              </div>
-            </article>
 
-            <article className={`tm-note severity-${severityKey} note-drivers`} style={{ '--rotation': '0.5deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />JO Drivers</header>
-              <div className="tm-note-body">
-                <div className="tm-note-line"><span className="tm-note-key">D1</span> {driver1Name}</div>
-                <div className="tm-note-line subtle"><span className="tm-note-key">D2</span> {driver2Name}</div>
-              </div>
-            </article>
-
-            <article className={`tm-note severity-${severityKey} note-schedule`} style={{ '--rotation': '-0.3deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />Schedule</header>
-              <div className="tm-note-body">
-                <div className="tm-note-line"><span className="tm-note-key">ETA Load</span> {formatTripMonitorStatusTime(shippingStatus?.loadEta)}</div>
-                <div className="tm-note-line subtle"><span className="tm-note-key">ETD Unload</span> {formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</div>
-              </div>
-            </article>
-
-            <article className={`tm-note severity-${severityKey} note-status`} style={{ '--rotation': '0.4deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />Status</header>
-              <div className="tm-note-body">
-                <strong className="tm-note-strong">{shippingStatus?.label || '-'}</strong>
-                <div className="tm-note-line subtle">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</div>
-              </div>
-            </article>
-
-            <article className={`tm-note severity-${severityKey} note-temprange`} style={{ '--rotation': '-0.5deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />TMS Temp Range</header>
-              <div className="tm-note-body">
-                <strong className="tm-note-strong">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}\u00B0 / ${fmtNum(normalizedJobTempRange.max)}\u00B0` : '-'}</strong>
-                <div className="tm-note-line subtle">{incidents.length ? `${incidents.length} active incident${incidents.length === 1 ? '' : 's'}` : 'No active incidents'}</div>
-              </div>
-            </article>
-
-            <article className={`tm-note severity-${severityKey} note-stops tm-note-wide`} style={{ '--rotation': '0.2deg' }}>
-              <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />Stops Timeline</header>
-              <div className="tm-note-body">
-                <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
-              </div>
-            </article>
-
-            <article
-              className={`tm-note severity-${severityKey} note-graphic tm-note-expandable ${expandedNoteId === 'graphic' ? 'is-expanded' : ''}`}
-              style={{ '--rotation': '-0.3deg' }}
-              onClick={() => toggleNote('graphic')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleNote('graphic'); } }}
-              aria-expanded={expandedNoteId === 'graphic'}
-            >
-              <header className="tm-note-header">
-                <span className="tm-note-pin" aria-hidden="true" />Temperature Trend
-                <span className="tm-note-cue">{expandedNoteId === 'graphic' ? 'Tap to collapse' : 'Tap to expand'}</span>
-              </header>
-              {expandedNoteId === 'graphic' ? (
-                <div className="tm-note-expanded" onClick={(e) => e.stopPropagation()}>
-                  {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={300} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}
-                </div>
-              ) : (
-                <div className="tm-note-body tm-note-mini">
-                  <div className="tm-graphic-mini">
-                    <span className="tm-graphic-mini-label">{historyLabel}</span>
-                    <span className="tm-graphic-mini-range">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}\u00B0 - ${fmtNum(normalizedJobTempRange.max)}\u00B0` : 'No JO'}</span>
-                  </div>
-                </div>
-              )}
-            </article>
-
-            <article
-              className={`tm-note severity-${severityKey} note-history tm-note-expandable ${expandedNoteId === 'history' ? 'is-expanded' : ''}`}
-              style={{ '--rotation': '0.3deg' }}
-              onClick={() => toggleNote('history')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleNote('history'); } }}
-              aria-expanded={expandedNoteId === 'history'}
-            >
-              <header className="tm-note-header">
-                <span className="tm-note-pin" aria-hidden="true" />Incident History
-                <span className="tm-note-cue">{expandedNoteId === 'history' ? 'Tap to collapse' : 'Tap to expand'}</span>
-              </header>
-              {expandedNoteId === 'history' ? (
-                <div className="tm-note-expanded" onClick={(e) => e.stopPropagation()}>
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
-                    columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
-                    emptyMessage="Belum ada incident history untuk JO ini."
-                    rows={incidentHistory.map((item) => {
-                      const description = buildTripMonitorIncidentHistoryDescription(item);
-                      const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
-                      return [
-                        <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
-                        <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
-                        <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
-                        <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
-                        formatMinutesText(item.durationMinutes || 0),
-                        fmtDate(item.openedAt),
-                        String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
-                        <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
-                        <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
-                      ];
-                    })}
-                  />
-                </div>
-              ) : (
-                <div className="tm-note-body tm-note-mini">
-                  <div className="tm-history-summary">
-                    <div className="tm-history-summary-row"><span>Active</span><strong>{incidentHistoryActiveCount}</strong></div>
-                    <div className="tm-history-summary-row"><span>Resolved</span><strong>{incidentHistoryResolvedCount}</strong></div>
-                    <div className="tm-history-summary-row"><span>Total anomaly</span><strong>{formatMinutesText(incidentHistoryTotalMinutes)}</strong></div>
-                  </div>
-                </div>
-              )}
-            </article>
-
-            {isFullscreen ? (
-              <article className={`tm-note severity-${severityKey} note-historical tm-note-wide`} style={{ '--rotation': '-0.2deg' }}>
-                <header className="tm-note-header"><span className="tm-note-pin" aria-hidden="true" />Historical Records</header>
-                <div className="tm-note-body">
-                  {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
-                </div>
-              </article>
-            ) : null}
+          <div className="tm-stack-section tm-map-section">
+            <div className="tm-map-frame">
+              {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+            </div>
+            <div className="tm-action-row">
+              <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)}>
+                <Route size={14} /> Track Route
+              </button>
+              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)}>
+                <Clock3 size={14} /> Trip History
+              </button>
+              <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)}>
+                <Truck size={14} /> Open Fleet
+              </button>
+            </div>
           </div>
+
+          <details className="tm-stack-section tm-section-collapsible" open>
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Notification</span>
+              <span className="tm-section-meta">
+                {totalIncidents > 0 ? <span className="tm-section-count">{totalIncidents}</span> : null}
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              {totalIncidents === 0 ? (
+                <div className="tm-empty-soft">No incidents on this trip.</div>
+              ) : (
+                <>
+                  {['critical', 'warning', 'normal'].map((lvl) => {
+                    const list = incidentsByLevel[lvl];
+                    if (!list.length) return null;
+                    const labelMap = { critical: 'Critical', warning: 'Warning', normal: 'Resolved / Normal' };
+                    return (
+                      <details key={lvl} className={`tm-incident-group severity-${lvl}`} open={lvl === 'critical' || lvl === 'warning'}>
+                        <summary className="tm-incident-group-summary">
+                          <span className={`tm-severity-dot severity-${lvl}`} />
+                          <span className="tm-incident-group-label">{labelMap[lvl]}</span>
+                          <span className="tm-incident-group-count">({list.length})</span>
+                          <ChevronDown size={12} className="tm-section-chevron" />
+                        </summary>
+                        <div className="tm-incident-group-body">
+                          {list.slice(0, 6).map((item, idx) => (
+                            <div key={item.id || idx} className={`tm-alert-row severity-${lvl}`}>
+                              <span className="tm-alert-time">{formatAlertTime(item.openedAt)}</span>
+                              <span className="tm-alert-content">
+                                <strong className="tm-alert-label">{item.label || tmsIncidentLabel(item.incidentCode)}</strong>
+                                <span className="tm-alert-meta">
+                                  {String(item.status || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active'}
+                                  {item.durationMinutes ? ` · ${formatMinutesText(item.durationMinutes)}` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                          {list.length > 6 ? <div className="tm-section-more">+ {list.length - 6} more in fullscreen</div> : null}
+                        </div>
+                      </details>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </details>
+
+          <details className="tm-stack-section tm-section-collapsible" open>
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Stops Timeline</span>
+              <span className="tm-section-meta">
+                {mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
+            </div>
+          </details>
+
+          <div className="tm-stack-section">
+            <div className="tm-section-summary tm-section-summary-static">
+              <span className="tm-section-title">Schedule</span>
+            </div>
+            <div className="tm-section-content tm-info-grid">
+              <div className="tm-info-cell">
+                <span className="tm-info-key">ETA Load</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">ETD Unload</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">Last update</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">TMS Range</span>
+                <strong className="tm-info-value">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}° / ${fmtNum(normalizedJobTempRange.max)}°` : '-'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <details className="tm-stack-section tm-section-collapsible">
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Temperature Trend</span>
+              <span className="tm-section-meta">
+                <span className="tm-section-count tm-range-chip">{historyLabel}</span>
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={240} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}
+            </div>
+          </details>
+
+          {isFullscreen ? (
+            <details className="tm-stack-section tm-section-collapsible" open>
+              <summary className="tm-section-summary">
+                <span className="tm-section-title">Historical Records</span>
+                <span className="tm-section-meta">
+                  <ChevronDown size={14} className="tm-section-chevron" />
+                </span>
+              </summary>
+              <div className="tm-section-content">
+                {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
+              </div>
+            </details>
+          ) : null}
+
+          {isFullscreen ? (
+            <details className="tm-stack-section tm-section-collapsible" open>
+              <summary className="tm-section-summary">
+                <span className="tm-section-title">Incident History (full)</span>
+                <span className="tm-section-meta">
+                  <span className="tm-section-count">{incidentHistory.length}</span>
+                  <ChevronDown size={14} className="tm-section-chevron" />
+                </span>
+              </summary>
+              <div className="tm-section-content">
+                <DataTable
+                  pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
+                  columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
+                  emptyMessage="Belum ada incident history untuk JO ini."
+                  rows={incidentHistory.map((item) => {
+                    const description = buildTripMonitorIncidentHistoryDescription(item);
+                    const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
+                    return [
+                      <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
+                      <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
+                      <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
+                      <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
+                      formatMinutesText(item.durationMinutes || 0),
+                      fmtDate(item.openedAt),
+                      String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
+                      <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
+                      <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
+                    ];
+                  })}
+                />
+              </div>
+            </details>
+          ) : null}
         </div>}
       </CardContent>
     </Card>
   </div>;
 }
+
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
