@@ -79,6 +79,44 @@ User feedback: "warnanya jangan oren ungu gitu, jelek, ga satu vibe. terus label
 | `07-chart-modern-dark.png` | Chart strip dark mode setelah resize (ratio ~0.55), B 9627 SXW. Emerald line, axis labels jelas, °C unit visible. |
 | `08-chart-modern-light.png` | Chart strip light mode, sama unit. Emerald deeper green, slate lebih dark (#64748B) biar contrast cukup. |
 
+## Update 3 — Shadcn-style chart + 2-color palette + TMS threshold sync
+
+User feedback: "chart di page fleet gw mau mirip kaya chart shadcn dong bentuknya. terus kalo dia diubah ubah daterange nya akan ada animasinya. warnanya jangan ijo semua, misal ijo sama apa gitu biar ketauan temp 1 chart sama temp 2 chart mana. terus yang batas range suhu di page ini juga di sync sama tms kaya di trip monitor. kalo dia gaada JO ya gausah ada garis batas nya"
+
+**Shadcn aesthetic (smooth curves, soft gradient fill)**:
+- `buildPath()` rewritten: Catmull-Rom cubic Bezier interpolation, tension=0.18 → curva mulus seperti shadcn area chart.
+- Gradient fill di bawah line (linearGradient `0%→100%` opacity 0.22→0 untuk Temp1, 0.16→0 untuk Temp2).
+- Soft area fill bukan hard-edge, tetap minimal axis decoration.
+- Stroke linecap/linejoin "round" untuk soft endpoint.
+
+**2-color palette distinct (gak ijo semua)**:
+- Temp1: **emerald** (#10B981 dark / #059669 light) — primary cold-chain accent.
+- Temp2: **sky blue** (#3B82F6 dark / #2563EB light) — distinct, high-contrast tapi tetap cool tone.
+- Verified via screenshot `03-with-jo-2colors-light.png` + `04-with-jo-2colors-dark.png`: dua line clearly distinguishable di chart B 9759 SXW (Temp1 -16.5 emerald, Temp2 -21.9 biru langit).
+
+**Animation pada date range change**:
+- `.chart-path-anim` — stroke-dashoffset `1 → 0`, durasi 580ms, cubic-bezier(0.22, 0.61, 0.36, 1).
+- `.chart-area-anim` — opacity `0 → 1`, durasi 720ms, delay 80ms.
+- Lightweight: cuma `transform`/`opacity`/stroke-dashoffset, no JS layer.
+
+**TMS threshold band sync**:
+- `tripMonitorBoard` di-fetch saat panel `fleet` aktif (sebelumnya cuma `trip-monitor`). Fix di useEffect line 1208.
+- Match unit (label/alias/id) ke aktif TMS row → ambil `tempMin` / `tempMax` → render dashed guides + soft band fill.
+- **Conditional hiding**: kalau unit tidak punya active JO, threshold guide & band tidak di-render. Verified di `02-no-data-light.png` (B 9398 UXX, no JO, no threshold lines).
+- Verified di `01-with-jo-light.png` (B 9751 SXW, JO-29542) dan `03/04-with-jo-2colors` (B 9759 SXW, JO-29566) — legend menampilkan `TMS · JO-XXXXX max/min` dan band visible.
+
+**Threshold band rendering**:
+- Soft amber band antara min & max (`rgba(245, 158, 11, 0.07)` dark / `rgba(217, 119, 6, 0.06)` light).
+- Dashed lines `4 4` di tempMin & tempMax.
+- Color tokens: `--chart-threshold-low`, `--chart-threshold-high`, `--chart-threshold-band`.
+
+| File | State |
+|---|---|
+| `chart-shadcn/01-with-jo-light.png` | B 9751 SXW (JO-29542 -20/-18). Legend `TMS · JO-29542 max/min`, threshold band visible di -18/-20°C, smooth curve emerald (Temp1=Temp2=0). |
+| `chart-shadcn/02-no-data-light.png` | B 9398 UXX (idle, GPS late, no historical data, no active JO). "Belum ada historical temperature" empty state — no chart, no threshold. |
+| `chart-shadcn/03-with-jo-2colors-light.png` | B 9759 SXW (JO-29566). Light mode. Two distinct curves: emerald Temp1 -16.5, sky-blue Temp2 -21.9. Smooth catmull-rom path, soft gradient fill, threshold band overlapping Temp2 zone. |
+| `chart-shadcn/04-with-jo-2colors-dark.png` | Same unit, dark mode. Both colors retain contrast against dark canvas. Threshold band amber tints. |
+
 ## Sengaja DEFERRED (next PR scope)
 
 - Tab `Route` (full-bleed map) di header detail — saat ini cuma single Overview view.

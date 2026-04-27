@@ -1205,7 +1205,7 @@ export default function App() {
   }, [overviewAstroBusy, overviewAstroSummary]);
 
   useEffect(() => {
-    if (activePanel !== 'trip-monitor' || !webSessionUser) {
+    if (!webSessionUser || (activePanel !== 'trip-monitor' && activePanel !== 'fleet')) {
       return undefined;
     }
     loadTripMonitorBoard(true).catch(() => {});
@@ -3396,6 +3396,7 @@ export default function App() {
             onOpenTempErrors={(row) => openUnit(row.accountId || 'primary', row.id, 'temp-errors')}
             onSeeHistorical={(row) => openUnit(row.accountId || 'primary', row.id, 'historical')}
             rangeLabel={`${range.startDate} to ${range.endDate}`}
+            tripMonitorRows={tripMonitorRows}
           /> : null}
           {/* Fleet legacy table block — DEPRECATED, kept disabled for reference; remove after parity confirmed */}
           {false ? <>
@@ -4541,6 +4542,7 @@ function FleetWorkspace({
   onOpenTempErrors,
   onSeeHistorical,
   rangeLabel,
+  tripMonitorRows = [],
 }) {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -4679,6 +4681,7 @@ function FleetWorkspace({
             rangeLabel={rangeLabel}
             onOpenTempErrors={() => onOpenTempErrors(selectedRow)}
             onSeeHistorical={() => onSeeHistorical(selectedRow)}
+            tripMonitorRows={tripMonitorRows}
           />
         ) : (
           <div className="fleet-workspace-detail-empty">
@@ -4690,7 +4693,7 @@ function FleetWorkspace({
   );
 }
 
-function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical }) {
+function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, tripMonitorRows = [] }) {
   const [splitRatio, setSplitRatio] = useState(() => readFleetWorkspaceSplit());
   const splitContainerRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -4744,6 +4747,24 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
   const routeRecords = detail?.records || [];
   const tripMetrics = calculateTripMetrics(routeRecords);
   const detailKey = unitRowKey(row);
+
+  const tmsThreshold = useMemo(() => {
+    if (!Array.isArray(tripMonitorRows) || !tripMonitorRows.length) return null;
+    const candidates = [row?.label, row?.alias, row?.id]
+      .map((value) => (typeof value === 'string' ? value.trim().toUpperCase() : ''))
+      .filter(Boolean);
+    if (!candidates.length) return null;
+    const match = tripMonitorRows.find((tripRow) => {
+      const tripCandidates = [tripRow?.unitLabel, tripRow?.normalizedPlate, tripRow?.unitId]
+        .map((value) => (typeof value === 'string' ? value.trim().toUpperCase() : ''))
+        .filter(Boolean);
+      return tripCandidates.some((value) => candidates.includes(value));
+    });
+    if (!match) return null;
+    const range = normalizeTemperatureRange(match.tempMin, match.tempMax);
+    if (range.min === null && range.max === null) return null;
+    return { min: range.min, max: range.max, jobOrderId: match.jobOrderId || null };
+  }, [tripMonitorRows, row?.label, row?.alias, row?.id]);
 
   return (
     <div className="fleet-workspace-detail-shell">
@@ -4820,6 +4841,9 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             title="Temperature trend"
             description="Historical Solofleet dari unit terpilih. Hover line buat lihat suhu tepat di waktu itu."
             compact
+            thresholdMin={tmsThreshold?.min ?? null}
+            thresholdMax={tmsThreshold?.max ?? null}
+            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS · ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
           />
         </div>
       </div>
@@ -5325,19 +5349,37 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
     const maxLabel = isNegativeRange ? `${thresholdLabel} min` : `${thresholdLabel} max`;
 
     const thresholdGuides = [
-      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: 'var(--chart-threshold-low)', label: minLabel } : null,
-      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: 'var(--chart-threshold-high)', label: maxLabel } : null,
+      normalizedThresholdRange.min !== null && Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: 'var(--chart-threshold-low)', label: minLabel } : null,
+      normalizedThresholdRange.max !== null && Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: 'var(--chart-threshold-high)', label: maxLabel } : null,
     ].filter(Boolean);
   const timeStart = series[0].timestamp;
   const timeEnd = series[series.length - 1].timestamp;
   const xFor = (timestamp) => timeStart === timeEnd ? padding.left : padding.left + ((timestamp - timeStart) / (timeEnd - timeStart)) * (width - padding.left - padding.right);
   const yFor = (value) => value === null || value === undefined ? null : height - padding.bottom - ((value - minY) / (maxY - minY || 1)) * (height - padding.top - padding.bottom);
-  const buildPath = (field) => series.reduce((path, point) => {
-    const y = yFor(point[field]);
-    if (y === null) return path;
-    const x = xFor(point.timestamp);
-    return `${path}${path ? ' L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }, '');
+  const buildPath = (field) => {
+    const pts = [];
+    for (const point of series) {
+      const y = yFor(point[field]);
+      if (y === null) continue;
+      pts.push({ x: xFor(point.timestamp), y });
+    }
+    if (!pts.length) return '';
+    if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    const tension = 0.18;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) * tension;
+      const c1y = p1.y + (p2.y - p0.y) * tension;
+      const c2x = p2.x - (p3.x - p1.x) * tension;
+      const c2y = p2.y - (p3.y - p1.y) * tension;
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  };
   const temp1Path = buildPath('temp1');
   const temp2Path = buildPath('temp2');
   const guideValues = yTicks;
@@ -5482,6 +5524,14 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
             </g>;
           })}
         <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
+        {thresholdGuides.length === 2 ? (() => {
+          const yMin = yFor(thresholdGuides[0].value);
+          const yMax = yFor(thresholdGuides[1].value);
+          if (yMin === null || yMax === null) return null;
+          const top = Math.min(yMin, yMax);
+          const bottom = Math.max(yMin, yMax);
+          return <rect key={`threshold-band-${thresholdGuides[0].value}-${thresholdGuides[1].value}`} className="chart-threshold-band" x={padding.left} y={top} width={width - padding.left - padding.right} height={Math.max(0, bottom - top)} fill="var(--chart-threshold-band)" pointerEvents="none" />;
+        })() : null}
         {thresholdGuides.map((guide) => {
             const y = yFor(guide.value);
             if (y === null) return null;
@@ -5502,10 +5552,15 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
           </g>;
         })}
         <text x={padding.left + (width - padding.left - padding.right) / 2} y={height - 4} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label">Time</text>
-        {temp1Path ? <path d={`${temp1Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp1-${chartId})`} /> : null}
-        {temp2Path ? <path d={`${temp2Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp2-${chartId})`} /> : null}
-        {temp2Path ? <path d={temp2Path} fill="none" stroke="var(--chart-temp2)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /> : null}
-        {temp1Path ? <path d={temp1Path} fill="none" stroke="var(--chart-temp1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
+        {(() => {
+          const animKey = `${totalPoints}-${rangeStart}-${rangeEnd}-${timeStart}-${timeEnd}`;
+          return <g key={animKey}>
+            {temp1Path ? <path className="chart-area-anim" d={`${temp1Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp1-${chartId})`} /> : null}
+            {temp2Path ? <path className="chart-area-anim" d={`${temp2Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp2-${chartId})`} /> : null}
+            {temp2Path ? <path className="chart-path-anim" pathLength="1" d={temp2Path} fill="none" stroke="var(--chart-temp2)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /> : null}
+            {temp1Path ? <path className="chart-path-anim" pathLength="1" d={temp1Path} fill="none" stroke="var(--chart-temp1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
+          </g>;
+        })()}
         {dragState && selectionWidth > 0 ? <rect x={selectionStart} y={padding.top} width={selectionWidth} height={height - padding.top - padding.bottom} fill="rgba(16,185,129,0.10)" stroke="rgba(16,185,129,0.55)" strokeDasharray="4 4" rx="4" /> : null}
         {hoveredPoint ? <g>
           <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-crosshair-stroke)" strokeDasharray="3 4" />
