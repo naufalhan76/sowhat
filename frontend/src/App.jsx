@@ -3,7 +3,7 @@ import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef,
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
+  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Maximize2, Menu, MessageSquare, Minimize2, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
 import { NavRail } from './layout/NavRail.jsx';
@@ -5944,6 +5944,8 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
   const mapStops = headlineJob?.stops || [];
   const [hoveredStopKey, setHoveredStopKey] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => { if (!detail) setIsFullscreen(false); }, [detail]);
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const shippingStatus = detail?.metadata?.shippingStatus || {
     label: detail?.shippingStatusLabel || '-',
@@ -5962,8 +5964,8 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const incidentHistoryResolvedCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() === 'resolved').length;
   const incidentHistoryTotalMinutes = incidentHistory.reduce((total, item) => total + Number(item?.durationMinutes || 0), 0);
 
-  return <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-    <Card className="tm-drawer-panel trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
+  return <div className={`tm-drawer-backdrop ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
+    <Card className={`tm-drawer-panel trip-monitor-detail-modal ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header tm-drawer-header">
         <div className="tm-drawer-header-inner">
           <div>
@@ -5971,9 +5973,20 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             <h2>{displayUnitLabel}</h2>
             <p>{detail.customerName || '-'} | {routeSummary}</p>
           </div>
-          <button type="button" className="tm-drawer-close" onClick={onClose} aria-label="Close drawer" title="Close (Esc)">
-            <X size={18} />
-          </button>
+          <div className="tm-drawer-header-actions">
+            <button
+              type="button"
+              className="tm-drawer-icon-btn"
+              onClick={() => setIsFullscreen((value) => !value)}
+              aria-label={isFullscreen ? 'Collapse to drawer' : 'Open as page'}
+              title={isFullscreen ? 'Collapse to drawer' : 'Open as page'}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button type="button" className="tm-drawer-close" onClick={onClose} aria-label="Close drawer" title="Close (Esc)">
+              <X size={18} />
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
