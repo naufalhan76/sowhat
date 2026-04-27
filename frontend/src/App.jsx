@@ -5909,9 +5909,9 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const incidentHistoryResolvedCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() === 'resolved').length;
   const incidentHistoryTotalMinutes = incidentHistory.reduce((total, item) => total + Number(item?.durationMinutes || 0), 0);
 
-  return <div className="auth-modal-backdrop" onClick={onClose}>
-    <Card className="auth-modal-card diagnostic-modal-card trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
-      <CardHeader className="panel-card-header">
+  return <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
+    <Card className="tm-drawer-panel trip-monitor-detail-modal" onClick={(event) => event.stopPropagation()}>
+      <CardHeader className="panel-card-header tm-drawer-header">
         <div>
           <p className="eyebrow local-eyebrow">Trip Monitor Detail</p>
           <h2>{displayUnitLabel}</h2>
