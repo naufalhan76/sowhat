@@ -30,7 +30,6 @@ export default defineConfig({
           if (!id.includes('node_modules')) return;
           if (id.includes('leaflet')) return 'vendor-leaflet';
           if (id.includes('react')) return 'vendor-react';
-          if (id.includes('@heroui') || id.includes('framer-motion')) return 'vendor-ui';
           if (id.includes('lucide-react')) return 'vendor-icons';
           return 'vendor';
         },

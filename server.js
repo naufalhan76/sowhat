@@ -11186,6 +11186,61 @@ async function handleApi(req, res, url) {
   return false;
 }
 
+function isSpaRoutePath(pathname) {
+  if (pathname.startsWith('/api/')) return false;
+  if (pathname.startsWith('/assets/')) return false;
+  const lastSegment = pathname.split('/').filter(Boolean).pop() || '';
+  return !lastSegment.includes('.');
+}
+
+function serveStaticFile(req, res, filePath, stats, method) {
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  const cacheControl = buildStaticCacheControl(filePath);
+  const etag = buildWeakEtag(stats);
+
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, {
+      'Cache-Control': cacheControl,
+      ETag: etag,
+      Vary: 'Accept-Encoding',
+      ...RESPONSE_SECURITY_HEADERS,
+    });
+    res.end();
+    return;
+  }
+
+  if (method === 'HEAD') {
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': String(stats.size || 0),
+      'Cache-Control': cacheControl,
+      ETag: etag,
+      'Last-Modified': stats.mtime.toUTCString(),
+      Vary: 'Accept-Encoding',
+      ...RESPONSE_SECURITY_HEADERS,
+    });
+    res.end();
+    return;
+  }
+
+  fs.readFile(filePath, function (readError, content) {
+    if (readError) {
+      send(res, 500, 'Internal Server Error', 'text/plain; charset=utf-8');
+      return;
+    }
+    const compressed = compressStaticContent(req, content, contentType);
+    send(res, 200, compressed.content, contentType, {
+      'Cache-Control': cacheControl,
+      ETag: etag,
+      'Last-Modified': stats.mtime.toUTCString(),
+      'Content-Length': String(compressed.content.length),
+      Vary: 'Accept-Encoding',
+      ...(compressed.encoding ? { 'Content-Encoding': compressed.encoding } : {}),
+    });
+  });
+}
+
 function handleStatic(req, res, url) {
   const method = req.method || 'GET';
   if (method !== 'GET' && method !== 'HEAD') {
@@ -11193,7 +11248,8 @@ function handleStatic(req, res, url) {
     return;
   }
 
-  const filePath = safePathFromUrl(url.pathname || '/');
+  const requestedPath = url.pathname || '/';
+  const filePath = safePathFromUrl(requestedPath);
   if (!filePath.startsWith(WEB_ROOT)) {
     send(res, 403, 'Forbidden', 'text/plain; charset=utf-8');
     return;
@@ -11201,55 +11257,22 @@ function handleStatic(req, res, url) {
 
   fs.stat(filePath, function (statError, stats) {
     if (statError || !stats.isFile()) {
+      if ((method === 'GET' || method === 'HEAD') && isSpaRoutePath(requestedPath)) {
+        const fallbackPath = path.join(WEB_ROOT, 'index.html');
+        fs.stat(fallbackPath, function (fallbackStatError, fallbackStats) {
+          if (fallbackStatError || !fallbackStats.isFile()) {
+            send(res, 404, 'Not Found', 'text/plain; charset=utf-8');
+            return;
+          }
+          serveStaticFile(req, res, fallbackPath, fallbackStats, method);
+        });
+        return;
+      }
       send(res, 404, 'Not Found', 'text/plain; charset=utf-8');
       return;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    const cacheControl = buildStaticCacheControl(filePath);
-    const etag = buildWeakEtag(stats);
-
-    if (req.headers['if-none-match'] === etag) {
-      res.writeHead(304, {
-        'Cache-Control': cacheControl,
-        ETag: etag,
-        Vary: 'Accept-Encoding',
-        ...RESPONSE_SECURITY_HEADERS,
-      });
-      res.end();
-      return;
-    }
-
-    if (method === 'HEAD') {
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Content-Length': String(stats.size || 0),
-        'Cache-Control': cacheControl,
-        ETag: etag,
-        'Last-Modified': stats.mtime.toUTCString(),
-        Vary: 'Accept-Encoding',
-        ...RESPONSE_SECURITY_HEADERS,
-      });
-      res.end();
-      return;
-    }
-
-    fs.readFile(filePath, function (readError, content) {
-      if (readError) {
-        send(res, 500, 'Internal Server Error', 'text/plain; charset=utf-8');
-        return;
-      }
-      const compressed = compressStaticContent(req, content, contentType);
-      send(res, 200, compressed.content, contentType, {
-        'Cache-Control': cacheControl,
-        ETag: etag,
-        'Last-Modified': stats.mtime.toUTCString(),
-        'Content-Length': String(compressed.content.length),
-        Vary: 'Accept-Encoding',
-        ...(compressed.encoding ? { 'Content-Encoding': compressed.encoding } : {}),
-      });
-    });
+    serveStaticFile(req, res, filePath, stats, method);
   });
 }
 
