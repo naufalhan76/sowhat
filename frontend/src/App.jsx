@@ -6,6 +6,18 @@ import {
   Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
+import { NavRail } from './layout/NavRail.jsx';
+import { CommandBar } from './layout/CommandBar.jsx';
+import { StatusFooter } from './layout/StatusFooter.jsx';
+import {
+  Surface, SurfaceHeader, SurfaceBody,
+  Action, ActionGroup,
+  Pill as UIPill,
+  Stat, StatGrid,
+  Section,
+  EmptyState,
+  Spinner as UISpinner,
+} from './components/index.js';
 
 const ROUTE_PANEL_IDS = new Set([
   'overview', 'fleet', 'trip-monitor', 'map', 'astro-report', 'temp-errors',
@@ -25,26 +37,34 @@ function useActivePanelRoute() {
   }, [navigate, activePanel]);
   return [activePanel, setActivePanel];
 }
-const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
-  const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
-  return <button type="button" className={`sf-btn ${baseClass} ${className}`} onClick={onPress} {...props}>{children}</button>;
+
+// Compatibility wrappers — old call sites pass `variant`/`color`/`onPress` style props.
+// Map these to the new component primitives without changing 5800 lines of JSX.
+const Button = ({ children, variant, color, className = '', onPress, onClick, ...props }) => {
+  const handle = onClick || onPress;
+  const next = variant === 'bordered' || variant === 'flat' ? 'secondary'
+    : variant === 'light' ? 'ghost'
+    : color === 'danger' || color === 'error' ? 'danger'
+    : 'primary';
+  return <Action variant={next} className={className} onClick={handle} {...props}>{children}</Action>;
 };
 
-const Card = React.forwardRef(({ children, className = '', ...props }, ref) => <div ref={ref} className={`sf-card ${className}`} {...props}>{children}</div>);
-const CardHeader = ({ children, className = '' }) => <div className={`sf-card-header ${className}`}>{children}</div>;
-const CardContent = ({ children, className = '' }) => <div className={`sf-card-content ${className}`}>{children}</div>;
+const Card = React.forwardRef(({ children, className = '', ...props }, ref) => (
+  <Surface ref={ref} className={`sf-card-compat ${className}`.trim()} {...props}>{children}</Surface>
+));
+const CardHeader = ({ children, className = '' }) => <SurfaceHeader className={className}>{children}</SurfaceHeader>;
+const CardContent = ({ children, className = '' }) => <SurfaceBody className={className}>{children}</SurfaceBody>;
 
-const Chip = ({ children, variant, color = 'default', className = '' }) => {
-  return <span className={`sf-chip sf-chip-${color} ${className}`}>{children}</span>;
-};
+const Chip = ({ children, variant, color = 'default', className = '', ...props }) => (
+  <UIPill color={color} className={className} {...props}>{children}</UIPill>
+);
 
 const Link = ({ children, className = '', ...props }) => <a className={`sf-link ${className}`} {...props}>{children}</a>;
-const Spinner = ({ size }) => <span className={`sf-spinner ${size === 'sm' ? 'sf-spinner-sm' : ''}`} />;
+const Spinner = ({ size }) => <UISpinner size={size === 'sm' ? 'sm' : 'md'} />;
 
 const BrandLockup = ({ compact = false }) => <div className={`brand-lockup ${compact ? 'brand-lockup-compact' : ''}`}>
-  <div className="brand-mark">Sowhat</div>
-  <div className="brand-cross">x</div>
-  <div className="brand-wordmark">Solo<span>fleet</span></div>
+  <span className="brand-mark">SF</span>
+  <span className="brand-wordmark"><span className="brand-wordmark-primary">Solofleet</span><span className="brand-wordmark-secondary">Ops Bridge</span></span>
 </div>;
 
 function formatInputDate(date) {
@@ -3149,94 +3169,38 @@ export default function App() {
 
   return (
     
-    <div className={`command-center ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${compactTopbar ? 'compact-topbar' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''} ${mobileTopbarExpanded ? 'mobile-topbar-expanded' : ''}`}>
-      <header className="topbar">
-        <div className="topbar-brand-row">
-          <div className="topbar-brand">
-            <BrandLockup compact />
-          </div>
-          <div className="mobile-topbar-actions">
-            <button type="button" className="topbar-icon-button mobile-topbar-toggle" onClick={() => setMobileTopbarExpanded((current) => !current)} aria-label={mobileTopbarExpanded ? 'Collapse topbar controls' : 'Expand topbar controls'}>
-              {mobileTopbarExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </button>
-            <button type="button" className="topbar-icon-button mobile-nav-toggle" onClick={() => setMobileNavOpen((current) => !current)} aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}>
-              {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
-          </div>
-        </div>
-        <div className="topbar-collapsible">
-          <div className="topbar-controls">
-            <div className="date-range-group">
-              <input type="date" value={range.startDate} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, startDate: event.target.value}))} />
-              <ArrowRight size={14} className="text-muted" />
-              <input type="date" value={range.endDate} onClick={(event) => event.currentTarget.showPicker?.()} onChange={(event) => setRange(c => ({...c, endDate: event.target.value}))} />
-            </div>
-            <div className="search-box">
-              <Search size={16} className="search-icon" />
-              <input type="text" placeholder="Search account, unit, location..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            </div>
-          </div>
-          <div className="topbar-actions">
-            <div className="account-badge">
-              <Settings size={14} />
-              <span>Account</span>
-              <strong>{accountName(currentAccount)}</strong>
-            </div>
-            <div className="control-inline-actions">
-              <Button variant="bordered" onPress={exportFleet}><Navigation size={14} /> Live CSV</Button>
-              <Button variant="bordered" onPress={exportAlerts}><ShieldAlert size={14} /> Alerts CSV</Button>
-            </div>
-            <Button variant="bordered" onPress={() => loadDashboard(false, false)}><RefreshCw size={14} /> Refresh</Button>
-            <Button onPress={runPollNow}><Zap size={14} /> Poll Now</Button>
-            <Button variant="bordered" onPress={togglePolling}>{status?.runtime?.isPolling ? 'Stop polling' : 'Start polling'}</Button>
-          </div>
-        </div>      </header>
-
-      <button type="button" className="mobile-sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />
-
-      <nav className="sidebar">
-        <div className="sidebar-top">
-          <button type="button" className="nav-item collapse-btn sidebar-collapse-top" onClick={() => setSidebarCollapsed((current) => !current)}>
-            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            <span>{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
-          </button>
-        </div>
-        <div className="sidebar-nav">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            return <button key={item.id} type="button" className={`nav-item ${activePanel === item.id ? 'active' : ''}`} onClick={() => {
-              setActivePanel(item.id);
-              setMobileNavOpen(false);
-            }}><Icon size={18} /><span>{item.label}</span></button>;
-          })}
-        </div>
-        <div className="sidebar-bottom profile-dock">
-          <button
-            type="button"
-            className={`nav-item theme-toggle-sidebar ${theme === 'light' ? 'is-light' : 'is-dark'}`}
-            onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
-            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-          >
-            {theme === 'light' ? <Sun size={18} /> : <MoonStar size={18} />}
-            <span>{theme === 'light' ? 'Light' : 'Dark'}</span>
-          </button>
-          <button type="button" className="profile-summary-button" onClick={() => {
-            setActivePanel(isAdmin ? 'admin' : 'overview');
-            setMobileNavOpen(false);
-          }}>
-            <strong>{webSessionUser?.displayName || webSessionUser?.username || 'Dashboard user'}</strong>
-            <span>{webSessionUser?.username || '-'}{webSessionUser?.role ? ` | ${webSessionUser.role}` : ''}</span>
-          </button>
-          <div className="profile-dock-actions">
-            <Button variant="bordered" className="profile-dock-btn" onPress={() => {
-              setActivePanel(isAdmin ? 'admin' : 'overview');
-              setMobileNavOpen(false);
-            }}>Profile</Button>
-            <Button variant="light" className="profile-dock-btn" onPress={logoutWeb}>Logout</Button>
-          </div>
-        </div>
-      </nav>
+    <div className={`bridge-shell ${sidebarCollapsed ? 'navrail-is-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+      <button type="button" className="bridge-mobile-toggle" onClick={() => setMobileNavOpen((current) => !current)} aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}>
+        {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
+      </button>
+      <button type="button" className="bridge-mobile-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />
+      <NavRail
+        activePanel={activePanel}
+        onSelect={(id) => { setActivePanel(id); setMobileNavOpen(false); }}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+        isAdmin={isAdmin}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+        user={webSessionUser}
+        onProfileClick={() => { setActivePanel(isAdmin ? 'admin' : 'overview'); setMobileNavOpen(false); }}
+        onLogout={logoutWeb}
+      />
+      <CommandBar
+        activePanel={activePanel}
+        range={range}
+        onRangeChange={setRange}
+        search={search}
+        onSearchChange={setSearch}
+        accountName={accountName(currentAccount)}
+        onExportFleet={exportFleet}
+        onExportAlerts={exportAlerts}
+        onRefresh={() => loadDashboard(false, false)}
+        onPollNow={runPollNow}
+        onTogglePolling={togglePolling}
+        isPolling={!!status?.runtime?.isPolling}
+        isOnline={!status?.runtime?.lastSnapshotError}
+      />
 
       <main className="workspace">
         {showOverviewChrome ? <div className="overview-chrome">
@@ -4532,19 +4496,13 @@ export default function App() {
         </Card>
       </div> : null}
       
-      <footer className="status-bar">
-        <div className="status-left">
-          <div className="status-indicator">
-            <span className={`status-dot ${status?.runtime?.isPolling ? 'active' : ''}`}></span>
-            <span>Polling {status?.runtime?.isPolling ? 'ON' : 'OFF'}</span>
-          </div>
-          <span>Next: {fmtDate(status?.runtime?.nextRunAt)}</span>
-        </div>
-        <div className="status-right">
-          <span>Snapshot: {fmtDate(status?.runtime?.lastSnapshotAt)}</span>
-          {status?.runtime?.lastSnapshotError && <span className="text-danger" style={{color: 'var(--danger)'}}>Err: {status.runtime.lastSnapshotError}</span>}
-        </div>
-      </footer>
+      <StatusFooter
+        isPolling={!!status?.runtime?.isPolling}
+        nextRunLabel={fmtDate(status?.runtime?.nextRunAt)}
+        snapshotLabel={fmtDate(status?.runtime?.lastSnapshotAt)}
+        accountName={accountName(currentAccount)}
+        errorMessage={status?.runtime?.lastSnapshotError || null}
+      />
 
       {busyOverlay}
 
