@@ -10734,14 +10734,29 @@ body.fleet-workspace-resizing * {
 /* Card refinements for kanban context (denser, severity stripe) */
 .trip-monitor-kanban .trip-monitor-card {
   position: relative;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: auto;
   padding: 10px 12px 10px 14px;
   border: 1px solid var(--border);
   background: var(--surface) !important;
   border-radius: 10px;
   display: grid;
   gap: 6px;
+  overflow: hidden;
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.trip-monitor-kanban .trip-monitor-card > * {
+  min-width: 0;
+}
+
+.trip-monitor-kanban .trip-monitor-card-head {
+  align-items: center;
+}
+
+.trip-monitor-kanban .trip-monitor-card-titleblock,
+.trip-monitor-kanban .trip-monitor-card-status {
+  min-width: 0;
 }
 
 .trip-monitor-kanban .trip-monitor-card::before {

@@ -5991,15 +5991,6 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
       </CardHeader>
       <CardContent>
         {busy ? <div className="empty-state">Loading detail...</div> : <div className="settings-stack">
-          <div className="trip-monitor-detail-actions-bar">
-            <div className="trip-monitor-detail-header-actions">
-              {fleetRow?.id ? <>
-                <Button variant="bordered" onPress={onOpenFleet}>Open fleet graphic</Button>
-                <Button variant="bordered" onPress={onOpenMap}>Open map</Button>
-                <Button variant="bordered" onPress={onOpenHistorical}>Open historical</Button>
-              </> : null}
-            </div>
-          </div>
           <div className="overview-mini-summary overview-mini-summary-compact trip-monitor-detail-summary">
             <div className="mini-metric">
               <span>Severity</span>
@@ -6023,10 +6014,6 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             <div className="mini-metric">
               <span>Incidents</span>
               <strong>{incidents.length}</strong>
-            </div>
-            <div className="mini-metric">
-              <span>App status</span>
-              <strong>{appStatus || '-'}</strong>
             </div>
             <div className="mini-metric">
               <span>Temp range</span>
