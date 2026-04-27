@@ -26,7 +26,6 @@ const BrandLockup = ({ compact = false }) => <div className={`brand-lockup ${com
   <div className="brand-cross">x</div>
   <div className="brand-wordmark">Solo<span>fleet</span></div>
 </div>;
-// removed object import
 
 function formatInputDate(date) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -508,9 +507,6 @@ const fmtDateCompact = (value) => {
 const fmtDateOnly = (value) => {
   const parsed = parseDateValue(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value} 00:00:00` : value);
   if (!parsed) return '-';
-  const year = parsed.getFullYear();
-  // Ensure we don't accidentally fall back to a fallback epoch year if parsed wrong.
-  // We'll still format the result correctly using robust Date APIs.
   return new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'long', day: '2-digit' }).format(parsed);
 };
 const fmtNum = (value, digits = 1) => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(digits);
