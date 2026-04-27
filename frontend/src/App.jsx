@@ -3042,109 +3042,114 @@ export default function App() {
   const busyOverlay = busy ? <div className="loading-overlay"><div className="loading-overlay-card"><Spinner /><h3>{busyMessage}</h3><p>Mohon tunggu, request sedang diproses. Aksi lain dikunci sementara untuk menghindari spam request.</p></div></div> : null;
 
   if (!loaded) {
-    return <div className="login-shell">
-      <div className="login-hero">
-        <div className="login-hero-content">
-          <BrandLockup />
-          <div className="login-hero-copy">
-            <h1>Solofleet Ops</h1>
-            <p className="login-subtitle">Intelligent fleet tracking and temperature monitoring</p>
+    return <div className="boot-shell" data-state="loading">
+      <div className="boot-grid" aria-hidden />
+      <div className="boot-frame">
+        <header className="boot-frame-head">
+          <div className="boot-frame-brand"><BrandLockup /></div>
+          <div className="boot-frame-stamp">
+            <span className="boot-frame-stamp-label">Build</span>
+            <strong>v0.2.0</strong>
           </div>
-          <div className="login-hero-status">
-            <div className="status-indicator">
-              <span className="status-dot"></span>
-              <span className="status-text">Backend connection checking...</span>
-            </div>
-            <div className="status-indicator">
-              <span className="status-dot"></span>
-              <span className="status-text">Web session verifying...</span>
-            </div>
+        </header>
+        <main className="boot-frame-body">
+          <p className="boot-eyebrow">System status</p>
+          <h1 className="boot-headline">Booting workspace</h1>
+          <ul className="boot-checklist">
+            <li className="boot-checklist-item boot-checklist-running">
+              <span className="boot-checklist-dot" />
+              <span className="boot-checklist-label">Backend connection</span>
+              <span className="boot-checklist-value">CONNECTING</span>
+            </li>
+            <li className="boot-checklist-item boot-checklist-running">
+              <span className="boot-checklist-dot" />
+              <span className="boot-checklist-label">Web session</span>
+              <span className="boot-checklist-value">VERIFYING</span>
+            </li>
+          </ul>
+          <div className="boot-spinner-row">
+            <UISpinner /> <span className="boot-spinner-text">If loading takes too long, the sign-in form will appear automatically.</span>
           </div>
-        </div>
-      </div>
-      <div className="login-form-panel">
-        <div className="login-glass-card">
-          <div className="login-glass-header">
-            <h2>Loading workspace</h2>
-            <p>Please wait while we set up your environment.</p>
-          </div>
-          <div className="login-glass-content">
-            <div className="inline-buttons" style={{ justifyContent: 'center', marginBottom: '20px' }}>
-              <Spinner />
-            </div>
-            <div className="subtle-line text-center">If loading takes too long, the login form will appear automatically.</div>
-          </div>
-        </div>
+        </main>
       </div>
     </div>;
   }
 
   if (loaded && !webSessionUser) {
-    return <div className="login-shell">
-      <button 
-        type="button" 
-        className="login-theme-toggle" 
+    return <div className="boot-shell" data-state="signin">
+      <div className="boot-grid" aria-hidden />
+      <button
+        type="button"
+        className="boot-theme-toggle"
         onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
         aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
       >
-        {theme === 'light' ? <MoonStar size={18} /> : <Sun size={18} />}
+        {theme === 'light' ? <MoonStar size={14} /> : <Sun size={14} />}
+        <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
       </button>
-      
-      <div className="login-hero">
-        <div className="login-hero-content">
-          <BrandLockup />
-          <div className="login-hero-copy">
-            <h1>Ops Dashboard</h1>
-            <p className="login-subtitle">Centralized fleet command center. Real-time temperature alerts, history, and route tracking.</p>
+
+      <div className="boot-frame">
+        <header className="boot-frame-head">
+          <div className="boot-frame-brand"><BrandLockup /></div>
+          <div className="boot-frame-meta">
+            <span className="boot-frame-meta-tag">SECURE LOGIN</span>
+            <span className="boot-frame-meta-time">{new Date().toLocaleString()}</span>
           </div>
-          <div className="login-hero-status">
-            <div className="status-indicator active">
-              <span className="status-dot"></span>
-              <span className="status-text">System operational</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="login-form-panel">
-        <div className="login-glass-card">
-          <div className="login-glass-header">
-            <h2>Welcome back</h2>
-            <p>Sign in to your Solofleet dashboard account</p>
-          </div>
-          <div className="login-glass-content">
-            <div className="settings-stack">
-              <label className="field">
-                <span>Username</span>
-                <input 
-                  type="text" 
-                  className="login-input"
-                  value={webLoginForm.username} 
-                  onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))} 
-                  placeholder="admin" 
-                />
-              </label>
-              <label className="field">
-                <span>Password</span>
-                <input 
-                  type="password" 
-                  className="login-input"
-                  value={webLoginForm.password} 
-                  onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))} 
-                  placeholder="Enter your password" 
-                />
-              </label>
-              <button 
-                type="button" 
-                className="sf-btn sf-btn-primary login-submit-btn" 
-                onClick={loginToWeb}
-              >
-                Sign in to workspace
-              </button>
-              <div className="subtle-line text-center">Solofleet API connections are managed in the Config panel after login.</div>
-            </div>
-          </div>
-        </div>
+        </header>
+        <main className="boot-frame-body">
+          <p className="boot-eyebrow">Operations bridge / sign in</p>
+          <h1 className="boot-headline">Workspace authentication</h1>
+          <p className="boot-subline">Sign in to access fleet ops, analytics, and platform tools. Solofleet API sessions are managed inside the Config panel after login.</p>
+
+          <form className="boot-form" onSubmit={(event) => { event.preventDefault(); loginToWeb(); }}>
+            <label className="boot-field">
+              <span className="boot-field-label">Username</span>
+              <input
+                type="text"
+                value={webLoginForm.username}
+                onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))}
+                placeholder="admin"
+                autoComplete="username"
+                autoFocus
+              />
+            </label>
+            <label className="boot-field">
+              <span className="boot-field-label">Password</span>
+              <input
+                type="password"
+                value={webLoginForm.password}
+                onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+              />
+            </label>
+            <Action variant="primary" size="lg" type="submit" className="boot-submit">
+              Authenticate &amp; enter bridge
+            </Action>
+          </form>
+
+          <ul className="boot-checklist boot-checklist-success">
+            <li className="boot-checklist-item">
+              <span className="boot-checklist-dot" />
+              <span className="boot-checklist-label">System operational</span>
+              <span className="boot-checklist-value">OK</span>
+            </li>
+            <li className="boot-checklist-item">
+              <span className="boot-checklist-dot" />
+              <span className="boot-checklist-label">Encrypted transport</span>
+              <span className="boot-checklist-value">TLS</span>
+            </li>
+            <li className="boot-checklist-item">
+              <span className="boot-checklist-dot" />
+              <span className="boot-checklist-label">Local seed storage</span>
+              <span className="boot-checklist-value">READY</span>
+            </li>
+          </ul>
+        </main>
+        <footer className="boot-frame-foot">
+          <span>Built for cold-chain fleet operations</span>
+          <span>Sowhat x Solofleet</span>
+        </footer>
       </div>
 
       {busyOverlay}
