@@ -1,2 +1,0 @@
-Account ID,Nopol,Customer,WH,POOL,POD1,POD2,POD3,POD4,POD5,Rit1 Start,Rit1 End,Rit1 WH Arrival Time SLA,Rit1 POD1 SLA,Rit1 POD2 SLA,Rit1 POD3 SLA,Rit1 POD4 SLA,Rit1 POD5 SLA,Rit2 Enabled,Rit2 Start,Rit2 End,Rit2 WH Arrival Time SLA,Rit2 POD1 SLA,Rit2 POD2 SLA,Rit2 POD3 SLA,Rit2 POD4 SLA,Rit2 POD5 SLA,WH Arrival Temp Min SLA,WH Arrival Temp Max SLA,Active,Notes
-primary,B 9749 SXW,Astro,Astro WH CBN,Astro Pool Cakung,Astro POD Bekasi Timur,,,,,05:00,14:59,06:30,07:00,,,,,false,19:00,06:00,,,,,,2,8,true,Rit pagi only
