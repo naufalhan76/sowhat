@@ -8689,3 +8689,334 @@ textarea:focus {
   .boot-headline { font-size: 22px; }
 }
 
+
+/* =====================================================================
+   Workspace content overrides — sharper panel paradigm
+   Panel content uses Surface/Stat/Section conventions even when rendered
+   via legacy panel-card / mini-metric classes inside App.jsx.
+   ===================================================================== */
+
+/* Panel cards: drop heavy gradients, use Surface aesthetic */
+.bridge-shell .panel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.bridge-shell .panel-card .sf-card-header,
+.bridge-shell .panel-card .panel-card-header,
+.bridge-shell .panel-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  border-radius: 0;
+}
+.bridge-shell .panel-card .sf-card-content,
+.bridge-shell .panel-card-content {
+  padding: 16px;
+}
+.bridge-shell .panel-card h2,
+.bridge-shell .panel-card-header h2,
+.bridge-shell .panel-card-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bridge-shell .panel-card h2::before,
+.bridge-shell .panel-card-header h2::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  background: var(--primary);
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.bridge-shell .panel-card-header p,
+.bridge-shell .panel-card p.panel-card-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* mini-metric stats inside panels — sharpen */
+.bridge-shell .mini-metric,
+.bridge-shell .stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+.bridge-shell .mini-metric::before,
+.bridge-shell .stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.bridge-shell .mini-metric:hover::before,
+.bridge-shell .stat-card:hover::before {
+  background: var(--primary);
+}
+.bridge-shell .mini-metric > span:first-child,
+.bridge-shell .stat-card .stat-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bridge-shell .mini-metric > strong,
+.bridge-shell .stat-card .stat-value {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum', 'zero';
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-dark);
+  line-height: 1.05;
+}
+.bridge-shell .mini-metric small,
+.bridge-shell .stat-card .stat-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: -0.005em;
+}
+.bridge-shell .mini-metric-danger {
+  border-color: rgba(239, 68, 68, 0.24);
+}
+.bridge-shell .mini-metric-danger > strong { color: var(--danger-text); }
+.bridge-shell .mini-metric-warning {
+  border-color: rgba(245, 158, 11, 0.24);
+}
+.bridge-shell .mini-metric-warning > strong { color: var(--warning-text); }
+
+/* Workspace headings */
+.bridge-shell .workspace > h1,
+.bridge-shell .workspace > h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-dark);
+  margin: 0 0 4px;
+}
+.bridge-shell .workspace .eyebrow,
+.bridge-shell .workspace .local-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--primary-text);
+}
+
+/* Tables inside workspace get sharper edges */
+.bridge-shell table.dt,
+.bridge-shell .data-table table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.bridge-shell table.dt th {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.bridge-shell table.dt td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-dark);
+}
+.bridge-shell table.dt tbody tr:hover td {
+  background: var(--surface-hover);
+}
+.bridge-shell table.dt tbody tr:last-child td { border-bottom: 0; }
+
+/* Pill / chip bars inside panels */
+.bridge-shell .chip-bar,
+.bridge-shell .filter-pill-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  margin-bottom: 12px;
+}
+.bridge-shell .filter-pill,
+.bridge-shell .chip-bar > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.bridge-shell .filter-pill:hover,
+.bridge-shell .chip-bar > button:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+  border-color: var(--border-strong);
+}
+.bridge-shell .filter-pill.active,
+.bridge-shell .filter-pill[data-active='true'],
+.bridge-shell .chip-bar > button.active {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: var(--primary-text);
+}
+
+/* Modal backdrop refresh */
+.bridge-shell .modal-backdrop,
+.bridge-shell .auth-modal-backdrop,
+.bridge-shell .fleet-modal-backdrop {
+  background: rgba(8, 9, 11, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+/* Modal card refresh */
+.bridge-shell .modal-card,
+.bridge-shell .auth-modal-card,
+.bridge-shell .fleet-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+/* Toast refresh */
+.toast-container {
+  position: fixed;
+  bottom: 48px;
+  right: 16px;
+  z-index: 200;
+}
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px -30px rgba(0, 0, 0, 0.6);
+  color: var(--text-dark);
+  font-size: 12.5px;
+}
+.toast-success {
+  border-color: rgba(16, 185, 129, 0.35);
+  color: var(--primary-text);
+}
+.toast-error {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--danger-text);
+}
+
+/* Loading overlay refresh */
+.bridge-shell .loading-overlay,
+.loading-overlay {
+  background: rgba(8, 9, 11, 0.66);
+  backdrop-filter: blur(6px);
+}
+.loading-overlay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.7);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+/* Welcome banner / auth toast */
+.welcome-toast {
+  background: var(--surface);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 8px;
+  color: var(--primary-text);
+}
+
+/* Drop-down/select refresh inside workspace (scoped to workspace + panel content,
+   so command-bar/boot-shell inputs keep their dedicated styling). */
+.bridge-shell main.workspace select,
+.bridge-shell main.workspace .filter-select,
+.bridge-shell main.workspace input[type='date'],
+.bridge-shell main.workspace input[type='text'],
+.bridge-shell main.workspace input[type='number'],
+.bridge-shell main.workspace input[type='search'] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dark);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+.bridge-shell main.workspace select:focus,
+.bridge-shell main.workspace input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Make command-bar date range inputs wider so dates aren't clipped */
+.command-bar-range input[type='date'] {
+  width: 110px;
+}
+
+/* Pretty empty messages */
+.bridge-shell .empty-message,
+.bridge-shell .empty-cell,
+.bridge-shell .data-table-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 32px 16px;
+  background: linear-gradient(180deg, var(--surface) 0%, transparent 100%);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
