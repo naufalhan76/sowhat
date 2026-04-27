@@ -9348,14 +9348,16 @@ html, body {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding: 0 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: var(--commandbar-height);
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  height: var(--commandbar-height) !important;
   position: sticky;
   top: 0;
   z-index: 30;
+  flex-wrap: nowrap;
 }
 .command-bar-row,
 .command-bar-row-primary,
@@ -10479,5 +10481,39 @@ html, body {
   letter-spacing: -0.005em !important;
   text-transform: none !important;
   color: var(--text-dark) !important;
+}
+
+
+/* Donut center label — kill uppercase + tracked spacing */
+.bridge-shell .overview-donut-center span {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--text-muted) !important;
+}
+.bridge-shell .overview-donut-center strong {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  color: var(--text-dark) !important;
+  font-feature-settings: 'tnum';
+}
+
+/* Generic checkbox label — kill uppercase if any inherited */
+.bridge-shell input[type='checkbox'] + span,
+.bridge-shell label > input[type='checkbox'] ~ * {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+.bridge-shell label:has(input[type='checkbox']) {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-main);
 }
 
