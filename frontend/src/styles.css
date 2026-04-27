@@ -11438,3 +11438,372 @@ body.fleet-workspace-resizing * {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-feature-settings: 'tnum' 1, 'zero' 1;
 }
+
+/* ===========================================================
+   Trip Monitor Drawer · Sticky-Notes redesign (Option A)
+   Layout: header (sticky) + map 60% + sticky-notes wall 40%
+   =========================================================== */
+.tm-drawer-panel.tm-drawer-stickynotes > div:nth-child(2),
+.tm-drawer-panel.tm-drawer-stickynotes > [data-card-content],
+.tm-drawer-panel.tm-drawer-stickynotes > .panel-card-content {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.tm-drawer-stickynotes-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tm-drawer-stickynotes.has-expanded-note .tm-drawer-map-section {
+  flex: 0 0 32%;
+}
+
+.tm-drawer-stickynotes.has-expanded-note .tm-sticky-wall {
+  flex: 1 1 68%;
+}
+
+.tm-drawer-map-section {
+  flex: 0 0 60%;
+  position: relative;
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: flex-basis 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.tm-drawer-map-section > * {
+  width: 100%;
+  height: 100%;
+}
+
+.tm-drawer-map-section .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.tm-sticky-wall {
+  flex: 1 1 40%;
+  overflow-y: auto;
+  padding: 14px 14px 18px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(120, 120, 130, 0.04) 0, transparent 50%),
+    radial-gradient(circle at 80% 60%, rgba(120, 120, 130, 0.04) 0, transparent 50%),
+    var(--background-color, #0a0a0a);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  align-content: start;
+  transition: flex-basis 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-theme='light'] .tm-sticky-wall {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(15, 23, 42, 0.025) 0, transparent 50%),
+    radial-gradient(circle at 80% 60%, rgba(15, 23, 42, 0.025) 0, transparent 50%),
+    var(--background-color, #f8f8f8);
+}
+
+/* Note primitive — subtle white card + colored left border + tiny rotation */
+.tm-note {
+  --note-border: rgba(120, 120, 130, 0.18);
+  --note-accent: #71717a;
+  --rotation: 0deg;
+  position: relative;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--note-border);
+  border-left: 3px solid var(--note-accent);
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+  transform: rotate(var(--rotation));
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 220ms ease-out,
+              grid-column 280ms ease-out;
+  will-change: transform, box-shadow;
+  min-width: 0;
+}
+
+[data-theme='dark'] .tm-note {
+  background: rgba(255, 255, 255, 0.018);
+  --note-border: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* Severity-aware accent */
+.tm-note.severity-critical { --note-accent: #ef4444; }
+.tm-note.severity-warning  { --note-accent: #d97706; }
+.tm-note.severity-normal   { --note-accent: #10b981; }
+
+[data-theme='light'] .tm-note.severity-critical { --note-accent: #dc2626; }
+[data-theme='light'] .tm-note.severity-warning  { --note-accent: #ca8a04; }
+[data-theme='light'] .tm-note.severity-normal   { --note-accent: #059669; }
+
+/* Pin pseudo-icon (top-left dot) */
+.tm-note-pin {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--note-accent);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4) inset, 0 1px 1px rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+
+.tm-note-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.tm-note-cue {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.65;
+  font-style: italic;
+}
+
+.tm-note-body {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-primary, inherit);
+  min-width: 0;
+}
+
+.tm-note-strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+  letter-spacing: -0.01em;
+}
+
+.tm-note-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary, inherit);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-note-line.subtle {
+  color: var(--text-secondary, #6b7280);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.tm-note-key {
+  flex-shrink: 0;
+  display: inline-block;
+  min-width: 56px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #71717a);
+  opacity: 0.75;
+}
+
+.tm-note-incident-icons {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Hover: lift + cancel rotation + stronger shadow */
+.tm-note:hover {
+  transform: translateY(-2px) rotate(0deg);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='dark'] .tm-note:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Wide notes (stops timeline, historical) span more columns */
+.tm-note-wide {
+  grid-column: span 2;
+}
+@media (min-width: 720px) {
+  .tm-note-wide { grid-column: 1 / -1; }
+}
+
+/* Expandable notes */
+.tm-note-expandable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tm-note-expandable:focus-visible {
+  outline: 2px solid var(--primary, #10B981);
+  outline-offset: 2px;
+}
+
+.tm-note.is-expanded {
+  grid-column: 1 / -1;
+  transform: rotate(0deg) scale(1);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14), 0 2px 4px rgba(0, 0, 0, 0.06);
+  cursor: default;
+  animation: tmNoteExpand 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-theme='dark'] .tm-note.is-expanded {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.tm-note.is-expanded:hover {
+  transform: rotate(0deg) translateY(0);
+}
+
+@keyframes tmNoteExpand {
+  from { transform: scale(0.985) rotate(0deg); opacity: 0.85; }
+  to   { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.tm-note-expanded {
+  margin-top: 4px;
+  animation: tmNoteFadeIn 220ms ease-out;
+}
+
+@keyframes tmNoteFadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Mini state — graphic + history */
+.tm-note-mini {
+  display: flex;
+  align-items: stretch;
+}
+
+.tm-graphic-mini {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 0;
+  gap: 4px;
+}
+
+.tm-graphic-mini-label {
+  font-size: 10px;
+  color: var(--text-secondary, #71717a);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tm-graphic-mini-range {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: -0.01em;
+}
+
+.tm-history-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.tm-history-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+.tm-history-summary-row > span {
+  color: var(--text-secondary, #71717a);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tm-history-summary-row > strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+/* Inside expanded note: nested cards/tables get clean treatment */
+.tm-note-expanded .panel-card,
+.tm-note-expanded .sf-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.tm-note-expanded .data-table-shell {
+  background: transparent;
+}
+
+.tm-note-expanded .empty-state {
+  padding: 24px 0;
+}
+
+/* Override the legacy density-pass styles when sticky-notes is active */
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-summary,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-incidents,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-incident-history-card,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-progress-panel,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-panel,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-graphic-panel,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-history,
+.tm-drawer-panel.tm-drawer-stickynotes .trip-monitor-detail-panels {
+  /* legacy section styles do not apply to new structure; reset */
+  display: revert;
+}
+
+/* Scrollbar tweak for sticky wall */
+.tm-sticky-wall::-webkit-scrollbar { width: 8px; }
+.tm-sticky-wall::-webkit-scrollbar-track { background: transparent; }
+.tm-sticky-wall::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 130, 0.18);
+  border-radius: 4px;
+}
+.tm-sticky-wall::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 130, 0.32);
+}
+
+/* Fullscreen mode: more breathing room, larger min cards */
+.tm-drawer-panel.is-fullscreen.tm-drawer-stickynotes .tm-sticky-wall {
+  padding: 20px 32px 28px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.tm-drawer-panel.is-fullscreen.tm-drawer-stickynotes .tm-drawer-map-section {
+  flex-basis: 55%;
+}
+
+@media (max-width: 720px) {
+  .tm-sticky-wall { grid-template-columns: 1fr; }
+  .tm-note-wide { grid-column: 1 / -1; }
+}
