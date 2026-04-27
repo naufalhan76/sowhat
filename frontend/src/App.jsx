@@ -4510,11 +4510,12 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
 }
 
 const FLEET_WORKSPACE_SPLIT_KEY = 'sowhat:fleet-workspace-split';
-const FLEET_WORKSPACE_SPLIT_MIN = 0.35;
-const FLEET_WORKSPACE_SPLIT_MAX = 0.85;
+const FLEET_WORKSPACE_SPLIT_MIN = 0.45;
+const FLEET_WORKSPACE_SPLIT_MAX = 0.92;
+const FLEET_WORKSPACE_SPLIT_DEFAULT = 0.82;
 
 function readFleetWorkspaceSplit() {
-  if (typeof window === 'undefined') return 0.7;
+  if (typeof window === 'undefined') return FLEET_WORKSPACE_SPLIT_DEFAULT;
   try {
     const raw = window.localStorage.getItem(FLEET_WORKSPACE_SPLIT_KEY);
     const parsed = parseFloat(raw);
@@ -4524,7 +4525,7 @@ function readFleetWorkspaceSplit() {
   } catch (_err) {
     // ignore
   }
-  return 0.7;
+  return FLEET_WORKSPACE_SPLIT_DEFAULT;
 }
 
 function FleetWorkspace({
@@ -4647,10 +4648,18 @@ function FleetWorkspace({
               >
                 <span className={`fleet-workspace-row-dot fleet-workspace-row-dot-${state.tone}`} aria-hidden />
                 <span className="fleet-workspace-row-main">
-                  <span className="fleet-workspace-row-id">{row.id}</span>
-                  <span className="fleet-workspace-row-label">{row.label || '-'}</span>
+                  <span className="fleet-workspace-row-label">{row.label || row.alias || '-'}</span>
                   <span className="fleet-workspace-row-meta">
                     {row.locationSummary || row.zoneName || 'No location'}
+                  </span>
+                  <span className="fleet-workspace-row-status">
+                    {row.geofenceStatusLabel
+                      ? <span className={`fleet-workspace-row-tag fleet-workspace-row-tag-${geofenceChipTone(row)}`}>{row.geofenceStatusLabel}</span>
+                      : null}
+                    {row.astroActive && row.astroStatusLabel
+                      ? <span className={`fleet-workspace-row-tag fleet-workspace-row-tag-${row.astroCurrentLocation ? 'warning' : 'default'}`}>{row.astroStatusLabel}</span>
+                      : null}
+                    <span className={`fleet-workspace-row-tag fleet-workspace-row-tag-${state.tone}`}>{state.label}</span>
                   </span>
                 </span>
                 <span className="fleet-workspace-row-stats">
@@ -4660,7 +4669,6 @@ function FleetWorkspace({
                   <span className={`fleet-workspace-row-temp ${tempFault === 'temp2' || tempFault === 'temp1+temp2' ? 'is-fault' : ''}`}>
                     {fmtNum(row.liveTemp2)}
                   </span>
-                  <span className="fleet-workspace-row-state">{state.label}</span>
                 </span>
               </button>
             );
@@ -4746,7 +4754,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
     <div className="fleet-workspace-detail-shell">
       <header className="fleet-workspace-detail-head">
         <div className="fleet-workspace-detail-title">
-          <h2>{row.id} <span className="fleet-workspace-detail-label">· {row.label || '-'}</span></h2>
+          <h2>{row.label || row.alias || '-'}</h2>
           <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
             <Chip color={state.tone} variant="flat">{state.label}</Chip>
@@ -5116,23 +5124,16 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
   const hasMapData = routePointCount > 0 || Boolean(currentPoint) || stopMarkers.length > 0;
 
   return <div className="unit-map-shell unit-map-shell-dark">
-    <div className="unit-map-head">
-      <div>
-        <strong>Route history map</strong>
-        <span>{rangeLabel ? `Track mengikuti date range ${rangeLabel}` : 'Track mengikuti historical data yang sedang ditarik.'}</span>
-      </div>
-      <div className="unit-map-actions">
-        <Button variant="bordered" onPress={() => setShowRoute((current) => !current)}>{showRoute ? 'Hide route' : 'Show route'}</Button>
-      </div>
-      <div className="chip-row unit-map-chip-row">
-        <Chip variant="flat">{routePointCount ? `${routePointCount} titik route` : 'Belum ada titik route'}</Chip>
-        <Chip variant="flat">{stopMarkers.length ? `${stopMarkers.length} marker stop TMS` : 'Stop TMS belum siap'}</Chip>
-        <Chip variant="flat">OSM dark mode</Chip>
-        <Chip variant="flat">Start / load / unload / current marker</Chip>
-      </div>
-    </div>
     <div className="unit-map-frame">
       <div ref={containerRef} className="unit-map-canvas" />
+      <button
+        type="button"
+        className="unit-map-route-toggle"
+        onClick={() => setShowRoute((current) => !current)}
+        aria-pressed={showRoute}
+      >
+        {showRoute ? 'Hide route' : 'Show route'}
+      </button>
       {!leaflet ? <div className="unit-map-overlay">Loading map...</div> : null}
       {leaflet && busy ? <div className="unit-map-overlay">Loading route map...</div> : null}
       {leaflet && !busy && !hasMapData ? <div className="unit-map-overlay">Belum ada koordinat historis untuk digambar di map.</div> : null}
@@ -5263,6 +5264,30 @@ function OverviewBarList({ items, busy, emptyMessage, valueKey = 'value', valueF
   })}</div>;
 }
 
+function niceTicks(min, max, count = 5) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+    const v = Number.isFinite(min) ? min : 0;
+    return [v - 1, v, v + 1];
+  }
+  const range = max - min;
+  const rough = range / Math.max(1, count - 1);
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.abs(rough) || 1)));
+  const fraction = rough / pow;
+  let nice;
+  if (fraction < 1.5) nice = 1;
+  else if (fraction < 3) nice = 2;
+  else if (fraction < 7) nice = 5;
+  else nice = 10;
+  const step = nice * pow;
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = niceMin; v <= niceMax + step / 2; v += step) {
+    ticks.push(parseFloat(v.toFixed(10)));
+  }
+  return ticks;
+}
+
 function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
   const normalizedThresholdRange = normalizeTemperatureRange(thresholdMin, thresholdMax);
@@ -5291,21 +5316,22 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
     ? Number(chartHeight)
     : compact ? 240 : 320;
-  const padding = { top: 20, right: 20, bottom: 34, left: 44 };
+  const padding = { top: 18, right: 24, bottom: 44, left: 56 };
   const thresholdValues = [normalizedThresholdRange.min, normalizedThresholdRange.max].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
     const rawMin = Math.min(...temps);
     const rawMax = Math.max(...temps);
-    const pad = Math.max(1, (rawMax - rawMin) * 0.18 || 1);
-    const minY = rawMin - pad;
-    const maxY = rawMax + pad;
+    const pad = Math.max(1, (rawMax - rawMin) * 0.15 || 1);
+    const yTicks = niceTicks(rawMin - pad, rawMax + pad, 5);
+    const minY = yTicks[0];
+    const maxY = yTicks[yTicks.length - 1];
     const isNegativeRange = normalizedThresholdRange.min < 0 && normalizedThresholdRange.max <= 0;
     const minLabel = isNegativeRange ? `${thresholdLabel} max` : `${thresholdLabel} min`;
     const maxLabel = isNegativeRange ? `${thresholdLabel} min` : `${thresholdLabel} max`;
 
     const thresholdGuides = [
-      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: '#38BDF8', label: minLabel } : null,
-      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: '#F43F5E', label: maxLabel } : null,
+      Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: 'var(--chart-threshold-low)', label: minLabel } : null,
+      Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: 'var(--chart-threshold-high)', label: maxLabel } : null,
     ].filter(Boolean);
   const timeStart = series[0].timestamp;
   const timeEnd = series[series.length - 1].timestamp;
@@ -5319,8 +5345,12 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   }, '');
   const temp1Path = buildPath('temp1');
   const temp2Path = buildPath('temp2');
-  const guideValues = [minY, (minY + maxY) / 2, maxY];
-  const timeGuides = [timeStart, timeStart + (timeEnd - timeStart) / 2, timeEnd];
+  const guideValues = yTicks;
+  const xTickCount = compact ? 5 : 6;
+  const timeGuides = timeStart === timeEnd
+    ? [timeStart]
+    : Array.from({ length: xTickCount }, (_, i) => timeStart + ((timeEnd - timeStart) * i) / (xTickCount - 1));
+  const spansMultipleDays = timeStart && timeEnd && new Date(timeStart).toDateString() !== new Date(timeEnd).toDateString();
   const plottedPoints = series.map((record, index) => ({
     record,
     absoluteIndex: rangeStart + index,
@@ -5436,36 +5466,56 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
       <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label="Temperature trend chart" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerLeave}>
         <defs>
           <linearGradient id={`fillTemp1-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F97316" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#F97316" stopOpacity="0.0" />
+            <stop offset="0%" stopColor="var(--chart-temp1)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--chart-temp1)" stopOpacity="0.0" />
           </linearGradient>
           <linearGradient id={`fillTemp2-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#A855F7" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
+            <stop offset="0%" stopColor="var(--chart-temp2)" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="var(--chart-temp2)" stopOpacity="0.0" />
           </linearGradient>
         </defs>
-        <rect x="0" y="0" width={width} height={height} rx="12" fill="var(--chart-panel-fill)" />
+        <rect x="0" y="0" width={width} height={height} rx="10" fill="var(--chart-panel-fill)" />
+        <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
+        <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
         {guideValues.map((value, index) => {
             const y = yFor(value);
-            return <g key={`guide-${index}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="6 8" /><text x="8" y={y + 4} fontSize="12" fill="var(--chart-guide-text)">{Number(value).toFixed(1)}</text></g>;
+            if (y === null || y < padding.top - 0.5 || y > height - padding.bottom + 0.5) return null;
+            return <g key={`guide-${index}`}>
+              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="2 4" />
+              <line x1={padding.left - 4} x2={padding.left} y1={y} y2={y} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
+              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}°</text>
+            </g>;
           })}
-          {thresholdGuides.map((guide) => {
+        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
+        {thresholdGuides.map((guide) => {
             const y = yFor(guide.value);
-            return <g key={`threshold-${guide.key}`}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1.5" strokeDasharray="10 6" /><text x={width - padding.right} y={y - 6} textAnchor="end" fontSize="11" fill={guide.color}>{guide.label} {fmtNum(guide.value, 1)}</text></g>;
+            if (y === null) return null;
+            return <g key={`threshold-${guide.key}`}>
+              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1" strokeDasharray="6 5" opacity="0.75" />
+              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} · {fmtNum(guide.value, 1)}°</text>
+            </g>;
           })}
         {timeGuides.map((value, index) => {
           const x = xFor(value);
-          return <g key={`time-${index}`}><line x1={x} x2={x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-time-stroke)" /><text x={x} y={height - 10} fontSize="12" textAnchor={index === 0 ? 'start' : index === timeGuides.length - 1 ? 'end' : 'middle'} fill="var(--chart-guide-text)">{fmtClock(value)}</text></g>;
+          const isFirst = index === 0;
+          const isLast = index === timeGuides.length - 1;
+          const showDate = spansMultipleDays && (isFirst || isLast);
+          return <g key={`time-${index}`}>
+            <line x1={x} x2={x} y1={height - padding.bottom} y2={height - padding.bottom + 4} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
+            <text x={x} y={height - padding.bottom + 18} fontSize="11" textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'} fill="var(--chart-guide-text)" className="chart-axis-tick">{fmtClock(value)}</text>
+            {showDate ? <text x={x} y={height - padding.bottom + 32} fontSize="10" textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'} fill="var(--chart-axis-label)" className="chart-axis-label">{fmtDateOnly(value)}</text> : null}
+          </g>;
         })}
+        <text x={padding.left + (width - padding.left - padding.right) / 2} y={height - 4} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label">Time</text>
         {temp1Path ? <path d={`${temp1Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp1-${chartId})`} /> : null}
-        {temp1Path ? <path d={temp1Path} fill="none" stroke="#F97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
         {temp2Path ? <path d={`${temp2Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp2-${chartId})`} /> : null}
-        {temp2Path ? <path d={temp2Path} fill="none" stroke="#A855F7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
-        {dragState && selectionWidth > 0 ? <rect x={selectionStart} y={padding.top} width={selectionWidth} height={height - padding.top - padding.bottom} fill="rgba(249,115,22,0.14)" stroke="rgba(249,115,22,0.62)" strokeDasharray="6 6" rx="8" /> : null}
+        {temp2Path ? <path d={temp2Path} fill="none" stroke="var(--chart-temp2)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /> : null}
+        {temp1Path ? <path d={temp1Path} fill="none" stroke="var(--chart-temp1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
+        {dragState && selectionWidth > 0 ? <rect x={selectionStart} y={padding.top} width={selectionWidth} height={height - padding.top - padding.bottom} fill="rgba(16,185,129,0.10)" stroke="rgba(16,185,129,0.55)" strokeDasharray="4 4" rx="4" /> : null}
         {hoveredPoint ? <g>
-          <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-crosshair-stroke)" strokeDasharray="4 6" />
-          {hoveredPoint.temp1Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp1Y} r="4.5" fill="#F97316" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
-          {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4.5" fill="#A855F7" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
+          <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-crosshair-stroke)" strokeDasharray="3 4" />
+          {hoveredPoint.temp1Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp1Y} r="4" fill="var(--chart-temp1)" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
+          {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4" fill="var(--chart-temp2)" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
         </g> : null}
       </svg>
       {hoveredPoint ? <div className="chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}>

@@ -113,12 +113,18 @@
   --tooltip-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 
   /* Charts */
-  --chart-panel-fill: rgba(15, 16, 18, 0.7);
-  --chart-guide-stroke: rgba(255, 255, 255, 0.05);
-  --chart-guide-text: rgba(255, 255, 255, 0.4);
+  --chart-panel-fill: rgba(15, 16, 18, 0.55);
+  --chart-axis-stroke: rgba(255, 255, 255, 0.14);
+  --chart-guide-stroke: rgba(255, 255, 255, 0.06);
+  --chart-guide-text: rgba(255, 255, 255, 0.55);
+  --chart-axis-label: rgba(255, 255, 255, 0.38);
   --chart-time-stroke: rgba(255, 255, 255, 0.04);
-  --chart-crosshair-stroke: rgba(16, 185, 129, 0.3);
+  --chart-crosshair-stroke: rgba(16, 185, 129, 0.45);
   --chart-point-stroke: #08090B;
+  --chart-temp1: #10B981;
+  --chart-temp2: #94A3B8;
+  --chart-threshold-low: #38BDF8;
+  --chart-threshold-high: #FB923C;
 
   /* Dropdowns / overlays */
   --dropdown-surface: #16181B;
@@ -270,11 +276,17 @@
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
 
   --chart-panel-fill: #FAFAFA;
+  --chart-axis-stroke: #D4D4D8;
   --chart-guide-stroke: #E4E4E7;
-  --chart-guide-text: #52525B;
+  --chart-guide-text: #3F3F46;
+  --chart-axis-label: #71717A;
   --chart-time-stroke: #E4E4E7;
   --chart-crosshair-stroke: #059669;
   --chart-point-stroke: #FFFFFF;
+  --chart-temp1: #059669;
+  --chart-temp2: #64748B;
+  --chart-threshold-low: #0284C7;
+  --chart-threshold-high: #EA580C;
 
   --dropdown-surface: #FFFFFF;
   --dropdown-input-bg: #F4F4F5;
@@ -1844,13 +1856,24 @@ textarea:focus {
 }
 
 .legend-dot-temp1 {
-  background: #6366F1;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.35);
+  background: var(--chart-temp1);
 }
 
 .legend-dot-temp2 {
-  background: #A855F7;
-  box-shadow: 0 0 10px rgba(168, 85, 247, 0.32);
+  background: var(--chart-temp2);
+}
+
+.chart-svg .chart-axis-tick {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: 0.01em;
+}
+
+.chart-svg .chart-axis-label {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 @media (max-width: 1200px) {
@@ -10252,22 +10275,19 @@ html, body {
   gap: 1px;
   min-width: 0;
 }
-.fleet-workspace-row-id {
-  font-size: 12.5px;
+.fleet-workspace-row-label {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-dark);
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-feature-settings: 'tnum' 1, 'zero' 1;
-}
-.fleet-workspace-row.is-active .fleet-workspace-row-id {
-  color: var(--primary);
-}
-.fleet-workspace-row-label {
-  font-size: 12px;
-  color: var(--text-secondary);
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.fleet-workspace-row.is-active .fleet-workspace-row-label {
+  color: var(--primary);
 }
 .fleet-workspace-row-meta {
   font-size: 11px;
@@ -10296,12 +10316,60 @@ html, body {
   color: #ef4444;
   font-weight: 600;
 }
-.fleet-workspace-row-state {
-  font-size: 10.5px;
-  color: var(--text-muted);
-  text-transform: lowercase;
-  letter-spacing: 0;
-  margin-top: 1px;
+.fleet-workspace-row-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.fleet-workspace-row-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.fleet-workspace-row-tag-success {
+  color: #16a34a;
+  background: rgba(34, 197, 94, 0.10);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+.fleet-workspace-row-tag-warning {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.fleet-workspace-row-tag-danger {
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.fleet-workspace-row-tag-primary {
+  color: var(--primary);
+  background: rgba(16, 185, 129, 0.10);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+[data-theme="dark"] .fleet-workspace-row-tag-success {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.30);
+}
+[data-theme="dark"] .fleet-workspace-row-tag-warning {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.30);
+}
+[data-theme="dark"] .fleet-workspace-row-tag-danger {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.32);
 }
 
 /* ---- Right: detail pane ---- */
@@ -10438,6 +10506,52 @@ html, body {
 .fleet-workspace-split-map .leaflet-container {
   height: 100% !important;
   min-height: 0 !important;
+}
+.fleet-workspace-split-map .unit-map-frame {
+  position: relative;
+}
+.unit-map-route-toggle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.unit-map-route-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(16, 185, 129, 0.16);
+}
+.unit-map-route-toggle:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+}
+[data-theme="dark"] .unit-map-route-toggle {
+  background: rgba(20, 22, 26, 0.92);
+  color: rgba(255, 255, 255, 0.86);
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(6px);
+}
+[data-theme="dark"] .unit-map-route-toggle:hover {
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #34d399;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.40);
 }
 
 .fleet-workspace-split-chart {
