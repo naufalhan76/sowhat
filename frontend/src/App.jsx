@@ -4941,10 +4941,11 @@ function FleetStatusMap({ rows }) {
   </div>;
 }
 
-function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
+function UnitRouteMap({ row, records, busy, rangeLabel, stops = [], hoveredStopKey = null, onHoverStop = null }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const containerRef = useRef(null);
+  const stopMarkerRefs = useRef(new Map());
   const mapInteractionRef = useRef(false);
   const lastFitKeyRef = useRef('');
   const [showRoute, setShowRoute] = useState(true);
@@ -5101,18 +5102,25 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
       }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', currentPoint)).addTo(layer);
     }
 
-    stopMarkers.forEach((stop) => {
+    stopMarkerRefs.current.clear();
+    stopMarkers.forEach((stop, i) => {
       const stopLatLng = [stop.latitude, stop.longitude];
       const tone = stop.taskType === 'load' ? 'load' : 'unload';
+      const key = tripMonitorStopKey(stop, i);
       bounds.push(stopLatLng);
-      leaflet.marker(stopLatLng, {
+      const marker = leaflet.marker(stopLatLng, {
         icon: leaflet.divIcon({
           className: 'trip-stop-marker-shell',
-          html: `<div class="trip-stop-marker trip-stop-marker-${tone}">${escapeHtml(stop.label)}</div>`,
+          html: `<div class="trip-stop-marker trip-stop-marker-${tone}" data-stop-key="${escapeHtml(key)}">${escapeHtml(stop.label)}</div>`,
           iconSize: [34, 34],
           iconAnchor: [17, 17],
         }),
       }).bindPopup(buildStopPopupHtml(stop)).addTo(layer);
+      if (key) {
+        stopMarkerRefs.current.set(key, marker);
+        marker.on('mouseover', () => onHoverStop?.(key));
+        marker.on('mouseout', () => onHoverStop?.((current) => (current === key ? null : current)));
+      }
     });
 
     if (!mapInteractionRef.current && lastFitKeyRef.current !== mapFitKey) {
@@ -5127,6 +5135,16 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
     }
     window.setTimeout(() => map.invalidateSize(), 50);
   }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers, mapFitKey]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const nodes = container.querySelectorAll('.trip-stop-marker');
+    nodes.forEach((node) => {
+      const matches = node.getAttribute('data-stop-key') === hoveredStopKey;
+      node.classList.toggle('is-hovered', !!hoveredStopKey && matches);
+    });
+  }, [hoveredStopKey, stopMarkers]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5660,7 +5678,18 @@ const SHIPPING_STEP_ICONS = {
   'selesai': Box,
 };
 
-function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
+function tripMonitorStopKey(stop, fallbackIndex) {
+  if (!stop) return null;
+  const idx = Number(stop.idx);
+  const taskType = String(stop.taskType || stop.type || stop.task_type || '').trim().toLowerCase();
+  if (Number.isFinite(idx) && idx > 0) return `${taskType || 'stop'}:${idx}`;
+  const lat = Number(stop.latitude);
+  const lng = Number(stop.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return `${taskType || 'stop'}:${lat.toFixed(5)}:${lng.toFixed(5)}`;
+  return `${taskType || 'stop'}:fallback:${fallbackIndex ?? 0}`;
+}
+
+function TripMonitorShippingProgressClean({ shippingStatus, headlineJob, hoveredStopKey = null, onHoverStop = null }) {
   const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
     ? shippingStatus.steps
     : [
@@ -5708,10 +5737,22 @@ function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
               {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {stopLabel}
             </button> : <small>{stepNote}</small>}
             {isExpanded && multiStops ? <div className="trip-monitor-progress-stops">
-              {multiStops.map((stop, i) => <div key={i} className="trip-monitor-progress-stop-item">
-                {stop.arrived || stop.completed ? <span className="trip-monitor-progress-stop-check">{'\u2713'}</span> : <span className="trip-monitor-progress-stop-pending" />}
-                <span>{stop.taskAddress || stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
-              </div>)}
+              {multiStops.map((stop, i) => {
+                const key = tripMonitorStopKey(stop, i);
+                const isHovered = key && hoveredStopKey === key;
+                return <div
+                  key={i}
+                  className={`trip-monitor-progress-stop-item ${isHovered ? 'is-hovered' : ''}`}
+                  onMouseEnter={() => onHoverStop?.(key)}
+                  onMouseLeave={() => onHoverStop?.((current) => (current === key ? null : current))}
+                  onFocus={() => onHoverStop?.(key)}
+                  onBlur={() => onHoverStop?.((current) => (current === key ? null : current))}
+                  tabIndex={0}
+                >
+                  {stop.arrived || stop.completed ? <span className="trip-monitor-progress-stop-check">{'\u2713'}</span> : <span className="trip-monitor-progress-stop-pending" />}
+                  <span>{stop.taskAddress || stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
+                </div>;
+              })}
             </div> : null}
           </div>
         </div>;
@@ -5902,6 +5943,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const displayUnitLabel = pickFirstText(fleetRow?.alias, detail.unitLabel, fleetRow?.label, detail.unitId) || '-';
   const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
   const mapStops = headlineJob?.stops || [];
+  const [hoveredStopKey, setHoveredStopKey] = useState(null);
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
   const shippingStatus = detail?.metadata?.shippingStatus || {
     label: detail?.shippingStatusLabel || '-',
@@ -6034,7 +6076,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
               </div>
             </CardHeader>
             <CardContent>
-              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} />
+              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
             </CardContent>
           </Card>
           <div className="split-panels trip-monitor-detail-panels">
@@ -6046,7 +6088,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
                 </div>
               </CardHeader>
               <CardContent>
-                {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+                {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
               </CardContent>
             </Card>
             <Card className="panel-card trip-monitor-detail-panel trip-monitor-detail-graphic-panel">

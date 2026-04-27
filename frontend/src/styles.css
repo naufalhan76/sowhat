@@ -2948,6 +2948,25 @@ textarea:focus {
   background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
 }
 
+.trip-stop-marker {
+  transition: transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 160ms ease-out, border-color 160ms ease-out;
+  will-change: transform;
+}
+
+.trip-stop-marker.is-hovered {
+  transform: scale(1.18);
+  border-color: var(--primary, #10B981);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 10px 22px rgba(2, 6, 23, 0.42);
+  z-index: 1000;
+  position: relative;
+  animation: tripStopMarkerPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tripStopMarkerPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 10px 22px rgba(2, 6, 23, 0.42); }
+  50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.10), 0 10px 22px rgba(2, 6, 23, 0.42); }
+}
+
 @media (max-width: 900px) {
   .unit-map-head {
     flex-direction: column;
@@ -5751,6 +5770,24 @@ textarea:focus {
   gap: 6px;
   font-size: 11px;
   color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: default;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out;
+}
+
+.trip-monitor-progress-stop-item:hover,
+.trip-monitor-progress-stop-item.is-hovered {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: var(--text-primary, inherit);
+  transform: translateX(2px);
+}
+
+.trip-monitor-progress-stop-item:focus-visible {
+  outline: 2px solid var(--primary, #10B981);
+  outline-offset: 2px;
 }
 
 .trip-monitor-progress-stop-check {
