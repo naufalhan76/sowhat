@@ -1,10 +1,30 @@
 
-import React, { startTransition, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
+import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
+
+const ROUTE_PANEL_IDS = new Set([
+  'overview', 'fleet', 'trip-monitor', 'map', 'astro-report', 'temp-errors',
+  'stop', 'api-monitor', 'historical', 'pod', 'config', 'admin',
+]);
+
+function useActivePanelRoute() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const segment = (location.pathname || '/').split('/').filter(Boolean)[0] || 'overview';
+  const activePanel = ROUTE_PANEL_IDS.has(segment) ? segment : 'overview';
+  const setActivePanel = useCallback((next) => {
+    const value = typeof next === 'function' ? next(activePanel) : next;
+    if (!value || !ROUTE_PANEL_IDS.has(value)) return;
+    if (value === activePanel) return;
+    navigate('/' + value);
+  }, [navigate, activePanel]);
+  return [activePanel, setActivePanel];
+}
 const Button = ({ children, variant, color, className = '', onPress, ...props }) => {
   const baseClass = variant === 'bordered' ? 'sf-btn-bordered' : variant === 'light' ? 'sf-btn-light' : 'sf-btn-primary';
   return <button type="button" className={`sf-btn ${baseClass} ${className}`} onClick={onPress} {...props}>{children}</button>;
@@ -812,7 +832,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState('Sedang memproses aksi...');
   const [loaded, setLoaded] = useState(false);
-  const [activePanel, setActivePanel] = useState('overview');
+  const [activePanel, setActivePanel] = useActivePanelRoute();
   const [selectedUnitId, setSelectedUnitId] = useState('');
   const [selectedUnitAccountId, setSelectedUnitAccountId] = useState('primary');
   const [activeAccountId, setActiveAccountId] = useState('primary');
