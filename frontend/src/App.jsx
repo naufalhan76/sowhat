@@ -3383,7 +3383,27 @@ export default function App() {
               </CardContent>
             </Card>
           </> : null}
-          {activePanel === 'fleet' ? <>
+          {activePanel === 'fleet' ? <FleetWorkspace
+            rows={prioritizedFleet}
+            selectedRow={selectedFleetRow}
+            onSelectUnit={(row) => openUnit(row.accountId || 'primary', row.id, 'fleet')}
+            detail={unitDetail}
+            detailBusy={detailBusy}
+            quickFilter={quickFilter}
+            onQuickFilterChange={handleQuickFilterSelect}
+            autoFilterCards={autoFilterCards}
+            fleetAccountFilter={fleetAccountFilter}
+            onFleetAccountFilterChange={setFleetAccountFilter}
+            fleetFilterAccounts={fleetFilterAccounts}
+            fleetCategoryFilter={fleetCategoryFilter}
+            onFleetCategoryFilterChange={setFleetCategoryFilter}
+            onExportFleet={exportFleet}
+            onOpenTempErrors={(row) => openUnit(row.accountId || 'primary', row.id, 'temp-errors')}
+            onSeeHistorical={(row) => openUnit(row.accountId || 'primary', row.id, 'historical')}
+            rangeLabel={`${range.startDate} to ${range.endDate}`}
+          /> : null}
+          {/* Fleet legacy table block — DEPRECATED, kept disabled for reference; remove after parity confirmed */}
+          {false ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
                 <span>All Fleet</span><span className="filter-badge">All</span>
@@ -4416,36 +4436,7 @@ export default function App() {
         /> : null}
         {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
-      {expandedFleetRow ? <div className="fleet-detail-modal-backdrop" onClick={() => setExpandedFleetRowKey('')}>
-        <Card className="fleet-detail-modal-card" onClick={(event) => event.stopPropagation()}>
-          <CardHeader className="panel-card-header">
-            <div>
-              <p className="eyebrow local-eyebrow">Fleet live graphic</p>
-              <h2>{expandedFleetRow.id} | {expandedFleetRow.label}</h2>
-              <p>{expandedFleetRow.accountLabel || expandedFleetRow.accountId || '-'} | {expandedFleetRow.locationSummary || 'No location'}</p>
-            </div>
-            <div className="inline-buttons">
-              <Button variant="bordered" onPress={() => setExpandedFleetRowKey('')}>Close</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <FleetExpandedDetails
-              row={expandedFleetRow}
-              detail={activeDetailRow && unitRowKey(activeDetailRow) === unitRowKey(expandedFleetRow) ? unitDetail : { records: [] }}
-              busy={activeDetailRow && unitRowKey(activeDetailRow) === unitRowKey(expandedFleetRow) ? detailBusy : false}
-              rangeLabel={`${range.startDate} to ${range.endDate}`}
-              onOpenTempErrors={() => {
-                openUnit(expandedFleetRow.accountId || 'primary', expandedFleetRow.id, 'temp-errors');
-                setExpandedFleetRowKey('');
-              }}
-              onSeeHistorical={() => {
-                openUnit(expandedFleetRow.accountId || 'primary', expandedFleetRow.id, 'historical');
-                setExpandedFleetRowKey('');
-              }}
-            />
-          </CardContent>
-        </Card>
-      </div> : null}
+      {/* Fleet detail modal removed — selected unit detail now renders inline inside FleetWorkspace */}
       
       <StatusFooter
         isPolling={!!status?.runtime?.isPolling}
@@ -4516,6 +4507,321 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
     <UnitRouteMap row={row} records={routeRecords} busy={busy} rangeLabel={rangeLabel} />
     <TemperatureChart records={routeRecords} busy={busy} title="Temperature trend" description="Historical Solofleet dari unit yang sedang kamu buka. Hover line buat lihat suhu dan waktu, lalu pakai zoom controls kalau mau fokus ke window tertentu." compact />
   </div>;
+}
+
+const FLEET_WORKSPACE_SPLIT_KEY = 'sowhat:fleet-workspace-split';
+const FLEET_WORKSPACE_SPLIT_MIN = 0.35;
+const FLEET_WORKSPACE_SPLIT_MAX = 0.85;
+
+function readFleetWorkspaceSplit() {
+  if (typeof window === 'undefined') return 0.7;
+  try {
+    const raw = window.localStorage.getItem(FLEET_WORKSPACE_SPLIT_KEY);
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed >= FLEET_WORKSPACE_SPLIT_MIN && parsed <= FLEET_WORKSPACE_SPLIT_MAX) {
+      return parsed;
+    }
+  } catch (_err) {
+    // ignore
+  }
+  return 0.7;
+}
+
+function FleetWorkspace({
+  rows,
+  selectedRow,
+  onSelectUnit,
+  detail,
+  detailBusy,
+  quickFilter,
+  onQuickFilterChange,
+  autoFilterCards,
+  fleetAccountFilter,
+  onFleetAccountFilterChange,
+  fleetFilterAccounts,
+  fleetCategoryFilter,
+  onFleetCategoryFilterChange,
+  onExportFleet,
+  onOpenTempErrors,
+  onSeeHistorical,
+  rangeLabel,
+}) {
+  const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
+  const filteredRows = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const haystack = `${row.id || ''} ${row.label || ''} ${row.alias || ''} ${row.accountLabel || row.accountId || ''} ${row.locationSummary || ''} ${row.zoneName || ''}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, deferredSearch]);
+
+  const accountOptions = fleetFilterAccounts || [];
+  const categoryOptions = UNIT_CATEGORY_OPTIONS;
+
+  const selectedRowKey = selectedRow ? unitRowKey(selectedRow) : '';
+
+  return (
+    <div className="fleet-workspace" data-has-selection={selectedRow ? 'true' : 'false'}>
+      <aside className="fleet-workspace-list" aria-label="Fleet list">
+        <div className="fleet-workspace-list-toolbar">
+          <label className="fleet-workspace-search">
+            <span className="sr-only">Cari unit</span>
+            <Search size={14} className="fleet-workspace-search-icon" aria-hidden />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari unit, nopol, lokasi..."
+            />
+          </label>
+          <div className="fleet-workspace-list-filters">
+            <select
+              aria-label="Account filter"
+              value={fleetAccountFilter}
+              onChange={(event) => onFleetAccountFilterChange(event.target.value)}
+            >
+              <option value="all">All accounts</option>
+              {accountOptions.map((account) => (
+                <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Category filter"
+              value={fleetCategoryFilter}
+              onChange={(event) => onFleetCategoryFilterChange(event.target.value)}
+            >
+              <option value="all">All categories</option>
+              {categoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="fleet-workspace-pills" role="tablist" aria-label="Fleet quick filters">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={quickFilter === 'all'}
+            className={`fleet-workspace-pill ${quickFilter === 'all' ? 'active' : ''}`}
+            onClick={() => onQuickFilterChange('all')}
+          >
+            <span>All</span>
+            <span className="fleet-workspace-pill-count">{rows.length}</span>
+          </button>
+          {autoFilterCards.map((card) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={quickFilter === card.id}
+              key={card.id}
+              className={`fleet-workspace-pill ${quickFilter === card.id ? 'active' : ''}`}
+              onClick={() => onQuickFilterChange(card.id)}
+            >
+              <span>{card.label}</span>
+              <span className="fleet-workspace-pill-count">{card.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="fleet-workspace-list-meta">
+          <span>{filteredRows.length} of {rows.length}</span>
+          <button type="button" className="fleet-workspace-export" onClick={onExportFleet}>Export CSV</button>
+        </div>
+        <div className="fleet-workspace-rows" role="list">
+          {filteredRows.length === 0 ? (
+            <div className="fleet-workspace-empty">Tidak ada unit yang cocok dengan filter ini.</div>
+          ) : filteredRows.map((row, idx) => {
+            const rowKey = unitRowKey(row);
+            const state = health(row);
+            const active = rowKey === selectedRowKey;
+            const tempFault = row.liveSensorFaultType || '';
+            return (
+              <button
+                type="button"
+                role="listitem"
+                key={row.rowKey || rowKey || `fleet-row-${idx}`}
+                className={`fleet-workspace-row ${active ? 'is-active' : ''} fleet-workspace-row-${state.tone}`}
+                onClick={() => onSelectUnit(row)}
+                aria-pressed={active}
+              >
+                <span className={`fleet-workspace-row-dot fleet-workspace-row-dot-${state.tone}`} aria-hidden />
+                <span className="fleet-workspace-row-main">
+                  <span className="fleet-workspace-row-id">{row.id}</span>
+                  <span className="fleet-workspace-row-label">{row.label || '-'}</span>
+                  <span className="fleet-workspace-row-meta">
+                    {row.locationSummary || row.zoneName || 'No location'}
+                  </span>
+                </span>
+                <span className="fleet-workspace-row-stats">
+                  <span className={`fleet-workspace-row-temp ${tempFault === 'temp1' || tempFault === 'temp1+temp2' ? 'is-fault' : ''}`}>
+                    {fmtNum(row.liveTemp1)}
+                  </span>
+                  <span className={`fleet-workspace-row-temp ${tempFault === 'temp2' || tempFault === 'temp1+temp2' ? 'is-fault' : ''}`}>
+                    {fmtNum(row.liveTemp2)}
+                  </span>
+                  <span className="fleet-workspace-row-state">{state.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+      <section className="fleet-workspace-detail" aria-label="Selected unit detail">
+        {selectedRow ? (
+          <FleetWorkspaceDetail
+            row={selectedRow}
+            detail={detail}
+            busy={detailBusy}
+            rangeLabel={rangeLabel}
+            onOpenTempErrors={() => onOpenTempErrors(selectedRow)}
+            onSeeHistorical={() => onSeeHistorical(selectedRow)}
+          />
+        ) : (
+          <div className="fleet-workspace-detail-empty">
+            <p>Pilih unit di kiri untuk lihat map dan grafik suhu.</p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical }) {
+  const [splitRatio, setSplitRatio] = useState(() => readFleetWorkspaceSplit());
+  const splitContainerRef = useRef(null);
+  const dragStateRef = useRef(null);
+
+  const persistSplit = useCallback((value) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(FLEET_WORKSPACE_SPLIT_KEY, String(value));
+    } catch (_err) {
+      // ignore
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((event) => {
+    const drag = dragStateRef.current;
+    if (!drag) return;
+    const rect = splitContainerRef.current?.getBoundingClientRect();
+    if (!rect || rect.height <= 0) return;
+    const offset = Math.min(Math.max(event.clientY - rect.top, 0), rect.height);
+    const ratio = Math.min(Math.max(offset / rect.height, FLEET_WORKSPACE_SPLIT_MIN), FLEET_WORKSPACE_SPLIT_MAX);
+    setSplitRatio(ratio);
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    dragStateRef.current = null;
+    document.body.classList.remove('fleet-workspace-resizing');
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    setSplitRatio((current) => {
+      persistSplit(current);
+      return current;
+    });
+  }, [handlePointerMove, persistSplit]);
+
+  const handlePointerDown = useCallback((event) => {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
+    dragStateRef.current = { startY: event.clientY, startRatio: splitRatio };
+    document.body.classList.add('fleet-workspace-resizing');
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    event.preventDefault();
+  }, [splitRatio, handlePointerMove, handlePointerUp]);
+
+  useEffect(() => () => {
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    document.body.classList.remove('fleet-workspace-resizing');
+  }, [handlePointerMove, handlePointerUp]);
+
+  const state = health(row);
+  const routeRecords = detail?.records || [];
+  const tripMetrics = calculateTripMetrics(routeRecords);
+  const detailKey = unitRowKey(row);
+
+  return (
+    <div className="fleet-workspace-detail-shell">
+      <header className="fleet-workspace-detail-head">
+        <div className="fleet-workspace-detail-title">
+          <h2>{row.id} <span className="fleet-workspace-detail-label">· {row.label || '-'}</span></h2>
+          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
+          <div className="fleet-workspace-detail-chips">
+            <Chip color={state.tone} variant="flat">{state.label}</Chip>
+            {row.unitCategoryLabel ? <Chip variant="flat">{row.unitCategoryLabel}</Chip> : null}
+            {row.customerName ? <Chip variant="flat">{row.customerName}</Chip> : null}
+            {row.geofenceStatusLabel ? <Chip color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip> : null}
+            {row.astroActive && row.astroStatusLabel ? <Chip color={row.astroCurrentLocation ? 'warning' : 'default'} variant="flat">{row.astroStatusLabel}</Chip> : null}
+            <Chip variant="flat">Updated {fmtAgo(row.minutesSinceUpdate)}</Chip>
+          </div>
+        </div>
+        <div className="fleet-workspace-detail-actions">
+          {row.latitude !== null && row.longitude !== null ? (
+            <a
+              className="sf-btn sf-btn-bordered fleet-workspace-detail-action"
+              href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+            >Open in Maps</a>
+          ) : null}
+          <Button variant="bordered" onPress={onOpenTempErrors}>Temp errors</Button>
+          <Button variant="bordered" onPress={onSeeHistorical}>Historical</Button>
+        </div>
+      </header>
+
+      <div className="fleet-workspace-detail-metrics">
+        <SummaryMetric label="Temp 1" value={fmtNum(row.liveTemp1)} danger={row.liveSensorFaultType === 'temp1' || row.liveSensorFaultType === 'temp1+temp2'} />
+        <SummaryMetric label="Temp 2" value={fmtNum(row.liveTemp2)} danger={row.liveSensorFaultType === 'temp2' || row.liveSensorFaultType === 'temp1+temp2'} />
+        <SummaryMetric label="Gap" value={fmtNum(row.liveTempDelta)} />
+        <SummaryMetric label="Speed" value={fmtNum(row.speed, 0)} />
+        <SummaryMetric label="Trip km" value={fmtNum(tripMetrics.distanceKm, 1)} />
+        <SummaryMetric label="Setpoint" value={row.targetTempMin !== null || row.targetTempMax !== null ? `${fmtNum(row.targetTempMin)} to ${fmtNum(row.targetTempMax)}` : 'Not set'} danger={rowHasSetpointIssue(row)} />
+        <SummaryMetric label="GPS" value={row.errGps || 'OK'} danger={Boolean(row.errGps) || rowHasGpsLate(row)} />
+      </div>
+
+      <div
+        className="fleet-workspace-split"
+        ref={splitContainerRef}
+        style={{ '--fleet-split-ratio': splitRatio.toFixed(3) }}
+      >
+        <div className="fleet-workspace-split-pane fleet-workspace-split-map" key={`map-${detailKey}`}>
+          <UnitRouteMap row={row} records={routeRecords} busy={busy} rangeLabel={rangeLabel} />
+        </div>
+        <div
+          className="fleet-workspace-split-handle"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize map and chart"
+          tabIndex={0}
+          onPointerDown={handlePointerDown}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              setSplitRatio((current) => {
+                const delta = event.key === 'ArrowUp' ? -0.04 : 0.04;
+                const next = Math.min(Math.max(current + delta, FLEET_WORKSPACE_SPLIT_MIN), FLEET_WORKSPACE_SPLIT_MAX);
+                persistSplit(next);
+                return next;
+              });
+            }
+          }}
+        >
+          <span className="fleet-workspace-split-grip" aria-hidden />
+        </div>
+        <div className="fleet-workspace-split-pane fleet-workspace-split-chart" key={`chart-${detailKey}`}>
+          <TemperatureChart
+            records={routeRecords}
+            busy={busy}
+            title="Temperature trend"
+            description="Historical Solofleet dari unit terpilih. Hover line buat lihat suhu tepat di waktu itu."
+            compact
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function FleetStatusMap({ rows }) {
@@ -4794,6 +5100,17 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [] }) {
     }
     window.setTimeout(() => map.invalidateSize(), 50);
   }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers, mapFitKey]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const node = containerRef.current;
+    if (!map || !node || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      window.requestAnimationFrame(() => map.invalidateSize());
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [leaflet]);
 
   const routePointCount = trackPoints.length;
   const hasMapData = routePointCount > 0 || Boolean(currentPoint) || stopMarkers.length > 0;
