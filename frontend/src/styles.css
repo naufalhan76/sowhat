@@ -6828,7 +6828,7 @@ textarea:focus {
     'nav  bar'
     'nav  main'
     'nav  foot';
-  min-height: 100vh;
+  height: 100vh;
   background: var(--bg);
   color: var(--text-dark);
   transition: grid-template-columns 0.18s ease;
@@ -8459,7 +8459,7 @@ html, body {
     'nav  bar'
     'nav  main'
     'nav  foot';
-  min-height: 100vh;
+  height: 100vh;
   background: var(--bg);
   color: var(--text-main);
 }
@@ -8878,6 +8878,7 @@ html, body {
   width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
