@@ -9020,3 +9020,1464 @@ textarea:focus {
   border-radius: 8px;
 }
 
+
+/* ======================================================================
+   NOTION-STYLE OVERRIDE LAYER (final cascade — must remain at file end)
+   Goal: clean, breathable, modern. Strip all "high-tech wannabe" gimmicks.
+   - No tracked-out uppercase eyebrows
+   - No emerald accent bars before headings
+   - No gradient surfaces
+   - No mono in UI labels (only on tabular numerals)
+   - Soft grays, generous spacing, hairline borders, subtle hover bg
+   ====================================================================== */
+
+:root,
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  /* Notion-inspired dark palette */
+  --bg: #191919;
+  --bg-elev: #202020;
+  --surface: #191919;
+  --surface-raised: #202225;
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --surface-active: rgba(255, 255, 255, 0.08);
+  --surface-sunken: #161616;
+
+  --border: rgba(255, 255, 255, 0.094);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-focus: rgba(35, 131, 226, 0.4);
+
+  --text-main: #E6E6E6;
+  --text-dark: #ECECEC;
+  --text-secondary: #B5B5B5;
+  --text-muted: #8C8C8C;
+  --text-quiet: #6E6E6E;
+
+  --primary: #10B981;
+  --primary-hover: #34D399;
+  --primary-text: #6EE7B7;
+  --primary-glow: rgba(16, 185, 129, 0.16);
+
+  --danger-text: #FB7185;
+  --warning-text: #FBBF24;
+  --success-text: #34D399;
+
+  --sidebar-bg: #202020;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='light'] {
+  --bg: #FFFFFF;
+  --bg-elev: #F7F6F3;
+  --surface: #FFFFFF;
+  --surface-raised: #F7F6F3;
+  --surface-hover: rgba(55, 53, 47, 0.06);
+  --surface-active: rgba(55, 53, 47, 0.08);
+  --surface-sunken: #FBFBFA;
+
+  --border: #EBEBEA;
+  --border-strong: #DDDDDC;
+  --border-focus: rgba(35, 131, 226, 0.45);
+
+  --text-main: #37352F;
+  --text-dark: #1F1E1B;
+  --text-secondary: #5E5C57;
+  --text-muted: #787773;
+  --text-quiet: #9B9A97;
+
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-text: #047857;
+  --primary-glow: rgba(5, 150, 105, 0.12);
+
+  --danger-text: #B91C1C;
+  --warning-text: #B45309;
+  --success-text: #047857;
+
+  --sidebar-bg: #F7F6F3;
+  --sidebar-border: rgba(55, 53, 47, 0.09);
+
+  --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.05);
+  --shadow-md: 0 6px 24px rgba(15, 15, 15, 0.06), 0 1px 3px rgba(15, 15, 15, 0.04);
+  --shadow-lg: 0 24px 60px rgba(15, 15, 15, 0.10), 0 2px 4px rgba(15, 15, 15, 0.04);
+}
+
+html, body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  color: var(--text-main);
+}
+
+/* =====================================================================
+   Bridge shell layout — Notion vibe
+   ===================================================================== */
+.bridge-shell {
+  --navrail-width: 240px;
+  --navrail-collapsed-width: 56px;
+  --commandbar-height: 56px;
+  --statusstrip-height: 28px;
+  display: grid;
+  grid-template-columns: var(--navrail-width) 1fr;
+  grid-template-rows: var(--commandbar-height) 1fr var(--statusstrip-height);
+  grid-template-areas:
+    'nav  bar'
+    'nav  main'
+    'nav  foot';
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text-main);
+}
+.bridge-shell.navrail-is-collapsed {
+  grid-template-columns: var(--navrail-collapsed-width) 1fr;
+}
+
+.bridge-shell::before { display: none !important; }
+.bridge-shell::after { display: none !important; }
+
+.bridge-shell > .navrail { grid-area: nav; }
+.bridge-shell > .command-bar { grid-area: bar; }
+.bridge-shell > .workspace { grid-area: main; }
+.bridge-shell > .status-strip { grid-area: foot; }
+
+/* =====================================================================
+   NavRail — Notion sidebar
+   ===================================================================== */
+.navrail {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  padding: 8px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+.navrail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px 14px;
+  gap: 8px;
+}
+.navrail-brand {
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.08s ease;
+}
+.navrail-brand:hover { background: var(--surface-hover); }
+.navrail-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--primary);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+[data-theme='light'] .navrail-mark { color: #FFFFFF; }
+.navrail-wordmark {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+}
+.navrail-collapse-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.navrail-collapse-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+
+.navrail-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 2px;
+}
+.navrail-scroll::-webkit-scrollbar { width: 6px; }
+.navrail-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.navrail-section { display: flex; flex-direction: column; gap: 2px; }
+.navrail-section-label {
+  /* Sentence case, light weight, muted — NOT uppercase tracked */
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 8px 8px 2px;
+  letter-spacing: -0.005em;
+  text-transform: none;
+}
+.navrail-section-divider { display: none; }
+.navrail-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+
+.navrail-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s ease, color 0.08s ease;
+  position: relative;
+}
+.navrail-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+.navrail-item-active {
+  background: var(--surface-active);
+  color: var(--text-dark);
+  font-weight: 500;
+}
+.navrail-item-glyph {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.navrail-item-active .navrail-item-glyph { color: var(--text-dark); }
+.navrail-item-label {
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.navrail-item-rail { display: none; }
+.navrail-item-text { display: contents; }
+.navrail-item-hint { display: none; }
+
+.navrail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--sidebar-border);
+}
+.navrail-foot-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.navrail-foot-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+.navrail-foot-btn-glyph {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.navrail-foot-btn-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collapsed: center align icons */
+.navrail-collapsed .navrail-head { justify-content: center; flex-direction: column; gap: 4px; padding: 6px 0 14px; }
+.navrail-collapsed .navrail-section-label { display: none; }
+.navrail-collapsed .navrail-item { justify-content: center; padding: 6px 0; }
+.navrail-collapsed .navrail-foot-btn { justify-content: center; padding: 6px 0; }
+
+/* =====================================================================
+   CommandBar — Notion page header
+   ===================================================================== */
+.command-bar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--commandbar-height);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.command-bar-row,
+.command-bar-row-primary,
+.command-bar-row-secondary,
+.command-bar-breadcrumb,
+.command-bar-meta,
+.command-bar-online,
+.command-bar-search-hint,
+.command-bar-extras { /* legacy gimmick layouts no longer used */ }
+
+.command-bar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.command-bar-title-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.015em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.command-bar-account {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.command-bar-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.command-bar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--surface-raised);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  width: 220px;
+  transition: background 0.08s ease, border-color 0.08s ease;
+}
+.command-bar-search:focus-within {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.command-bar-search-icon { color: var(--text-muted); flex: 0 0 auto; }
+.command-bar-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-dark);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  padding: 0;
+}
+.command-bar-search input::placeholder { color: var(--text-muted); }
+
+.command-bar-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+.command-bar-range:hover { background: var(--surface-hover); }
+.command-bar-range-icon { color: var(--text-muted); flex: 0 0 auto; }
+.command-bar-range-arrow { display: none; }
+.command-bar-range-sep { color: var(--text-muted); font-size: 12px; }
+.command-bar-range input[type='date'] {
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  color: var(--text-dark);
+  padding: 0;
+  width: 110px;
+  cursor: pointer;
+}
+[data-theme='dark'] .command-bar-range input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+
+.command-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.command-bar-icon-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.command-bar-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+.command-bar-icon-btn-on {
+  background: var(--primary-glow);
+  color: var(--primary-text);
+}
+
+/* Hide every legacy command-bar gimmick if anything still renders */
+.command-bar-breadcrumb,
+.breadcrumb-tag,
+.breadcrumb-sep,
+.breadcrumb-current,
+.command-bar-search-hint,
+.command-bar-online,
+.command-bar-online-dot,
+.command-bar-online-on,
+.command-bar-online-off,
+.command-bar-account-label { display: none !important; }
+
+/* =====================================================================
+   StatusFooter — subtle muted strip
+   ===================================================================== */
+.status-strip {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--statusstrip-height);
+  font-family: 'Inter', sans-serif;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.status-strip-text {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  font-feature-settings: normal;
+}
+.status-strip-on { color: var(--primary-text); }
+.status-strip-text-end { margin-left: auto; }
+.status-strip-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--danger-text);
+  font-size: 11.5px;
+}
+/* hide legacy section + caps gimmicks */
+.status-strip-section,
+.status-strip-section-end,
+.status-strip-state,
+.status-strip-pulse,
+.status-strip-state-label,
+.status-strip-meta,
+.status-strip-meta-label { display: none !important; }
+
+/* =====================================================================
+   Workspace content — drop the gimmicks
+   ===================================================================== */
+.bridge-shell .workspace {
+  background: var(--bg);
+  padding: 28px 28px 60px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Kill emerald accent bar before headings */
+.bridge-shell .panel-card h2::before,
+.bridge-shell .panel-card-header h2::before,
+.bridge-shell .panel-card-header h3::before,
+.bridge-shell .workspace h2::before,
+.bridge-shell .workspace h3::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* Kill all uppercase tracked-out eyebrow labels */
+.bridge-shell .eyebrow,
+.bridge-shell .local-eyebrow,
+.bridge-shell .panel-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Workspace headings: clean, no decoration */
+.bridge-shell .workspace h1,
+.bridge-shell .workspace h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-dark);
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+}
+.bridge-shell .workspace h3 {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.bridge-shell .workspace h4 {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0;
+}
+.bridge-shell .workspace > p,
+.bridge-shell .panel-card > p,
+.bridge-shell .panel-card-header > p {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Panel cards: clean Notion-like surface */
+.bridge-shell .panel-card,
+.bridge-shell .sf-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: none !important;
+  overflow: visible;
+  background-image: none !important;
+}
+.bridge-shell .panel-card-header,
+.bridge-shell .sf-card-header,
+.bridge-shell .panel-card .panel-card-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background-image: none !important;
+  border-radius: 0;
+}
+.bridge-shell .panel-card-header h2,
+.bridge-shell .panel-card-header h3,
+.bridge-shell .sf-card-header h2,
+.bridge-shell .sf-card-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding-left: 0 !important;
+}
+.bridge-shell .panel-card-header h2::before,
+.bridge-shell .panel-card-header h3::before {
+  content: none !important;
+  display: none !important;
+}
+.bridge-shell .panel-card-content,
+.bridge-shell .sf-card-content {
+  padding: 18px 20px 20px;
+}
+
+/* Mini-metric / stat cards: clean, no mono uppercase eyebrow */
+.bridge-shell .mini-metric,
+.bridge-shell .stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: none;
+  background-image: none !important;
+}
+.bridge-shell .mini-metric::before,
+.bridge-shell .stat-card::before { display: none !important; content: none !important; }
+.bridge-shell .mini-metric:hover,
+.bridge-shell .stat-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.bridge-shell .mini-metric > span:first-child,
+.bridge-shell .stat-card .stat-label {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--text-muted) !important;
+}
+.bridge-shell .mini-metric > strong,
+.bridge-shell .stat-card .stat-value {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+  color: var(--text-dark) !important;
+  font-feature-settings: 'tnum';
+  line-height: 1.1;
+}
+.bridge-shell .mini-metric small,
+.bridge-shell .stat-card .stat-note {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 11.5px !important;
+  color: var(--text-muted) !important;
+  letter-spacing: 0 !important;
+  font-feature-settings: normal !important;
+}
+.bridge-shell .mini-metric-danger { border-color: rgba(220, 38, 38, 0.18); }
+.bridge-shell .mini-metric-danger > strong { color: var(--danger-text) !important; }
+.bridge-shell .mini-metric-warning { border-color: rgba(180, 83, 9, 0.18); }
+.bridge-shell .mini-metric-warning > strong { color: var(--warning-text) !important; }
+
+/* Tables: drop mono uppercase headers, use clean Notion-style */
+.bridge-shell table.dt,
+.bridge-shell .data-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+}
+.bridge-shell table.dt th {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--text-muted) !important;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.bridge-shell table.dt td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-main);
+  font-feature-settings: 'tnum';
+}
+.bridge-shell table.dt tbody tr:hover td { background: var(--surface-hover); }
+.bridge-shell table.dt tbody tr:last-child td { border-bottom: 0; }
+
+/* Action buttons (replaces Action.jsx variants) */
+.bridge-shell .action,
+.action {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.005em !important;
+  border-radius: 6px;
+  transition: background 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+}
+.bridge-shell .action-primary,
+.action-primary {
+  background: var(--primary);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+}
+.bridge-shell .action-primary:hover { background: var(--primary-hover); }
+[data-theme='dark'] .action-primary { color: #052E1A; }
+[data-theme='dark'] .action-primary:hover { background: #34D399; color: #052E1A; }
+.bridge-shell .action-secondary,
+.action-secondary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dark);
+}
+.bridge-shell .action-secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+.bridge-shell .action-ghost,
+.action-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+}
+.bridge-shell .action-ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+.bridge-shell .action-danger,
+.action-danger {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--danger-text);
+}
+.bridge-shell .action-danger:hover { background: rgba(220, 38, 38, 0.06); }
+
+/* Pills (replaces Chip) */
+.bridge-shell .pill {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+.bridge-shell .pill-primary {
+  background: var(--primary-glow);
+  color: var(--primary-text);
+  border-color: rgba(16, 185, 129, 0.24);
+}
+[data-theme='light'] .bridge-shell .pill-primary {
+  background: rgba(5, 150, 105, 0.10);
+  color: var(--primary-text);
+  border-color: rgba(5, 150, 105, 0.24);
+}
+.bridge-shell .pill-success {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--success-text);
+  border-color: transparent;
+}
+.bridge-shell .pill-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning-text);
+  border-color: transparent;
+}
+.bridge-shell .pill-danger {
+  background: rgba(220, 38, 38, 0.10);
+  color: var(--danger-text);
+  border-color: transparent;
+}
+
+/* Filter chip bars */
+.bridge-shell .chip-bar {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.bridge-shell .chip-bar > button,
+.bridge-shell .filter-pill {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  padding: 5px 10px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 5px !important;
+  color: var(--text-secondary) !important;
+  cursor: pointer;
+}
+.bridge-shell .chip-bar > button:hover,
+.bridge-shell .filter-pill:hover {
+  background: var(--surface-hover) !important;
+  color: var(--text-dark) !important;
+}
+.bridge-shell .chip-bar > button.active,
+.bridge-shell .filter-pill.active,
+.bridge-shell .filter-pill[data-active='true'] {
+  background: var(--surface-active) !important;
+  color: var(--text-dark) !important;
+  border-color: var(--border) !important;
+  font-weight: 500 !important;
+}
+
+/* Remove all background-image gradients from cards */
+.bridge-shell .sf-card,
+.bridge-shell .panel-card,
+.bridge-shell .glass-card,
+.bridge-shell .overview-card,
+.bridge-shell .sf-card-header,
+.bridge-shell .panel-card-header {
+  background-image: none !important;
+}
+
+/* Modal cards */
+.modal-backdrop,
+.auth-modal-backdrop,
+.fleet-modal-backdrop {
+  background: rgba(15, 15, 15, 0.5);
+  backdrop-filter: blur(2px);
+}
+[data-theme='light'] .modal-backdrop,
+[data-theme='light'] .auth-modal-backdrop,
+[data-theme='light'] .fleet-modal-backdrop {
+  background: rgba(15, 15, 15, 0.35);
+}
+.modal-card,
+.auth-modal-card,
+.fleet-modal-card,
+.bridge-shell .modal-card,
+.bridge-shell .auth-modal-card,
+.bridge-shell .fleet-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  background-image: none !important;
+}
+
+/* Forms inside workspace */
+.bridge-shell main.workspace input[type='text'],
+.bridge-shell main.workspace input[type='date'],
+.bridge-shell main.workspace input[type='number'],
+.bridge-shell main.workspace input[type='search'],
+.bridge-shell main.workspace input[type='email'],
+.bridge-shell main.workspace input[type='password'],
+.bridge-shell main.workspace select,
+.bridge-shell main.workspace textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dark);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 5px;
+  outline: 0;
+  transition: border-color 0.08s ease, box-shadow 0.08s ease;
+}
+.bridge-shell main.workspace input:focus,
+.bridge-shell main.workspace select:focus,
+.bridge-shell main.workspace textarea:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* Buttons in workspace fall-through */
+.bridge-shell main.workspace button {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Tabular numbers helper for explicit number-display elements */
+.bridge-shell .num,
+.bridge-shell [data-num] {
+  font-feature-settings: 'tnum', 'zero';
+}
+
+/* Toast */
+.toast,
+.welcome-toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  color: var(--text-dark);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+}
+.toast-success { border-color: rgba(16, 185, 129, 0.32); }
+.toast-error { border-color: rgba(220, 38, 38, 0.32); }
+
+/* Loading overlay */
+.loading-overlay {
+  background: rgba(15, 15, 15, 0.4);
+  backdrop-filter: blur(2px);
+}
+[data-theme='light'] .loading-overlay { background: rgba(255, 255, 255, 0.6); }
+.loading-overlay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 22px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+/* =====================================================================
+   Auth shell — Notion-style centered form
+   ===================================================================== */
+.auth-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  position: relative;
+}
+.auth-shell::before { display: none; }
+.auth-theme-toggle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.auth-theme-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+}
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.auth-card-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.auth-card-brand .brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-card-brand .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  border: 0;
+  box-shadow: none;
+}
+.auth-card-brand .brand-wordmark {
+  display: inline-flex;
+  font-family: 'Inter', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.015em;
+}
+.auth-card-brand .brand-wordmark-secondary { display: none; }
+
+.auth-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-dark);
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-align: center;
+}
+.auth-subtitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auth-field-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.auth-field input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--text-dark);
+  outline: 0;
+  transition: border-color 0.08s ease, box-shadow 0.08s ease;
+}
+.auth-field input:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.auth-field input::placeholder { color: var(--text-muted); }
+
+.auth-submit {
+  width: 100%;
+  padding: 9px 14px !important;
+  font-size: 14px !important;
+  margin-top: 4px;
+}
+
+.auth-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.auth-loader-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Hide all legacy boot-shell gimmicks */
+.boot-shell,
+.boot-grid,
+.boot-frame,
+.boot-frame-head,
+.boot-frame-stamp,
+.boot-frame-stamp-label,
+.boot-frame-meta,
+.boot-frame-meta-tag,
+.boot-frame-meta-time,
+.boot-frame-body,
+.boot-eyebrow,
+.boot-headline,
+.boot-subline,
+.boot-form,
+.boot-field,
+.boot-field-label,
+.boot-submit,
+.boot-checklist,
+.boot-checklist-item,
+.boot-checklist-running,
+.boot-checklist-success,
+.boot-checklist-dot,
+.boot-checklist-label,
+.boot-checklist-value,
+.boot-frame-foot,
+.boot-spinner-row,
+.boot-spinner-text,
+.boot-frame-brand,
+.boot-theme-toggle { /* no-op — superseded by auth-* classes; kept for any legacy ref */ }
+
+/* Brand lockup base */
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--primary);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  border: 0;
+  box-shadow: none;
+}
+.brand-wordmark {
+  display: inline-flex;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: -0.01em;
+}
+.brand-wordmark-primary { color: var(--text-dark); }
+.brand-wordmark-secondary { display: none; }
+
+/* Spinner refresh */
+.spinner,
+.spinner-md,
+.spinner-sm {
+  border-color: var(--border) !important;
+  border-top-color: var(--primary) !important;
+}
+
+/* =====================================================================
+   Generic uppercase tracked-out class kill-list
+   ===================================================================== */
+.bridge-shell .label-eyebrow,
+.bridge-shell .panel-eyebrow,
+.bridge-shell .stat-card-eyebrow,
+.bridge-shell label > span:first-child,
+.bridge-shell legend {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--text-muted) !important;
+}
+
+/* Workspace label gimmick — Notion uses sentence case */
+.bridge-shell main.workspace label > span:first-child,
+.bridge-shell main.workspace .field-label,
+.bridge-shell main.workspace .form-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* No accent backgrounds on sf-btn-primary buttons */
+.bridge-shell .sf-btn,
+.bridge-shell .sf-btn-primary {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  border-radius: 6px;
+}
+
+/* Drop heavy box shadows that gave "high tech" feel */
+.bridge-shell .panel-card,
+.bridge-shell .sf-card,
+.bridge-shell .glass-card,
+.bridge-shell .overview-card {
+  box-shadow: none !important;
+}
+
+/* Refresh sf-btn-primary */
+.bridge-shell .sf-btn-primary {
+  background: var(--primary);
+  color: #FFFFFF !important;
+  border-color: transparent;
+}
+[data-theme='dark'] .bridge-shell .sf-btn-primary { color: #052E1A !important; }
+.bridge-shell .sf-btn-primary:hover { background: var(--primary-hover); }
+
+
+/* =====================================================================
+   GLOBAL KILL-SWITCH for uppercase tracked-out gimmick text
+   This runs after everything to neutralize legacy declarations.
+   Scoped to bridge-shell + auth-shell so the rest of the page is
+   unaffected if needed.
+   ===================================================================== */
+.bridge-shell .mini-metric span,
+.bridge-shell .mini-metric > span,
+.bridge-shell .mini-metric strong,
+.bridge-shell .mini-metric small,
+.bridge-shell .stat-label,
+.bridge-shell .stat-card-eyebrow,
+.bridge-shell .panel-eyebrow,
+.bridge-shell .eyebrow,
+.bridge-shell .local-eyebrow,
+.bridge-shell .sf-eyebrow,
+.bridge-shell .sf-card-header .eyebrow,
+.bridge-shell .panel-card-header .eyebrow,
+.bridge-shell .label,
+.bridge-shell .form-label,
+.bridge-shell .field-label,
+.bridge-shell .filter-label,
+.bridge-shell .section-label,
+.bridge-shell .group-label,
+.bridge-shell .panel-card-meta,
+.bridge-shell .meta-label,
+.bridge-shell .pill-uppercase,
+.bridge-shell .uppercase,
+.bridge-shell .nav-section,
+.bridge-shell .navrail-section-label,
+.bridge-shell legend,
+.bridge-shell .legend,
+.bridge-shell .table-header-cell,
+.bridge-shell table th,
+.bridge-shell .data-table th,
+.bridge-shell .trip-monitor-meta span,
+.bridge-shell .trip-monitor-eyebrow,
+.bridge-shell .stat-card span,
+.bridge-shell .map-overlay-eyebrow,
+.bridge-shell .severity-tag,
+.bridge-shell label > span:first-child {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* Restore reasonable default sizes/weights (and avoid bumping stat values) */
+.bridge-shell .mini-metric span,
+.bridge-shell .mini-metric > span,
+.bridge-shell .mini-metric small,
+.bridge-shell .stat-label,
+.bridge-shell .panel-eyebrow,
+.bridge-shell .eyebrow,
+.bridge-shell .local-eyebrow,
+.bridge-shell .sf-eyebrow,
+.bridge-shell .panel-card-meta,
+.bridge-shell .meta-label,
+.bridge-shell .navrail-section-label {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--text-muted) !important;
+}
+
+/* Stat strong values keep large size */
+.bridge-shell .mini-metric strong,
+.bridge-shell .stat-card .stat-value {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: var(--text-dark) !important;
+  letter-spacing: -0.015em !important;
+  font-feature-settings: 'tnum' !important;
+}
+
+/* Severity-colored value variants kept */
+.bridge-shell .mini-metric-danger strong { color: var(--danger-text) !important; }
+.bridge-shell .mini-metric-warning strong { color: var(--warning-text) !important; }
+.bridge-shell .mini-metric-success strong,
+.bridge-shell .mini-metric-good strong { color: var(--success-text) !important; }
+
+/* Description small text inside metric — softer */
+.bridge-shell .mini-metric small {
+  font-size: 11.5px !important;
+  font-weight: 400 !important;
+  color: var(--text-muted) !important;
+}
+
+/* Tables */
+.bridge-shell table th {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+/* Trip monitor meta */
+.bridge-shell .trip-monitor-meta span {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--text-muted) !important;
+}
+
+/* Brand wordmark "Ops Bridge" secondary inside sidebar — kill */
+.navrail-wordmark-primary { color: var(--text-dark); }
+.navrail-wordmark-secondary { display: none !important; }
+
+/* Severity status pills inside trip cards */
+.bridge-shell .severity-tag,
+.bridge-shell [class*='severity-'] {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: 500 !important;
+}
+
+/* Show account form group */
+.bridge-shell main.workspace label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* Severity colors should not pulse / glow */
+.bridge-shell .mini-metric strong { text-shadow: none !important; }
+
+/* Donut center label */
+.bridge-shell .donut-center,
+.bridge-shell .donut-label {
+  font-family: 'Inter', sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+
+/* =====================================================================
+   Override .overview-kpi-card (separate from .mini-metric)
+   ===================================================================== */
+.bridge-shell .overview-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: none !important;
+  background-image: none !important;
+  transform: none !important;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bridge-shell .overview-kpi-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.bridge-shell .overview-kpi-card > span {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--text-muted) !important;
+}
+.bridge-shell .overview-kpi-card > strong {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.1 !important;
+  color: var(--text-dark) !important;
+  font-feature-settings: 'tnum';
+}
+.bridge-shell .overview-kpi-card > small {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 11.5px !important;
+  font-weight: 400 !important;
+  color: var(--text-muted) !important;
+}
+.bridge-shell .overview-kpi-card.info { box-shadow: none !important; }
+.bridge-shell .overview-kpi-card.info > strong { color: var(--text-dark) !important; }
+.bridge-shell .overview-kpi-card.danger { box-shadow: none !important; }
+.bridge-shell .overview-kpi-card.danger > strong { color: var(--danger-text) !important; }
+.bridge-shell .overview-kpi-card.success { box-shadow: none !important; }
+.bridge-shell .overview-kpi-card.success > strong { color: var(--success-text) !important; }
+.bridge-shell .overview-kpi-card.warning { box-shadow: none !important; }
+.bridge-shell .overview-kpi-card.warning > strong { color: var(--warning-text) !important; }
+
+/* Overview hero / donut polish */
+.bridge-shell .overview-card,
+.bridge-shell .overview-hero-card,
+.bridge-shell .overview-donut-card {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+.bridge-shell .overview-legend-row strong {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  color: var(--text-dark) !important;
+  letter-spacing: -0.005em !important;
+}
+.bridge-shell .overview-legend-row small,
+.bridge-shell .overview-legend-row .legend-count {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+}
+
+/* Pill in overview top-right (1 day(s), 0 unit, 2/4 WH) */
+.bridge-shell .pill,
+.bridge-shell .panel-card-meta-pill,
+.bridge-shell .overview-card-tag {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+/* Astro KPI per Warehouse cards */
+.bridge-shell .overview-wh-card,
+.bridge-shell [class*='wh-card'] {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.bridge-shell .overview-wh-card h4,
+.bridge-shell [class*='wh-card'] h4 {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.005em !important;
+  text-transform: none !important;
+  color: var(--text-dark) !important;
+}
+

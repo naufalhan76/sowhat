@@ -1,31 +1,18 @@
 import React from 'react';
-import { Search, ArrowRight, Calendar, Zap, RefreshCw, Download, ShieldAlert, Play, Square } from 'lucide-react';
+import { Search, Calendar, RefreshCw, Download, ShieldAlert, Play, Square, Zap } from 'lucide-react';
 import { Action } from '../components/Action.jsx';
 
-const PANEL_LABELS = {
-  overview: 'Mission Control',
-  fleet: 'Fleet Live',
-  'trip-monitor': 'Trip Monitor',
-  map: 'Map View',
-  'astro-report': 'Astro Report',
-  'temp-errors': 'Temp Errors',
-  stop: 'Stop / Idle',
-  'api-monitor': 'API Monitor',
+const PANEL_TITLES = {
+  overview: 'Overview',
+  fleet: 'Fleet',
+  'trip-monitor': 'Trips',
+  map: 'Map',
+  'astro-report': 'Astro report',
+  'temp-errors': 'Temp errors',
+  stop: 'Stop / idle',
+  'api-monitor': 'API monitor',
   config: 'Config',
-  admin: 'Admin Console',
-};
-
-const PANEL_GROUPS = {
-  overview: 'Fleet Ops',
-  fleet: 'Fleet Ops',
-  'trip-monitor': 'Fleet Ops',
-  map: 'Fleet Ops',
-  'astro-report': 'Analytics',
-  'temp-errors': 'Analytics',
-  stop: 'Analytics',
-  'api-monitor': 'Platform',
-  config: 'Platform',
-  admin: 'Platform',
+  admin: 'Admin',
 };
 
 export function CommandBar({
@@ -41,47 +28,29 @@ export function CommandBar({
   onPollNow,
   onTogglePolling,
   isPolling,
-  isOnline,
-  rightExtras,
 }) {
-  const groupLabel = PANEL_GROUPS[activePanel] || 'Workspace';
-  const panelLabel = PANEL_LABELS[activePanel] || 'Workspace';
+  const title = PANEL_TITLES[activePanel] || 'Workspace';
   return (
     <header className="command-bar" role="banner">
-      <div className="command-bar-row command-bar-row-primary">
-        <nav className="command-bar-breadcrumb" aria-label="Breadcrumb">
-          <span className="breadcrumb-tag">{groupLabel}</span>
-          <span className="breadcrumb-sep" aria-hidden>/</span>
-          <span className="breadcrumb-current">{panelLabel}</span>
-        </nav>
+      <div className="command-bar-title">
+        <h1 className="command-bar-title-text">{title}</h1>
+        {accountName ? <span className="command-bar-account">{accountName}</span> : null}
+      </div>
 
+      <div className="command-bar-tools">
         <div className="command-bar-search" role="search">
-          <Search size={14} className="command-bar-search-icon" strokeWidth={1.75} />
+          <Search size={14} strokeWidth={1.75} className="command-bar-search-icon" />
           <input
             type="text"
-            placeholder="Search account, unit, location, JO..."
+            placeholder="Search"
             value={search || ''}
             onChange={(event) => onSearchChange?.(event.target.value)}
             aria-label="Global search"
           />
-          <span className="command-bar-search-hint">Cmd K</span>
         </div>
 
-        <div className="command-bar-meta">
-          <span className={`command-bar-online ${isOnline ? 'command-bar-online-on' : 'command-bar-online-off'}`}>
-            <span className="command-bar-online-dot" />
-            <span>{isOnline ? 'Live' : 'Offline'}</span>
-          </span>
-          <span className="command-bar-account" title="Active account">
-            <span className="command-bar-account-label">Account</span>
-            <strong>{accountName || 'Primary'}</strong>
-          </span>
-        </div>
-      </div>
-
-      <div className="command-bar-row command-bar-row-secondary">
         <div className="command-bar-range">
-          <Calendar size={14} className="command-bar-range-icon" strokeWidth={1.75} />
+          <Calendar size={13} strokeWidth={1.75} className="command-bar-range-icon" aria-hidden />
           <input
             type="date"
             value={range?.startDate || ''}
@@ -89,7 +58,7 @@ export function CommandBar({
             onChange={(event) => onRangeChange?.((c) => ({ ...c, startDate: event.target.value }))}
             aria-label="Range start"
           />
-          <ArrowRight size={12} className="command-bar-range-arrow" strokeWidth={1.75} />
+          <span className="command-bar-range-sep" aria-hidden>—</span>
           <input
             type="date"
             value={range?.endDate || ''}
@@ -100,21 +69,37 @@ export function CommandBar({
         </div>
 
         <div className="command-bar-actions">
-          {onExportFleet ? <Action variant="ghost" size="sm" startIcon={<Download size={13} strokeWidth={1.75} />} onClick={onExportFleet}>Live</Action> : null}
-          {onExportAlerts ? <Action variant="ghost" size="sm" startIcon={<ShieldAlert size={13} strokeWidth={1.75} />} onClick={onExportAlerts}>Alerts</Action> : null}
-          {onRefresh ? <Action variant="ghost" size="sm" startIcon={<RefreshCw size={13} strokeWidth={1.75} />} onClick={onRefresh}>Refresh</Action> : null}
+          {onRefresh ? (
+            <button type="button" className="command-bar-icon-btn" onClick={onRefresh} title="Refresh" aria-label="Refresh">
+              <RefreshCw size={14} strokeWidth={1.75} />
+            </button>
+          ) : null}
+          {onExportFleet ? (
+            <button type="button" className="command-bar-icon-btn" onClick={onExportFleet} title="Export fleet CSV" aria-label="Export fleet CSV">
+              <Download size={14} strokeWidth={1.75} />
+            </button>
+          ) : null}
+          {onExportAlerts ? (
+            <button type="button" className="command-bar-icon-btn" onClick={onExportAlerts} title="Export alerts" aria-label="Export alerts">
+              <ShieldAlert size={14} strokeWidth={1.75} />
+            </button>
+          ) : null}
           {onTogglePolling ? (
-            <Action
-              variant={isPolling ? 'secondary' : 'secondary'}
-              size="sm"
-              startIcon={isPolling ? <Square size={13} strokeWidth={1.75} /> : <Play size={13} strokeWidth={1.75} />}
+            <button
+              type="button"
+              className={`command-bar-icon-btn ${isPolling ? 'command-bar-icon-btn-on' : ''}`.trim()}
               onClick={onTogglePolling}
+              title={isPolling ? 'Stop polling' : 'Start polling'}
+              aria-label={isPolling ? 'Stop polling' : 'Start polling'}
             >
-              {isPolling ? 'Stop polling' : 'Start polling'}
+              {isPolling ? <Square size={14} strokeWidth={1.75} /> : <Play size={14} strokeWidth={1.75} />}
+            </button>
+          ) : null}
+          {onPollNow ? (
+            <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow}>
+              Poll now
             </Action>
           ) : null}
-          {onPollNow ? <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow}>Poll now</Action> : null}
-          {rightExtras ? <div className="command-bar-extras">{rightExtras}</div> : null}
         </div>
       </div>
     </header>

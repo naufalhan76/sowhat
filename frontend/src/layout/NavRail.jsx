@@ -6,32 +6,30 @@ import {
 
 const SECTIONS = [
   {
-    id: 'fleet-ops',
-    label: 'Fleet Ops',
+    id: 'workspace',
     items: [
-      { id: 'overview', label: 'Mission Control', icon: LayoutDashboard, hint: 'Live KPI + alerts' },
-      { id: 'fleet', label: 'Fleet Live', icon: Navigation, hint: 'Snapshot & filters' },
-      { id: 'trip-monitor', label: 'Trip Monitor', icon: Truck, hint: 'JO kanban' },
-      { id: 'map', label: 'Map', icon: MapIcon, hint: 'Geo view' },
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { id: 'fleet', label: 'Fleet', icon: Navigation },
+      { id: 'trip-monitor', label: 'Trips', icon: Truck },
+      { id: 'map', label: 'Map', icon: MapIcon },
     ],
   },
   {
-    id: 'analytics',
-    label: 'Analytics',
+    id: 'reports',
+    label: 'Reports',
     items: [
-      { id: 'astro-report', label: 'Astro Report', icon: BarChart3, hint: 'Per-WH KPI' },
-      { id: 'temp-errors', label: 'Temp Errors', icon: Thermometer, hint: 'Compile + chart' },
-      { id: 'stop', label: 'Stop / Idle', icon: Flag, hint: 'Per unit events' },
+      { id: 'astro-report', label: 'Astro', icon: BarChart3 },
+      { id: 'temp-errors', label: 'Temp errors', icon: Thermometer },
+      { id: 'stop', label: 'Stop / idle', icon: Flag },
     ],
   },
   {
-    id: 'platform',
-    label: 'Platform',
-    adminOnly: false,
+    id: 'settings',
+    label: 'Settings',
     items: [
-      { id: 'api-monitor', label: 'API Monitor', icon: Activity, hint: 'Endpoint trace' },
-      { id: 'config', label: 'Config', icon: Settings, hint: 'Solofleet & TMS', adminOnly: true },
-      { id: 'admin', label: 'Admin', icon: Shield, hint: 'Users & DB', adminOnly: true },
+      { id: 'api-monitor', label: 'API monitor', icon: Activity },
+      { id: 'config', label: 'Config', icon: Settings, adminOnly: true },
+      { id: 'admin', label: 'Admin', icon: Shield, adminOnly: true },
     ],
   },
 ];
@@ -51,23 +49,18 @@ export function NavRail({
   return (
     <nav className={`navrail ${collapsed ? 'navrail-collapsed' : ''}`.trim()} aria-label="Workspace navigation">
       <div className="navrail-head">
-        <div className="navrail-brand">
-          <span className="navrail-mark">SF</span>
-          {!collapsed ? (
-            <span className="navrail-wordmark">
-              <span className="navrail-wordmark-primary">Solofleet</span>
-              <span className="navrail-wordmark-secondary">Ops Bridge</span>
-            </span>
-          ) : null}
-        </div>
+        <button type="button" className="navrail-brand" onClick={() => onSelect?.('overview')} title="Sowhat">
+          <span className="navrail-mark">S</span>
+          {!collapsed ? <span className="navrail-wordmark">Sowhat</span> : null}
+        </button>
         <button
           type="button"
           className="navrail-collapse-btn"
           onClick={onToggleCollapsed}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          title={collapsed ? 'Expand' : 'Collapse'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {collapsed ? <ChevronRight size={14} strokeWidth={1.75} /> : <ChevronLeft size={14} strokeWidth={1.75} />}
         </button>
       </div>
 
@@ -77,7 +70,9 @@ export function NavRail({
           if (!visibleItems.length) return null;
           return (
             <div key={section.id} className="navrail-section">
-              {!collapsed ? <p className="navrail-section-label">{section.label}</p> : <div className="navrail-section-divider" />}
+              {!collapsed && section.label ? (
+                <p className="navrail-section-label">{section.label}</p>
+              ) : null}
               <ul className="navrail-list">
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
@@ -92,13 +87,7 @@ export function NavRail({
                         aria-current={active ? 'page' : undefined}
                       >
                         <span className="navrail-item-glyph"><Icon size={16} strokeWidth={1.75} /></span>
-                        {!collapsed ? (
-                          <span className="navrail-item-text">
-                            <span className="navrail-item-label">{item.label}</span>
-                            {item.hint ? <span className="navrail-item-hint">{item.hint}</span> : null}
-                          </span>
-                        ) : null}
-                        {active ? <span className="navrail-item-rail" aria-hidden /> : null}
+                        {!collapsed ? <span className="navrail-item-label">{item.label}</span> : null}
                       </button>
                     </li>
                   );
@@ -112,38 +101,37 @@ export function NavRail({
       <div className="navrail-foot">
         <button
           type="button"
-          className={`navrail-theme-toggle navrail-theme-${theme}`}
+          className="navrail-foot-btn"
           onClick={onToggleTheme}
           aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
         >
-          <span className="navrail-theme-thumb">
-            {theme === 'dark' ? <MoonStar size={14} strokeWidth={1.75} /> : <Sun size={14} strokeWidth={1.75} />}
+          <span className="navrail-foot-btn-glyph">
+            {theme === 'dark' ? <MoonStar size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
           </span>
-          {!collapsed ? <span className="navrail-theme-label">{theme === 'dark' ? 'Dark mode' : 'Light mode'}</span> : null}
+          {!collapsed ? <span className="navrail-foot-btn-label">{theme === 'dark' ? 'Dark' : 'Light'}</span> : null}
         </button>
 
-        <div className="navrail-profile">
-          <button
-            type="button"
-            className="navrail-profile-button"
-            onClick={onProfileClick}
-            title={user?.displayName || user?.username || 'Profile'}
-          >
-            <span className="navrail-profile-avatar"><User size={14} /></span>
-            {!collapsed ? (
-              <span className="navrail-profile-meta">
-                <span className="navrail-profile-name">{user?.displayName || user?.username || 'Operator'}</span>
-                <span className="navrail-profile-role">{user?.role || 'viewer'}</span>
-              </span>
-            ) : null}
-          </button>
-          {!collapsed ? (
-            <button type="button" className="navrail-profile-logout" onClick={onLogout} aria-label="Logout" title="Logout">
-              <LogOut size={14} strokeWidth={1.75} />
-            </button>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          className="navrail-foot-btn"
+          onClick={onProfileClick}
+          title={user?.displayName || user?.username || 'Account'}
+        >
+          <span className="navrail-foot-btn-glyph"><User size={15} strokeWidth={1.75} /></span>
+          {!collapsed ? <span className="navrail-foot-btn-label">{user?.displayName || user?.username || 'Account'}</span> : null}
+        </button>
+
+        <button
+          type="button"
+          className="navrail-foot-btn"
+          onClick={onLogout}
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <span className="navrail-foot-btn-glyph"><LogOut size={15} strokeWidth={1.75} /></span>
+          {!collapsed ? <span className="navrail-foot-btn-label">Sign out</span> : null}
+        </button>
       </div>
     </nav>
   );
