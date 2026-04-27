@@ -2,7 +2,7 @@
 import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Activity, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
@@ -3370,16 +3370,11 @@ export default function App() {
                   </div>
                 </div>
                 <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | TMS window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Topbar range: {range.startDate || '-'} to {range.endDate || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
-                <div className="trip-monitor-flat-board">
-                  {tripMonitorVisibleRows.length ? tripMonitorVisibleRows.map((row) => <TripMonitorUnitCard
-                    key={row.rowId}
-                    row={row}
-                    onOpen={() => openTripMonitorDetail(row.rowId)}
-                    onOpenHistorical={() => openTripMonitorInvestigation(row, 'historical')}
-                    onOpenMap={() => openTripMonitorInvestigation(row, 'map')}
-                    onOpenFleet={() => openTripMonitorInvestigation(row, 'fleet')}
-                  />) : <div className="empty-state trip-monitor-empty trip-monitor-empty-flat">Belum ada unit dengan JO aktif di filter ini.</div>}
-                </div>
+                <TripMonitorKanban
+                  rows={tripMonitorVisibleRows}
+                  selectedRowId={tripMonitorDetail?.rowId}
+                  onOpen={(row) => openTripMonitorDetail(row.rowId)}
+                />
               </CardContent>
             </Card>
           </> : null}
@@ -5670,14 +5665,19 @@ function TripMonitorShippingProgressClean({ shippingStatus, headlineJob }) {
   </div>;
 }
 
-function TripMonitorUnitCard({ row, onOpen }) {
+function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
   const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
   const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
   const activeStopName = row?.metadata?.shippingStatus?.activeStopName || '';
   const sublineText = `${row.jobOrderId || '-'} | ${row.customerName || '-'}`;
   const tempRange = normalizeTemperatureRange(row.tempMin, row.tempMax);
   const tempLabel = tempRange.min !== null ? `${fmtNum(tempRange.min)}°C s/d ${fmtNum(tempRange.max)}°C` : null;
-  return <button type="button" className={`trip-monitor-card trip-monitor-card-${row.severity || 'normal'}`} onClick={onOpen} title={`${unitLabel} — ${sublineText}`}>
+  const incidentSummary = row.incidentSummary && row.incidentSummary !== '-' ? row.incidentSummary : '';
+  const driverAppStatus = row.driverAppStatus && row.driverAppStatus !== '-' ? row.driverAppStatus : '';
+  const driverAppCompact = driverAppStatus.split('|').map((part) => part.trim()).filter(Boolean).slice(0, 2).join(' · ');
+  const cardClasses = ['trip-monitor-card', `trip-monitor-card-${row.severity || 'normal'}`];
+  if (isActive) cardClasses.push('is-active');
+  return <button type="button" className={cardClasses.join(' ')} onClick={onOpen} title={`${unitLabel} — ${sublineText}`}>
     <div className="trip-monitor-card-head">
       <div className="trip-monitor-card-titleblock">
         <strong title={unitLabel}>{unitLabel}</strong>
@@ -5689,9 +5689,47 @@ function TripMonitorUnitCard({ row, onOpen }) {
       <strong title={shippingStatus}>{shippingStatus}</strong>
       {activeStopName ? <div className="trip-monitor-card-location" title={activeStopName}>{activeStopName}</div> : null}
     </div>
-    {tempLabel ? <div className="trip-monitor-card-temp"><Thermometer size={12} /> {tempLabel}</div> : null}
+    {incidentSummary ? <div className="trip-monitor-card-incident-summary" title={incidentSummary}>
+      <AlertCircle size={12} /> {incidentSummary}
+    </div> : null}
+    <div className="trip-monitor-card-meta">
+      {tempLabel ? <span className="trip-monitor-card-temp"><Thermometer size={12} /> {tempLabel}</span> : null}
+      {driverAppCompact ? <span className="trip-monitor-card-driver-pill" title={driverAppStatus}>{driverAppCompact}</span> : null}
+    </div>
     {row.unmatchedReason ? <div className="trip-monitor-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
   </button>;
+}
+
+const TRIP_MONITOR_KANBAN_COLUMNS = [
+  { key: 'critical', label: 'Critical', match: (severity) => severity === 'critical' },
+  { key: 'warning', label: 'Warning', match: (severity) => severity === 'warning' },
+  { key: 'normal', label: 'Normal', match: (severity) => severity === 'normal' || severity === 'unmatched' || severity === 'no-job-order' || !severity },
+];
+
+function TripMonitorKanban({ rows, selectedRowId, onOpen }) {
+  const grouped = TRIP_MONITOR_KANBAN_COLUMNS.map((col) => ({
+    ...col,
+    rows: rows.filter((row) => col.match(String(row.severity || '').trim())),
+  }));
+  return <div className="trip-monitor-kanban">
+    {grouped.map((column) => <section key={column.key} className={`trip-monitor-kanban-column trip-monitor-kanban-column-${column.key}`}>
+      <header className="trip-monitor-kanban-column-header">
+        <span className="trip-monitor-kanban-column-title">
+          <span className="trip-monitor-kanban-column-dot" />
+          {column.label}
+        </span>
+        <span className="trip-monitor-kanban-column-count">{column.rows.length}</span>
+      </header>
+      <div className="trip-monitor-kanban-column-body">
+        {column.rows.length ? column.rows.map((row) => <TripMonitorUnitCard
+          key={row.rowId}
+          row={row}
+          isActive={row.rowId === selectedRowId}
+          onOpen={() => onOpen(row)}
+        />) : <div className="trip-monitor-kanban-column-empty">No trips in this severity bucket.</div>}
+      </div>
+    </section>)}
+  </div>;
 }
 
 function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
