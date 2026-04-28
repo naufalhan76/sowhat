@@ -1,6 +1,6 @@
 import { TMS_INCIDENT_META, dedupeTripMonitorIncidentCodes, tmsIncidentIcon, tmsIncidentLabel } from './helpers.jsx';
 
-export function TripMonitorIncidentIcons({ codes, className = '', size = 13 }) {
+export function TripMonitorIncidentIcons({ codes, className = '', size = 14 }) {
   const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
 
   if (!uniqueCodes.length) {

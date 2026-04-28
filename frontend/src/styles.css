@@ -11136,15 +11136,400 @@ body.fleet-workspace-resizing * {
    Trip Monitor — severity kanban + side drawer
    ============================================================ */
 
-.trip-monitor-kanban {
+/* =====================================================================
+   Trip Monitor Page — Redesigned layout
+   ===================================================================== */
+
+/* ── Page shell ── */
+.tm-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Hero header ── */
+.tm-page-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tm-page-hero-left {
+  min-width: 0;
+}
+
+.tm-page-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-dark);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tm-page-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+
+.tm-page-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tm-refresh-btn svg {
+  transition: transform 0.3s ease;
+}
+
+/* ── Metrics strip ── */
+.tm-metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.tm-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color 120ms ease;
+}
+
+.tm-metric:hover {
+  border-color: var(--border-strong);
+}
+
+.tm-metric-value {
+  font-family: var(--font-body);
+  font-feature-settings: 'tnum';
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-dark);
+  line-height: 1.1;
+}
+
+.tm-metric-value--text {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.tm-metric-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tm-metric--critical { border-color: rgba(239, 68, 68, 0.22); }
+.tm-metric--critical .tm-metric-value { color: var(--danger-text); }
+
+.tm-metric--warning { border-color: rgba(245, 158, 11, 0.22); }
+.tm-metric--warning .tm-metric-value { color: var(--warning-text); }
+
+.tm-metric--normal { border-color: rgba(16, 185, 129, 0.22); }
+.tm-metric--normal .tm-metric-value { color: var(--success-text); }
+
+/* ── Controls row ── */
+.tm-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tm-severity-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tm-severity-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.tm-severity-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.tm-severity-pill.is-active {
+  background: var(--primary-glow);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: var(--primary-text);
+  font-weight: 600;
+}
+
+/* Severity-tinted inactive pills */
+.tm-severity-pill--critical {
+  border-color: rgba(239, 68, 68, 0.18);
+}
+.tm-severity-pill--critical.is-active {
+  background: var(--danger-surface);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--danger-text);
+}
+
+.tm-severity-pill--warning {
+  border-color: rgba(245, 158, 11, 0.18);
+}
+.tm-severity-pill--warning.is-active {
+  background: var(--warning-surface);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--warning-text);
+}
+
+.tm-severity-pill--normal {
+  border-color: rgba(16, 185, 129, 0.14);
+}
+.tm-severity-pill--normal.is-active {
+  background: var(--success-surface);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: var(--success-text);
+}
+
+.tm-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum';
+  font-weight: 600;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.tm-severity-pill.is-active .tm-pill-count {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+  color: inherit;
+}
+
+.tm-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-search-compact {
+  position: relative;
+  min-width: 180px;
+}
+
+.tm-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.tm-search-compact input {
+  width: 100%;
+  padding-left: 32px;
+  height: 34px;
+  font-size: 12.5px;
+}
+
+.tm-filter-toggle {
+  gap: 6px;
+  position: relative;
+}
+
+.tm-filter-toggle.has-filters::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.tm-filter-chevron {
+  transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  color: var(--text-muted);
+}
+
+.tm-filter-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.tm-filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+
+/* ── Filter drawer ── */
+.tm-filter-drawer {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  display: grid;
+  gap: 12px;
+  animation: tmFilterSlideDown 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes tmFilterSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.tm-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(280px, 1.5fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.tm-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tm-filter-field > span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tm-filter-field select {
+  height: 34px;
+  font-size: 12.5px;
+}
+
+.tm-filter-legend-wrap {
+  min-width: 0;
+}
+
+.tm-filter-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  min-height: 34px;
+}
+
+.tm-filter-legend .trip-monitor-incident-legend-item {
+  font-size: 11px;
+}
+
+.tm-filter-context {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum';
+  line-height: 1.5;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 960px) {
+  .tm-page-hero {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tm-page-hero-actions {
+    width: 100%;
+  }
+  .tm-metrics-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tm-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .tm-filter-legend-wrap {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .tm-metrics-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tm-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tm-severity-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .tm-severity-tabs::-webkit-scrollbar { display: none; }
+  .tm-controls-right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tm-search-compact {
+    min-width: 0;
+    width: 100%;
+  }
+  .tm-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================================
+   Kanban Board — Redesigned columns
+   ===================================================================== */
+
+.tm-kanban {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   align-items: stretch;
-  margin-top: 4px;
 }
 
-.trip-monitor-kanban-column {
+.tm-kanban-col {
+  --severity-color: var(--text-muted);
+  --severity-bg: transparent;
+  --severity-rail: 3px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -11152,215 +11537,343 @@ body.fleet-workspace-resizing * {
   border-radius: var(--radius-lg);
   background: var(--surface);
   overflow: hidden;
-  min-height: 320px;
+  min-height: 360px;
 }
 
-.trip-monitor-kanban-column-header {
+.tm-kanban-col--critical {
+  --severity-color: #ef4444;
+  --severity-bg: rgba(239, 68, 68, 0.06);
+  --severity-rail: 5px;
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.tm-kanban-col--warning {
+  --severity-color: #f59e0b;
+  --severity-bg: rgba(245, 158, 11, 0.05);
+  --severity-rail: 4px;
+  border-color: rgba(245, 158, 11, 0.15);
+}
+
+.tm-kanban-col--normal {
+  --severity-color: #10b981;
+  --severity-bg: rgba(16, 185, 129, 0.04);
+  --severity-rail: 3px;
+}
+
+.tm-kanban-col-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 12px;
+  gap: 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-raised);
+  background: var(--severity-bg);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
-.trip-monitor-kanban-column-title {
+.tm-kanban-col-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--text-secondary);
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--severity-color);
+  flex-shrink: 0;
 }
 
-.trip-monitor-kanban-column-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--text-muted);
+[data-theme='light'] .tm-kanban-col-icon {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
-.trip-monitor-kanban-column-critical .trip-monitor-kanban-column-dot {
-  background: var(--trip-critical-text, #ef4444);
-}
-.trip-monitor-kanban-column-warning .trip-monitor-kanban-column-dot {
-  background: var(--trip-warning-text, #d97706);
-}
-.trip-monitor-kanban-column-normal .trip-monitor-kanban-column-dot {
-  background: #10b981;
+.tm-kanban-col-info {
+  flex: 1;
+  min-width: 0;
 }
 
-.trip-monitor-kanban-column-count {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+.tm-kanban-col-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+  letter-spacing: -0.005em;
+}
+
+.tm-kanban-col-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 1px 0 0;
+  line-height: 1.3;
+}
+
+.tm-kanban-col-count {
+  font-family: var(--font-mono);
   font-feature-settings: 'tnum' 1, 'zero' 1;
   font-size: 12px;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--severity-color);
   background: transparent;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
+  flex-shrink: 0;
 }
 
-.trip-monitor-kanban-column-body {
+.tm-kanban-col-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - 320px);
   min-height: 240px;
 }
 
-.trip-monitor-kanban-column-empty {
+.tm-kanban-col-body::-webkit-scrollbar { width: 4px; }
+.tm-kanban-col-body::-webkit-scrollbar-track { background: transparent; }
+.tm-kanban-col-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.tm-kanban-empty {
   font-size: 12px;
   color: var(--text-muted);
   text-align: center;
-  padding: 24px 12px;
+  padding: 32px 12px;
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
 }
 
 @media (max-width: 1024px) {
-  .trip-monitor-kanban {
+  .tm-kanban {
     grid-template-columns: 1fr;
   }
-  .trip-monitor-kanban-column-body {
+  .tm-kanban-col-body {
     max-height: 480px;
   }
 }
 
-/* Card refinements for kanban context (denser, severity stripe) */
-.trip-monitor-kanban .trip-monitor-card {
+/* =====================================================================
+   Unit Card — Redesigned hierarchy
+   ===================================================================== */
+
+.tm-card {
+  --card-severity: var(--text-muted);
+  --card-severity-bg: transparent;
+  --card-rail-width: 3px;
   position: relative;
-  flex: 0 0 auto;
-  min-height: auto;
-  padding: 7px 10px 7px 12px;
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
   border: 1px solid var(--border);
-  background: var(--surface) !important;
+  background: var(--surface);
   border-radius: 8px;
+  padding: 8px 10px 8px 14px;
   display: grid;
-  gap: 4px;
+  gap: 5px;
+  align-content: start;
   overflow: hidden;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+  font: inherit;
+  color: inherit;
 }
 
-.trip-monitor-kanban .trip-monitor-card > * {
-  min-width: 0;
-}
+.tm-card > * { min-width: 0; }
 
-.trip-monitor-kanban .trip-monitor-card-head {
-  align-items: center;
-}
-
-.trip-monitor-kanban .trip-monitor-card-titleblock,
-.trip-monitor-kanban .trip-monitor-card-status {
-  min-width: 0;
-}
-
-.trip-monitor-kanban .trip-monitor-card-titleblock strong {
-  font-size: 12.5px;
-  line-height: 1.2;
-}
-
-.trip-monitor-kanban .trip-monitor-card-status strong {
-  font-size: 11.5px;
-  line-height: 1.2;
-}
-
-.trip-monitor-kanban .trip-monitor-card-subline,
-.trip-monitor-kanban .trip-monitor-card-location,
-.trip-monitor-kanban .trip-monitor-card-temp,
-.trip-monitor-kanban .trip-monitor-card-note {
-  font-size: 10.5px;
-  line-height: 1.3;
-}
-
-.trip-monitor-kanban .trip-monitor-card::before {
-  content: '';
+/* Severity rail */
+.tm-card-rail {
   position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
+  top: 8px;
+  bottom: 8px;
+  width: var(--card-rail-width);
   border-radius: 0 3px 3px 0;
-  background: var(--text-muted);
-  opacity: 0.45;
+  background: var(--card-severity);
+  opacity: 0.5;
   transition: opacity 140ms ease;
 }
 
-.trip-monitor-kanban .trip-monitor-card-critical::before {
-  background: var(--trip-critical-text);
-  opacity: 1;
+/* Severity variants */
+.tm-card--critical {
+  --card-severity: #ef4444;
+  --card-severity-bg: rgba(239, 68, 68, 0.04);
+  --card-rail-width: 4px;
 }
-.trip-monitor-kanban .trip-monitor-card-warning::before {
-  background: var(--trip-warning-text);
-  opacity: 1;
+.tm-card--critical .tm-card-rail { opacity: 1; }
+
+.tm-card--warning {
+  --card-severity: #f59e0b;
+  --card-severity-bg: rgba(245, 158, 11, 0.03);
+  --card-rail-width: 4px;
 }
-.trip-monitor-kanban .trip-monitor-card-normal::before,
-.trip-monitor-kanban .trip-monitor-card-unmatched::before {
-  background: var(--success-text);
-  opacity: 0.85;
+.tm-card--warning .tm-card-rail { opacity: 0.9; }
+
+.tm-card--normal {
+  --card-severity: #10b981;
+  --card-rail-width: 3px;
+}
+.tm-card--normal .tm-card-rail { opacity: 0.7; }
+
+.tm-card--unmatched {
+  --card-severity: var(--text-muted);
+  --card-rail-width: 2px;
 }
 
-.trip-monitor-kanban .trip-monitor-card:hover {
+.tm-card--no-job-order {
+  --card-severity: var(--text-muted);
+  --card-rail-width: 2px;
+}
+
+/* Hover + active */
+.tm-card:hover {
   border-color: var(--border-strong);
 }
 
-.trip-monitor-kanban .trip-monitor-card.is-active {
+.tm-card.is-active {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
-.trip-monitor-card-meta {
+/* Primary row: unit + icons */
+.tm-card-primary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-card-unit-block {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tm-card-unit {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.tm-card-customer {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Incident alert row */
+.tm-card-alert {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--card-severity);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--card-severity-bg);
+}
+
+.tm-card-alert svg {
+  flex-shrink: 0;
+}
+
+/* Status row */
+.tm-card-status-row {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 11px;
+}
+
+.tm-card-status {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-card-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Footer metadata */
+.tm-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
   color: var(--text-muted);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-feature-settings: 'tnum' 1, 'zero' 1;
 }
 
-.trip-monitor-card-driver-pill {
+.tm-card-jo {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.tm-card-temp {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
+  gap: 3px;
+}
+
+.tm-card-driver {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
   border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 500;
   border: 1px solid var(--border);
-  color: var(--text-secondary);
   background: var(--surface-raised);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.trip-monitor-card-incident-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--trip-warning-text);
+.tm-card-note {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--trip-note-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.trip-monitor-card-critical .trip-monitor-card-incident-summary {
-  color: var(--trip-critical-text);
 }
 
 /* ----- Side drawer (replaces modal) ----- */
