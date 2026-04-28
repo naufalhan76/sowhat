@@ -19,6 +19,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'web-dist'),
     emptyOutDir: true,
+    target: 'es2020',
+    sourcemap: false,
     modulePreload: {
       resolveDependencies(url, deps) {
         return deps.filter((dependency) => !dependency.includes('vendor-leaflet'));
