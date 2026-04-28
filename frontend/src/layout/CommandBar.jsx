@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Calendar, RefreshCw, Download, ShieldAlert, Play, Square, Zap } from 'lucide-react';
+import { Search, Calendar, RefreshCw, Download, ShieldAlert, Play, Square, Zap, ChevronDown } from 'lucide-react';
 import { Action } from '../components/Action.jsx';
 
 const PANEL_TITLES = {
@@ -30,8 +30,111 @@ export function CommandBar({
   isPolling,
   isOnline,
   busy,
+  compact = false,
+  expanded = false,
+  onToggleExpand,
 }) {
   const title = PANEL_TITLES[activePanel] || 'Workspace';
+
+  /* Collapsible controls — rendered in both inline (desktop) and dropdown (compact) */
+  const controlsBlock = (
+    <>
+      <div className="command-bar-search" role="search">
+        <Search size={14} strokeWidth={1.75} className="command-bar-search-icon" aria-hidden />
+        <input
+          type="text"
+          placeholder="Search units, alerts..."
+          value={search || ''}
+          onChange={(event) => onSearchChange?.(event.target.value)}
+          aria-label="Global search"
+        />
+        <kbd className="command-bar-search-kbd">Ctrl K</kbd>
+      </div>
+
+      <div className="command-bar-range">
+        <Calendar size={13} strokeWidth={1.75} className="command-bar-range-icon" aria-hidden />
+        <input
+          type="date"
+          value={range?.startDate || ''}
+          onClick={(event) => event.currentTarget.showPicker?.()}
+          onChange={(event) => onRangeChange?.((c) => ({ ...c, startDate: event.target.value }))}
+          aria-label="Range start"
+        />
+        <span className="command-bar-range-sep" aria-hidden>—</span>
+        <input
+          type="date"
+          value={range?.endDate || ''}
+          onClick={(event) => event.currentTarget.showPicker?.()}
+          onChange={(event) => onRangeChange?.((c) => ({ ...c, endDate: event.target.value }))}
+          aria-label="Range end"
+        />
+      </div>
+
+      <div className="command-bar-actions">
+        {onRefresh ? (
+          <button type="button" className="command-bar-icon-btn" onClick={onRefresh} disabled={busy} title="Refresh" aria-label="Refresh">
+            <RefreshCw size={14} strokeWidth={1.75} className={busy ? 'command-bar-spin' : ''} />
+          </button>
+        ) : null}
+        {onExportFleet ? (
+          <button type="button" className="command-bar-icon-btn" onClick={onExportFleet} title="Export fleet CSV" aria-label="Export fleet CSV">
+            <Download size={14} strokeWidth={1.75} />
+          </button>
+        ) : null}
+        {onExportAlerts ? (
+          <button type="button" className="command-bar-icon-btn" onClick={onExportAlerts} title="Export alerts" aria-label="Export alerts">
+            <ShieldAlert size={14} strokeWidth={1.75} />
+          </button>
+        ) : null}
+        {onTogglePolling ? (
+          <button
+            type="button"
+            className={`command-bar-icon-btn ${isPolling ? 'command-bar-icon-btn-on' : ''}`.trim()}
+            onClick={onTogglePolling}
+            title={isPolling ? 'Stop polling' : 'Start polling'}
+            aria-label={isPolling ? 'Stop polling' : 'Start polling'}
+          >
+            {isPolling ? <Square size={14} strokeWidth={1.75} /> : <Play size={14} strokeWidth={1.75} />}
+          </button>
+        ) : null}
+        {onPollNow ? (
+          <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow} disabled={busy} loading={busy}>
+            Poll
+          </Action>
+        ) : null}
+      </div>
+    </>
+  );
+
+  /* ---- Compact mode: single row + chevron dropdown ---- */
+  if (compact) {
+    return (
+      <header className={`command-bar command-bar--compact ${expanded ? 'command-bar--expanded' : ''}`} role="banner">
+        <div className="command-bar-left">
+          <h1 className="command-bar-title-text">{title}</h1>
+          {accountName ? <span className="command-bar-account">{accountName}</span> : null}
+        </div>
+
+        <button
+          type="button"
+          className={`command-bar-chevron ${expanded ? 'is-open' : ''}`}
+          onClick={onToggleExpand}
+          aria-label={expanded ? 'Collapse toolbar' : 'Expand toolbar'}
+          aria-expanded={expanded}
+        >
+          <ChevronDown size={16} strokeWidth={1.75} />
+        </button>
+
+        {expanded ? (
+          <div className="command-bar-dropdown">
+            {controlsBlock}
+          </div>
+        ) : null}
+      </header>
+    );
+  }
+
+  /* ---- Desktop mode: full inline bar ---- */
   return (
     <header className="command-bar" role="banner">
       <div className="command-bar-left">

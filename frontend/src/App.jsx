@@ -3286,6 +3286,9 @@ export default function App() {
         isPolling={!!status?.runtime?.isPolling}
         isOnline={!status?.runtime?.lastSnapshotError}
         busy={busy}
+        compact={compactTopbar}
+        expanded={mobileTopbarExpanded}
+        onToggleExpand={() => setMobileTopbarExpanded((v) => !v)}
       />
 
       <main className="workspace">

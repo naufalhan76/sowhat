@@ -1,4 +1,4 @@
-/* Fonts loaded via <link> in index.html (Inter + JetBrains Mono) */
+﻿/* Fonts loaded via <link> in index.html (Inter + JetBrains Mono) */
 
 /* Sowhat Ops Console — Emerald, dense, signal-driven */
 
@@ -16193,4 +16193,259 @@ body {
   .fleet-workspace-detail-metrics .mini-metric > span {
     font-size: 9px !important;
   }
+}
+
+/* =====================================================================
+   COMMAND BAR � Compact mode with chevron dropdown
+   ===================================================================== */
+
+/* ---- Compact mode: single-row bar ---- */
+.command-bar--compact {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 44px !important;
+  padding: 0 12px 0 48px !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  position: relative;
+}
+
+.command-bar--compact .command-bar-left {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  height: auto !important;
+  border-bottom: none !important;
+}
+
+.command-bar--compact .command-bar-account {
+  display: none;
+}
+
+/* ---- Chevron toggle button ---- */
+.command-bar-chevron {
+  display: none; /* hidden on desktop */
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.command-bar-chevron:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+  border-color: var(--border-strong);
+}
+.command-bar-chevron:active {
+  transform: scale(0.92);
+}
+.command-bar-chevron svg {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.command-bar-chevron.is-open svg {
+  transform: rotate(180deg);
+}
+
+/* Show chevron only in compact mode */
+.command-bar--compact .command-bar-chevron {
+  display: inline-flex;
+}
+
+/* ---- Dropdown panel (expanded state) ---- */
+.command-bar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.15);
+  animation: cmdbar-dropdown-enter 0.18s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes cmdbar-dropdown-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+[data-theme='dark'] .command-bar-dropdown {
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* Search inside dropdown: full width */
+.command-bar-dropdown .command-bar-search {
+  width: 100%;
+  max-width: none !important;
+  height: 36px;
+}
+
+/* Date range inside dropdown: full width */
+.command-bar-dropdown .command-bar-range {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* Actions inside dropdown: row, wrap */
+.command-bar-dropdown .command-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Hide kbd shortcut in dropdown */
+.command-bar-dropdown .command-bar-search-kbd {
+  display: none;
+}
+
+/* ---- Hide center/right on compact (they're in dropdown now) ---- */
+.command-bar--compact .command-bar-center,
+.command-bar--compact .command-bar-right,
+.command-bar--compact .command-bar-divider {
+  display: none !important;
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .command-bar-dropdown { animation: none; }
+  .command-bar-chevron svg { transition: none; }
+}
+/* =====================================================================
+   COMMAND BAR — Compact mode with chevron dropdown
+   ===================================================================== */
+
+/* ---- Compact mode: single-row bar ---- */
+.command-bar--compact {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 44px !important;
+  padding: 0 12px 0 48px !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  position: relative;
+}
+
+.command-bar--compact .command-bar-left {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  height: auto !important;
+  border-bottom: none !important;
+}
+
+.command-bar--compact .command-bar-account {
+  display: none;
+}
+
+/* ---- Chevron toggle button ---- */
+.command-bar-chevron {
+  display: none; /* hidden on desktop */
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.command-bar-chevron:hover {
+  background: var(--surface-hover);
+  color: var(--text-dark);
+  border-color: var(--border-strong);
+}
+.command-bar-chevron:active {
+  transform: scale(0.92);
+}
+.command-bar-chevron svg {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.command-bar-chevron.is-open svg {
+  transform: rotate(180deg);
+}
+
+/* Show chevron only in compact mode */
+.command-bar--compact .command-bar-chevron {
+  display: inline-flex;
+}
+
+/* ---- Dropdown panel (expanded state) ---- */
+.command-bar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.15);
+  animation: cmdbar-dropdown-enter 0.18s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes cmdbar-dropdown-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+[data-theme='dark'] .command-bar-dropdown {
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* Search inside dropdown: full width */
+.command-bar-dropdown .command-bar-search {
+  width: 100%;
+  max-width: none !important;
+  height: 36px;
+}
+
+/* Date range inside dropdown: full width */
+.command-bar-dropdown .command-bar-range {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* Actions inside dropdown: row, wrap */
+.command-bar-dropdown .command-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Hide kbd shortcut in dropdown */
+.command-bar-dropdown .command-bar-search-kbd {
+  display: none;
+}
+
+/* ---- Hide center/right on compact (they're in dropdown now) ---- */
+.command-bar--compact .command-bar-center,
+.command-bar--compact .command-bar-right,
+.command-bar--compact .command-bar-divider {
+  display: none !important;
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .command-bar-dropdown { animation: none; }
+  .command-bar-chevron svg { transition: none; }
 }
