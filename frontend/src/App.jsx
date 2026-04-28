@@ -5058,7 +5058,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
       </div>
     </div>
     <div className="chart-stage" ref={chartContainerRef}>
-      <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label="Temperature trend chart" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerLeave}>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" role="img" aria-label="Temperature trend chart" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerLeave}>
         <defs>
           <linearGradient id={`fillTemp1-${chartId}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--chart-temp1)" stopOpacity="0.22" />

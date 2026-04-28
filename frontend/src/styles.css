@@ -1788,6 +1788,8 @@ textarea:focus {
   width: 100%;
   min-width: 0;
   overflow: visible;
+  flex: 1;
+  min-height: 200px;
 }
 
 .chart-stage .chart-svg {
@@ -1796,7 +1798,7 @@ textarea:focus {
 
 .chart-svg {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   border-radius: var(--radius-lg);
 }
