@@ -51,10 +51,11 @@ function RegionCard({ region, rows, getMapStatusMeta, expanded, onToggle, onZoom
   const hasMore = rows.length > REGION_PAGE_SIZE;
 
   return (
-    <div className={`mp-region-card ${collapsed ? 'is-collapsed' : ''}`}>
+    <div className={`mp-region-card ${collapsed ? 'is-collapsed' : ''}`} style={{ flexShrink: 0 }}>
       <button 
         type="button" 
         className="mp-region-header" 
+        style={{ flexShrink: 0 }}
         onClick={() => setCollapsed(!collapsed)} 
         title={`Toggle ${region}`}
       >

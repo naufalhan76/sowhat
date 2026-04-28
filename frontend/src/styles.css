@@ -702,7 +702,7 @@ textarea:focus {
 
 .search-box input {
   width: 100%;
-  padding-left: 36px;
+  padding-left: 34px;
   background: var(--surface-raised);
   font-size: clamp(12px, 0.9vw, 13px);
 }
@@ -3247,8 +3247,7 @@ textarea:focus {
 
 .mp-search-input input {
   width: 100%;
-  padding: 8px 10px 8px 36px;
-  background: var(--surface);
+  padding: 8px 10px 8px 34px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--surface-raised);
@@ -3471,7 +3470,7 @@ textarea:focus {
   cursor: pointer;
   border-top: 1px solid var(--border);
   transition: background 120ms ease;
-  font: inherit;
+  font-family: inherit;
 }
 
 .mp-region-more:hover {
@@ -10047,10 +10046,10 @@ html, body {
 /* Preserve left-padding for search inputs with absolute-positioned icons */
 .bridge-shell main.workspace .search-box input,
 .bridge-shell main.workspace .historical-search-box input {
-  padding-left: 36px;
+  padding-left: 34px;
 }
 .bridge-shell main.workspace .fleet-workspace-search input {
-  padding: 8px 10px 8px 32px;
+  padding: 8px 10px 8px 34px;
 }
 .bridge-shell main.workspace .searchable-dropdown-search input {
   padding: 6px 4px;
@@ -12129,7 +12128,7 @@ body.fleet-workspace-resizing * {
 
 .tm-search-compact input {
   width: 100%;
-  padding-left: 36px;
+  padding-left: 34px;
   height: 34px;
   font-size: 12.5px;
 }

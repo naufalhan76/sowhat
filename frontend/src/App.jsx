@@ -4878,7 +4878,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
           </div>
         </div>
       </div>
-      <div className="chart-stage" style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: 0 }}>
+      <div className="chart-stage" style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: compact ? 180 : 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={fullSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <defs>
