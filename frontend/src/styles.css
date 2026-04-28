@@ -3247,13 +3247,22 @@ textarea:focus {
 
 .mp-search-input input {
   width: 100%;
-  padding: 8px 10px 8px 34px;
+  padding: 8px 10px 8px 38px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--surface-raised);
   color: var(--text-main);
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
   transition: border-color 120ms ease;
+}
+
+.mp-search-input input::-webkit-search-decoration,
+.mp-search-input input::-webkit-search-cancel-button,
+.mp-search-input input::-webkit-search-results-button,
+.mp-search-input input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
 }
 
 .mp-search-input input:focus {
