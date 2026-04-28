@@ -3,7 +3,7 @@ import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef,
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Maximize2, Menu, MessageSquare, Minimize2, MoonStar, Navigation,
+  Clock3, Flag, LayoutDashboard, Map as MapIcon, MapPinOff, Menu, MessageSquare, MoonStar, Navigation,
   PackageSearch, RefreshCw, Route, Settings, ShieldAlert, Sun, Thermometer, Truck, X, Zap, Search
 } from 'lucide-react';
 import { NavRail } from './layout/NavRail.jsx';
@@ -795,6 +795,13 @@ const getMapStatusMeta = (row) => {
   if (row?.isMoving || Number(row?.speed || 0) > 0) return { key: 'moving', label: 'Moving', color: '#22c55e' };
   return { key: 'stop', label: 'Stop', color: '#94a3b8' };
 };
+const TRUCK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18h2a1 1 0 0 0 1-1v-3.28a1 1 0 0 0-.684-.948l-1.923-.641a1 1 0 0 1-.684-.949V8a1 1 0 0 1 1-1h1.382a1 1 0 0 1 .894.553l1.448 2.894A1 1 0 0 0 20.382 11H22v5a2 2 0 0 1-2 2"/><circle cx="7" cy="18" r="2"/><circle cx="20" cy="18" r="2" style="display:none"/></svg>`;
+const buildTruckDivIcon = (leaflet, color, size = 28) => leaflet.divIcon({
+  className: 'fleet-truck-marker-shell',
+  html: `<div class="fleet-truck-marker" style="--truck-color:${color};width:${size}px;height:${size}px">${TRUCK_SVG}</div>`,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
 const geofenceChipTone = (row) => {
   const label = String(row?.geofenceStatusLabel || '').trim().toLowerCase();
   if (!label) return 'default';
@@ -922,16 +929,13 @@ export default function App() {
   const [tripMonitorBoard, setTripMonitorBoard] = useState({ rows: [], summary: null });
   const [tripMonitorBusy, setTripMonitorBusy] = useState(false);
   const [tripMonitorFilters, setTripMonitorFilters] = useState({ customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
-  const [tripMonitorDetail, setTripMonitorDetail] = useState(null);
-  const [tripMonitorDetailBusy, setTripMonitorDetailBusy] = useState(false);
-  const [tripMonitorDetailHistory, setTripMonitorDetailHistory] = useState(null);
-  const [tripMonitorDetailHistoryBusy, setTripMonitorDetailHistoryBusy] = useState(false);
-  const [tripMonitorDetailRange, setTripMonitorDetailRange] = useState({ startDate: '', endDate: '' });
+  const [tripMonitorPanels, setTripMonitorPanels] = useState([]);
   const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
   const tripMonitorBoardRequestRef = useRef(0);
+  const tripMonitorNextZRef = useRef(100);
   const fleetRows = status?.fleet?.rows || [];
   const availableAccounts = status?.config?.accounts || [];
   const connectedAccounts = useMemo(() => availableAccounts.filter((account) => account.hasSessionCookie), [availableAccounts]);
@@ -1580,9 +1584,12 @@ export default function App() {
   }, [expandedFleetRowKey, prioritizedFleet]);
 
   useEffect(() => {
-    if (!tripMonitorDetail?.rowId) return;
-    loadTripMonitorDetailHistory(tripMonitorDetail, range).catch(() => {});
-  }, [tripMonitorDetail?.rowId, range.startDate, range.endDate]);
+    tripMonitorPanels.forEach((panel) => {
+      if (panel.detail?.rowId && !panel.historyDetail && !panel.historyBusy) {
+        loadPanelHistory(panel.id, panel.detail, range).catch(() => {});
+      }
+    });
+  }, [tripMonitorPanels.map((panel) => panel.detail?.rowId).join(','), range.startDate, range.endDate]);
 
   useEffect(() => {
     setSelectedAstroLocationIds((current) => {
@@ -1827,15 +1834,15 @@ export default function App() {
     }
   };
 
-  const closeTripMonitorDetail = () => {
-    setTripMonitorDetail(null);
-    setTripMonitorDetailHistory(null);
-    setTripMonitorDetailRange({ startDate: '', endDate: '' });
-    setTripMonitorDetailBusy(false);
-    setTripMonitorDetailHistoryBusy(false);
+  const closeTripMonitorDetail = (panelId) => {
+    if (panelId) {
+      setTripMonitorPanels((current) => current.filter((panel) => panel.id !== panelId));
+      return;
+    }
+    setTripMonitorPanels([]);
   };
 
-  const loadTripMonitorDetailHistory = async (detail, rangeOverride = null) => {
+  const loadPanelHistory = async (panelId, detail, rangeOverride = null) => {
     const fleetRow = resolveTripMonitorFleetRow(detail);
     const fallbackRange = deriveTripMonitorHistoryRange(detail);
     const requestedRange = rangeOverride || range || fallbackRange;
@@ -1843,46 +1850,61 @@ export default function App() {
       startDate: normalizeInputDayValue(requestedRange?.startDate || '', fallbackRange.startDate),
       endDate: normalizeInputDayValue(requestedRange?.endDate || '', fallbackRange.endDate),
     };
-    startTransition(() => {
-      setTripMonitorDetailRange(resolvedRange);
-      setTripMonitorDetailHistory(null);
-    });
+    setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, historyRange: resolvedRange, historyDetail: null, historyBusy: true } : panel));
     if (!fleetRow?.id) {
-      startTransition(() => {
-        setTripMonitorDetailHistory({ unit: { id: detail?.unitId || '' }, records: [], incidents: [], geofenceEvents: [] });
-      });
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, historyDetail: { unit: { id: detail?.unitId || '' }, records: [], incidents: [], geofenceEvents: [] }, historyBusy: false } : panel));
       return;
     }
-    setTripMonitorDetailHistoryBusy(true);
     try {
       const query = new URLSearchParams({ accountId: fleetRow.accountId || 'primary', unitId: fleetRow.id, startDate: resolvedRange.startDate, endDate: resolvedRange.endDate, source: 'remote' });
       const payload = await api(`/api/unit-history?${query.toString()}`);
-      startTransition(() => {
-        if (payload.remoteError) setBanner({ tone: 'warning', message: `Data tidak lengkap. Error: ${payload.remoteError}` });
-        setTripMonitorDetailHistory(payload);
-      });
+      if (payload.remoteError) setBanner({ tone: 'warning', message: `Data tidak lengkap. Error: ${payload.remoteError}` });
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, historyDetail: payload, historyBusy: false } : panel));
     } catch (error) {
-      startTransition(() => {
-        setTripMonitorDetailHistory({ unit: { id: fleetRow.id }, records: [], incidents: [], geofenceEvents: [] });
-        setBanner({ tone: 'error', message: error.message || 'Historical Trip Monitor gagal diambil.' });
-      });
-    } finally {
-      setTripMonitorDetailHistoryBusy(false);
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, historyDetail: { unit: { id: fleetRow.id }, records: [], incidents: [], geofenceEvents: [] }, historyBusy: false } : panel));
+      setBanner({ tone: 'error', message: error.message || 'Historical Trip Monitor gagal diambil.' });
     }
   };
 
   const openTripMonitorDetail = async (rowId) => {
     if (!rowId) return;
-    setTripMonitorDetailBusy(true);
-    setTripMonitorDetailHistory(null);
+    const existing = tripMonitorPanels.find((panel) => panel.rowId === rowId);
+    if (existing) {
+      const nextZ = tripMonitorNextZRef.current++;
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === existing.id ? { ...panel, zIndex: nextZ } : panel));
+      return;
+    }
+    if (tripMonitorPanels.length >= 5) {
+      setBanner({ tone: 'warning', message: 'Max 5 panel terbuka. Tutup salah satu dulu.' });
+      return;
+    }
+    const cascadeOffset = tripMonitorPanels.length * 30;
+    const panelId = `tm-panel-${rowId}`;
+    const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth;
+    const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight;
+    const newPanel = {
+      id: panelId,
+      rowId,
+      detail: null,
+      detailBusy: true,
+      historyDetail: null,
+      historyBusy: false,
+      historyRange: { startDate: '', endDate: '' },
+      position: {
+        x: Math.max(0, Math.min(viewportWidth - 520, 200 + cascadeOffset)),
+        y: Math.max(0, Math.min(viewportHeight - 640, 60 + cascadeOffset)),
+      },
+      size: { width: 480, height: 600 },
+      zIndex: tripMonitorNextZRef.current++,
+    };
+    setTripMonitorPanels((current) => [...current, newPanel]);
     try {
       const payload = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId }).toString()}`);
       const detail = payload.detail || null;
-      startTransition(() => setTripMonitorDetail(detail));
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, detail, detailBusy: false } : panel));
     } catch (error) {
       setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
-    } finally {
-      setTripMonitorDetailBusy(false);
+      setTripMonitorPanels((current) => current.filter((panel) => panel.id !== panelId));
     }
   };
 
@@ -2613,7 +2635,6 @@ export default function App() {
       setBanner({ tone: 'error', message: 'Unit ini belum match ke Solofleet, jadi detail investigasi belum bisa dibuka.' });
       return;
     }
-    closeTripMonitorDetail();
     if (target === 'fleet') {
       toggleFleetGraph(fleetRow);
       return;
@@ -3151,6 +3172,7 @@ export default function App() {
         onTogglePolling={togglePolling}
         isPolling={!!status?.runtime?.isPolling}
         isOnline={!status?.runtime?.lastSnapshotError}
+        busy={busy}
       />
 
       <main className="workspace">
@@ -3372,7 +3394,7 @@ export default function App() {
                 <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | TMS window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Topbar range: {range.startDate || '-'} to {range.endDate || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
                 <TripMonitorKanban
                   rows={tripMonitorVisibleRows}
-                  selectedRowId={tripMonitorDetail?.rowId}
+                  selectedRowId={tripMonitorPanels.length ? tripMonitorPanels.reduce((front, panel) => front.zIndex > panel.zIndex ? front : panel).rowId : null}
                   onOpen={(row) => openTripMonitorDetail(row.rowId)}
                 />
               </CardContent>
@@ -3382,6 +3404,7 @@ export default function App() {
             rows={prioritizedFleet}
             selectedRow={selectedFleetRow}
             onSelectUnit={(row) => openUnit(row.accountId || 'primary', row.id, 'fleet')}
+            onBack={() => { setSelectedUnitId(''); setSelectedUnitAccountId('primary'); }}
             detail={unitDetail}
             detailBusy={detailBusy}
             quickFilter={quickFilter}
@@ -3775,10 +3798,10 @@ export default function App() {
                     columns={['Select', 'Unit ID', 'Current', 'Set category']}
                     emptyMessage="Belum ada unit dikonfigurasi di account aktif. Klik Discover units dulu."
                     rows={filteredConfiguredUnits.map((unit) => [
-                      <input type="checkbox" checked={selectedUnitCategoryIds.includes(unit.id)} onChange={() => toggleConfiguredUnitSelection(unit.id)} />,
+                      <input type="checkbox" aria-label={`Select ${unit.label || unit.id}`} checked={selectedUnitCategoryIds.includes(unit.id)} onChange={() => toggleConfiguredUnitSelection(unit.id)} />,
                       <div><strong>{unit.id}</strong><div className="subtle-line">{unit.label || unit.id}</div></div>,
                       <Chip color={unitCategoryTone(unit.category)}>{unitCategoryLabel(unit.category)}</Chip>,
-                      <select value={normalizeUnitCategory(unit.category)} onChange={(event) => updateConfiguredUnitCategory(unit.id, event.target.value)}>
+                      <select aria-label={`Category for ${unit.label || unit.id}`} value={normalizeUnitCategory(unit.category)} onChange={(event) => updateConfiguredUnitCategory(unit.id, event.target.value)}>
                         {UNIT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>,
                     ])}
@@ -3795,7 +3818,7 @@ export default function App() {
                   </div>
                   <label className="field"><span>Bulk category CSV</span><textarea rows="6" value={unitCategoryCsvText} onChange={(event) => setUnitCategoryCsvText(event.target.value)} placeholder="label,category" /></label>
                   <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" onChange={loadUnitCategoryCsvFile} />
+                    <input type="file" accept=".csv,text/csv" aria-label="Upload unit category CSV" onChange={loadUnitCategoryCsvFile} />
                     <Button variant="bordered" onPress={importUnitCategoryCsv}>Import CSV merge</Button>
                   </div>
                   <div className="subtle-line">CSV category sekarang bisa pakai label / nopol atau unitId. Template download mengikuti unit di account aktif. Kategori tersimpan per account dan per unit.</div>
@@ -3921,7 +3944,7 @@ export default function App() {
                   </div>
                   <label className="field"><span>Bulk CSV import</span><textarea rows="5" value={astroCsvText} onChange={(event) => setAstroCsvText(event.target.value)} placeholder="Nama Tempat, Latitude, Longitude, Radius, Type, Scope Mode, Account Scope, Customer Scope" /></label>
                   <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" onChange={loadAstroCsvFile} />
+                    <input type="file" accept=".csv,text/csv" aria-label="Upload location CSV" onChange={loadAstroCsvFile} />
                     <Button variant="bordered" onPress={() => importAstroLocations(false)}>Import merge</Button>
                     <Button variant="light" onPress={() => importAstroLocations(true)}>Replace all</Button>
                   </div>
@@ -3957,7 +3980,7 @@ export default function App() {
                           {visibleItems.map((location) => <div key={location.id} className="astro-entity-card">
                             <div className="astro-entity-card-head">
                               <label className="astro-card-select">
-                                <input type="checkbox" checked={selectedAstroLocationIds.includes(location.id)} onChange={() => toggleAstroLocationSelection(location.id)} />
+                                <input type="checkbox" aria-label={`Select ${location.name}`} checked={selectedAstroLocationIds.includes(location.id)} onChange={() => toggleAstroLocationSelection(location.id)} />
                               </label>
                               <div>
                                 <strong>{location.name}</strong>
@@ -4052,7 +4075,7 @@ export default function App() {
                   </div>
                   <label className="field"><span>Bulk route CSV import</span><textarea rows="6" value={astroRouteCsvText} onChange={(event) => setAstroRouteCsvText(event.target.value)} placeholder="Account ID, Nopol, Customer, WH, POOL, POD1..POD5, Rit1 Start, Rit1 End, Rit1 WH SLA, Rit1 POD SLA..., Rit2 Enabled, Rit2 Start, Rit2 End, Rit2 WH SLA, Rit2 POD SLA..., WH Temp Min SLA, WH Temp Max SLA, Active, Notes" /></label>
                   <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" onChange={loadAstroRouteCsvFile} />
+                    <input type="file" accept=".csv,text/csv" aria-label="Upload route CSV" onChange={loadAstroRouteCsvFile} />
                     <Button variant="bordered" onPress={() => importAstroRoutes(false)}>Import route merge</Button>
                     <Button variant="light" onPress={() => importAstroRoutes(true)}>Replace all routes</Button>
                   </div>
@@ -4090,7 +4113,7 @@ export default function App() {
                           {visibleItems.map((route) => <div key={route.id} className="astro-entity-card astro-route-card">
                             <div className="astro-entity-card-head">
                               <label className="astro-card-select">
-                                <input type="checkbox" checked={selectedAstroRouteIds.includes(route.id)} onChange={() => toggleAstroRouteSelection(route.id)} />
+                                <input type="checkbox" aria-label={`Select ${route.unitId}`} checked={selectedAstroRouteIds.includes(route.id)} onChange={() => toggleAstroRouteSelection(route.id)} />
                               </label>
                               <div>
                                 <strong>{astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId}</strong>
@@ -4418,18 +4441,21 @@ export default function App() {
         
       </main>
       
-      {tripMonitorDetail ? <TripMonitorDetailModal
-          detail={tripMonitorDetail}
-          busy={tripMonitorDetailBusy}
-          historyDetail={tripMonitorDetailHistory}
-          historyBusy={tripMonitorDetailHistoryBusy}
-          historyRange={tripMonitorDetailRange}
+      {tripMonitorPanels.map((panel) => <TripMonitorFloatingPanel
+          key={panel.id}
+          panel={panel}
           webSessionUser={webSessionUser}
-          onClose={closeTripMonitorDetail}
-          onOpenFleet={() => openTripMonitorInvestigation(tripMonitorDetail, 'fleet')}
-          onOpenMap={() => openTripMonitorInvestigation(tripMonitorDetail, 'map')}
-          onOpenHistorical={() => openTripMonitorInvestigation(tripMonitorDetail, 'historical')}
-        /> : null}
+          onClose={() => closeTripMonitorDetail(panel.id)}
+          onOpenFleet={() => openTripMonitorInvestigation(panel.detail, 'fleet')}
+          onOpenMap={() => openTripMonitorInvestigation(panel.detail, 'map')}
+          onOpenHistorical={() => openTripMonitorInvestigation(panel.detail, 'historical')}
+          onBringToFront={() => {
+            const nextZ = tripMonitorNextZRef.current++;
+            setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, zIndex: nextZ } : item));
+          }}
+          onMove={(position) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, position } : item))}
+          onResize={(size) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, size } : item))}
+        />)}
         {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
       {/* Fleet detail modal removed — selected unit detail now renders inline inside FleetWorkspace */}
@@ -4508,7 +4534,7 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
 const FLEET_WORKSPACE_SPLIT_KEY = 'sowhat:fleet-workspace-split';
 const FLEET_WORKSPACE_SPLIT_MIN = 0.45;
 const FLEET_WORKSPACE_SPLIT_MAX = 0.92;
-const FLEET_WORKSPACE_SPLIT_DEFAULT = 0.82;
+const FLEET_WORKSPACE_SPLIT_DEFAULT = 0.88;
 
 function readFleetWorkspaceSplit() {
   if (typeof window === 'undefined') return FLEET_WORKSPACE_SPLIT_DEFAULT;
@@ -4528,6 +4554,7 @@ function FleetWorkspace({
   rows,
   selectedRow,
   onSelectUnit,
+  onBack,
   detail,
   detailBusy,
   quickFilter,
@@ -4637,11 +4664,11 @@ function FleetWorkspace({
             return (
               <button
                 type="button"
-                role="listitem"
                 key={row.rowKey || rowKey || `fleet-row-${idx}`}
                 className={`fleet-workspace-row ${active ? 'is-active' : ''} fleet-workspace-row-${state.tone}`}
                 onClick={() => onSelectUnit(row)}
                 aria-pressed={active}
+                aria-label={`${row.label || row.alias || 'Unit'}: ${state.label}`}
               >
                 <span className={`fleet-workspace-row-dot fleet-workspace-row-dot-${state.tone}`} aria-hidden />
                 <span className="fleet-workspace-row-main">
@@ -4681,6 +4708,7 @@ function FleetWorkspace({
             rangeLabel={rangeLabel}
             onOpenTempErrors={() => onOpenTempErrors(selectedRow)}
             onSeeHistorical={() => onSeeHistorical(selectedRow)}
+            onBack={onBack}
             tripMonitorRows={tripMonitorRows}
           />
         ) : (
@@ -4693,7 +4721,7 @@ function FleetWorkspace({
   );
 }
 
-function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, tripMonitorRows = [] }) {
+function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, onBack, tripMonitorRows = [] }) {
   const [splitRatio, setSplitRatio] = useState(() => readFleetWorkspaceSplit());
   const splitContainerRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -4770,6 +4798,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
     <div className="fleet-workspace-detail-shell">
       <header className="fleet-workspace-detail-head">
         <div className="fleet-workspace-detail-title">
+          {onBack ? <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button> : null}
           <h2>{row.label || row.alias || '-'}</h2>
           <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
@@ -4903,14 +4932,10 @@ function FleetStatusMap({ rows }) {
       const longitude = Number(row.longitude);
       const statusMeta = getMapStatusMeta(row);
       const region = resolveFleetRegion(row);
-      const marker = leaflet.circleMarker([latitude, longitude], {
-        radius: 8,
-        color: statusMeta.color,
-        fillColor: statusMeta.color,
-        fillOpacity: 0.88,
-        weight: 2,
+      const marker = leaflet.marker([latitude, longitude], {
+        icon: buildTruckDivIcon(leaflet, statusMeta.color, 28),
       });
-      marker.bindTooltip(row.label || row.id, { permanent: true, direction: 'top', offset: [0, -10], className: 'fleet-map-label' });
+      marker.bindTooltip(row.label || row.id, { permanent: true, direction: 'top', offset: [0, -14], className: 'fleet-map-label' });
       marker.bindPopup(`<div class="fleet-map-popup"><strong>${row.label || row.id}</strong><div>${row.id}</div><div>${row.accountLabel || row.accountId || '-'}</div><div>${statusMeta.label}</div><div>${row.locationSummary || '-'}</div><div>${region}</div><div>Temp 1 ${fmtNum(row.liveTemp1, 1)} C</div><div>Temp 2 ${fmtNum(row.liveTemp2, 1)} C</div><div>Speed ${fmtNum(row.speed, 0)} km/h</div></div>`);
       marker.addTo(layer);
       bounds.push([latitude, longitude]);
@@ -5082,23 +5107,21 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [], hoveredStopK
 
       const endPoint = trackPoints[trackPoints.length - 1];
       bounds.push([endPoint.latitude, endPoint.longitude]);
-      leaflet.circleMarker([endPoint.latitude, endPoint.longitude], {
-        radius: 7,
-        weight: 2,
-        color: '#0f172a',
-        fillColor: currentMatchesLastTrack ? '#38bdf8' : '#fb923c',
-        fillOpacity: 1,
-      }).bindTooltip(currentMatchesLastTrack ? 'Current live position' : 'Last history point').bindPopup(buildPopupHtml(currentMatchesLastTrack ? 'Current live position' : 'Last history point', endPoint)).addTo(layer);
+      if (currentMatchesLastTrack) {
+        leaflet.marker([endPoint.latitude, endPoint.longitude], {
+          icon: buildTruckDivIcon(leaflet, '#38bdf8', 30),
+        }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', endPoint)).addTo(layer);
+      } else {
+        leaflet.circleMarker([endPoint.latitude, endPoint.longitude], {
+          radius: 7, weight: 2, color: '#0f172a', fillColor: '#fb923c', fillOpacity: 1,
+        }).bindTooltip('Last history point').bindPopup(buildPopupHtml('Last history point', endPoint)).addTo(layer);
+      }
     }
 
     if (currentPoint && !currentMatchesLastTrack) {
       bounds.push([currentPoint.latitude, currentPoint.longitude]);
-      leaflet.circleMarker([currentPoint.latitude, currentPoint.longitude], {
-        radius: 8,
-        weight: 2,
-        color: '#0f172a',
-        fillColor: '#38bdf8',
-        fillOpacity: 1,
+      leaflet.marker([currentPoint.latitude, currentPoint.longitude], {
+        icon: buildTruckDivIcon(leaflet, '#38bdf8', 30),
       }).bindTooltip('Current live position').bindPopup(buildPopupHtml('Current live position', currentPoint)).addTo(layer);
     }
 
@@ -5352,7 +5375,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   const width = 860;
   const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
     ? Number(chartHeight)
-    : compact ? 240 : 320;
+    : compact ? 180 : 240;
   const padding = { top: 18, right: 24, bottom: 44, left: 56 };
   const thresholdValues = [normalizedThresholdRange.min, normalizedThresholdRange.max].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
@@ -5885,7 +5908,7 @@ function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
       <div className="trip-monitor-comment-card">
         {showForm && (
           <div className="trip-monitor-comment-form">
-            <textarea rows={3} placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+            <textarea rows={3} aria-label="Komentar trip" placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
             <div className="trip-monitor-comment-form-actions">
               <button type="button" className="sf-btn sf-btn-light sf-btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
               <button type="button" className="sf-btn sf-btn-primary sf-btn-sm" disabled={busy || !commentText.trim()} onClick={handleSubmit}>
@@ -5919,7 +5942,116 @@ function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
   </div>;
 }
 
-function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical }) {
+/* TripMonitorFloatingPanelStyles moved to styles.css */
+
+function TripMonitorFloatingPanel({ panel, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical, onBringToFront, onMove, onResize }) {
+  const panelRef = useRef(null);
+  useEffect(() => {
+    const handleKey = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const handleDragStart = (event) => {
+    event.preventDefault();
+    onBringToFront?.();
+    const el = panelRef.current;
+    const startX = event.clientX - panel.position.x;
+    const startY = event.clientY - panel.position.y;
+    let lastX = panel.position.x;
+    let lastY = panel.position.y;
+    const handleMove = (moveEvent) => {
+      lastX = Math.max(0, Math.min(window.innerWidth - 100, moveEvent.clientX - startX));
+      lastY = Math.max(0, Math.min(window.innerHeight - 50, moveEvent.clientY - startY));
+      if (el) { el.style.left = lastX + 'px'; el.style.top = lastY + 'px'; }
+    };
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      onMove?.({ x: lastX, y: lastY });
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+  };
+
+  const handleResizeStart = (event, direction) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onBringToFront?.();
+    const el = panelRef.current;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = panel.size.width;
+    const startH = panel.size.height;
+    const startPosX = panel.position.x;
+    const startPosY = panel.position.y;
+    let lastW = startW, lastH = startH, lastX = startPosX, lastY = startPosY;
+    const handleMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      lastW = startW; lastH = startH; lastX = startPosX; lastY = startPosY;
+      if (direction.includes('e')) lastW = Math.max(360, startW + dx);
+      if (direction.includes('w')) { lastW = Math.max(360, startW - dx); lastX = startPosX + (startW - lastW); }
+      if (direction.includes('s')) lastH = Math.max(300, startH + dy);
+      if (direction.includes('n')) { lastH = Math.max(300, startH - dy); lastY = startPosY + (startH - lastH); }
+      lastX = Math.max(0, lastX); lastY = Math.max(0, lastY);
+      if (el) { el.style.width = lastW + 'px'; el.style.height = lastH + 'px'; el.style.left = lastX + 'px'; el.style.top = lastY + 'px'; }
+    };
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      onResize?.({ width: lastW, height: lastH });
+      onMove?.({ x: lastX, y: lastY });
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+  };
+
+  const detail = panel.detail;
+  if (!detail && !panel.detailBusy) return null;
+  const rawSeverity = String(detail?.severity || '').toLowerCase();
+  const severityKey = rawSeverity === 'critical' ? 'critical' : rawSeverity === 'warning' ? 'warning' : 'normal';
+  const displayLabel = detail ? pickFirstText(detail.metadata?.fleetRow?.alias, detail.unitLabel, detail.metadata?.fleetRow?.label, detail.unitId) : 'Loading...';
+
+  return <div
+    ref={panelRef}
+    className={`tm-float-panel severity-${severityKey}`}
+    style={{ left: panel.position.x, top: panel.position.y, width: panel.size.width, height: panel.size.height, zIndex: panel.zIndex, position: 'fixed' }}
+    onPointerDown={onBringToFront}
+    role="dialog"
+    aria-label="Trip Monitor floating panel"
+  >
+    {['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((direction) => <div key={direction} className={`tm-float-resize tm-float-resize-${direction}`} onPointerDown={(event) => handleResizeStart(event, direction)} />)}
+    <div className="tm-float-header" onPointerDown={handleDragStart}>
+      <div className="tm-float-title-block">
+        <h3 className="tm-float-title">{displayLabel || '-'}</h3>
+        <div className="tm-float-meta">
+          <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail?.severity)}</span>
+          {detail?.customerName ? <span className="tm-brand-chip">{detail.customerName}</span> : null}
+        </div>
+      </div>
+      <button type="button" className="tm-float-close" onClick={(event) => { event.stopPropagation(); onClose?.(); }} aria-label="Close panel" title="Close (Esc)"><X size={16} /></button>
+    </div>
+    <div className="tm-float-body">
+      {panel.detailBusy ? <div className="empty-state">Loading detail...</div> : <TripMonitorDetailModal
+        detail={detail}
+        busy={false}
+        historyDetail={panel.historyDetail}
+        historyBusy={panel.historyBusy}
+        historyRange={panel.historyRange}
+        webSessionUser={webSessionUser}
+        onOpenFleet={onOpenFleet}
+        onOpenMap={onOpenMap}
+        onOpenHistorical={onOpenHistorical}
+        mode="floating"
+      />}
+    </div>
+  </div>;
+}
+
+function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical, mode = 'drawer' }) {
   useEffect(() => {
     if (!detail) return undefined;
     const handleKey = (event) => {
@@ -5944,8 +6076,6 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
   const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
   const mapStops = headlineJob?.stops || [];
   const [hoveredStopKey, setHoveredStopKey] = useState(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  useEffect(() => { if (!detail) { setIsFullscreen(false); } }, [detail]);
   const rawSeverity = String(detail?.severity || '').toLowerCase();
   const severityKey = rawSeverity === 'critical' ? 'critical' : rawSeverity === 'warning' ? 'warning' : 'normal';
   const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
@@ -5983,8 +6113,189 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
     } catch { return '--:--'; }
   };
 
-  return <div className={`tm-drawer-backdrop ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-    <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey} ${isFullscreen ? 'is-fullscreen' : ''}`} onClick={(event) => event.stopPropagation()}>
+  const body = <CardContent>
+        {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-stack">
+
+          <div className="tm-stack-section tm-driver-section">
+            <div className="tm-driver-row">
+              <div className="tm-driver-info">
+                <span className="tm-stack-label">Drivers</span>
+                <strong className="tm-driver-names">
+                  {driver1Name}{driver2Name && driver2Name !== '-' ? <> <span className="tm-divider-dot">·</span> {driver2Name}</> : null}
+                </strong>
+              </div>
+              <span className={`tm-status-pill status-${String(shippingStatus?.label || '').toLowerCase().replace(/\s+/g, '-')}`}>
+                {shippingStatus?.label || 'Unknown'}
+              </span>
+            </div>
+            <p className="tm-route-line">{routeSummary}</p>
+          </div>
+
+          <div className="tm-stack-section tm-map-section">
+            <div className="tm-map-frame">
+              {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+            </div>
+            <div className="tm-action-row">
+              <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)}>
+                <Route size={14} /> Track Route
+              </button>
+              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)}>
+                <Clock3 size={14} /> Trip History
+              </button>
+              <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)}>
+                <Truck size={14} /> Open Fleet
+              </button>
+            </div>
+          </div>
+
+          <details className="tm-stack-section tm-section-collapsible" open>
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Notification</span>
+              <span className="tm-section-meta">
+                {totalIncidents > 0 ? <span className="tm-section-count">{totalIncidents}</span> : null}
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              {totalIncidents === 0 ? (
+                <div className="tm-empty-soft">No incidents on this trip.</div>
+              ) : (
+                <>
+                  {['critical', 'warning', 'normal'].map((lvl) => {
+                    const list = incidentsByLevel[lvl];
+                    if (!list.length) return null;
+                    const labelMap = { critical: 'Critical', warning: 'Warning', normal: 'Resolved / Normal' };
+                    return (
+                      <details key={lvl} className={`tm-incident-group severity-${lvl}`} open={lvl === 'critical' || lvl === 'warning'}>
+                        <summary className="tm-incident-group-summary">
+                          <span className={`tm-severity-dot severity-${lvl}`} />
+                          <span className="tm-incident-group-label">{labelMap[lvl]}</span>
+                          <span className="tm-incident-group-count">({list.length})</span>
+                          <ChevronDown size={12} className="tm-section-chevron" />
+                        </summary>
+                        <div className="tm-incident-group-body">
+                          {list.slice(0, 6).map((item, idx) => (
+                            <div key={item.id || idx} className={`tm-alert-row severity-${lvl}`}>
+                              <span className="tm-alert-time">{formatAlertTime(item.openedAt)}</span>
+                              <span className="tm-alert-content">
+                                <strong className="tm-alert-label">{item.label || tmsIncidentLabel(item.incidentCode)}</strong>
+                                <span className="tm-alert-meta">
+                                  {String(item.status || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active'}
+                                  {item.durationMinutes ? ` · ${formatMinutesText(item.durationMinutes)}` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                          {list.length > 6 ? <div className="tm-section-more">+ {list.length - 6} more incidents</div> : null}
+                        </div>
+                      </details>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </details>
+
+          <details className="tm-stack-section tm-section-collapsible" open>
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Stops Timeline</span>
+              <span className="tm-section-meta">
+                {mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
+            </div>
+          </details>
+
+          <div className="tm-stack-section">
+            <div className="tm-section-summary tm-section-summary-static">
+              <span className="tm-section-title">Schedule</span>
+            </div>
+            <div className="tm-section-content tm-info-grid">
+              <div className="tm-info-cell">
+                <span className="tm-info-key">ETA Load</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">ETD Unload</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">Last update</span>
+                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</strong>
+              </div>
+              <div className="tm-info-cell">
+                <span className="tm-info-key">TMS Range</span>
+                <strong className="tm-info-value">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}° / ${fmtNum(normalizedJobTempRange.max)}°` : '-'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <details className="tm-stack-section tm-section-collapsible">
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Temperature Trend</span>
+              <span className="tm-section-meta">
+                <span className="tm-section-count tm-range-chip">{historyLabel}</span>
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={240} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}
+            </div>
+          </details>
+
+          <details className="tm-stack-section tm-section-collapsible">
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Historical Records</span>
+              <span className="tm-section-meta">
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
+            </div>
+          </details>
+
+          <details className="tm-stack-section tm-section-collapsible">
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Incident History (full)</span>
+              <span className="tm-section-meta">
+                <span className="tm-section-count">{incidentHistory.length}</span>
+                <ChevronDown size={14} className="tm-section-chevron" />
+              </span>
+            </summary>
+            <div className="tm-section-content">
+              <DataTable
+                pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
+                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
+                emptyMessage="Belum ada incident history untuk JO ini."
+                rows={incidentHistory.map((item) => {
+                  const description = buildTripMonitorIncidentHistoryDescription(item);
+                  const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
+                  return [
+                    <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
+                    <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
+                    <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
+                    <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
+                    formatMinutesText(item.durationMinutes || 0),
+                    fmtDate(item.openedAt),
+                    String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
+                    <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
+                    <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
+                  ];
+                })}
+              />
+            </div>
+          </details>
+        </div>}
+      </CardContent>;
+
+  if (mode === 'floating') return body;
+
+  return <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
+    <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
       <CardHeader className="panel-card-header tm-drawer-header">
         <div className="tm-drawer-header-inner">
           <div className="tm-drawer-title-block">
@@ -5998,22 +6309,14 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             </div>
           </div>
           <div className="tm-drawer-header-actions">
-            <button
-              type="button"
-              className="tm-drawer-icon-btn"
-              onClick={() => setIsFullscreen((value) => !value)}
-              aria-label={isFullscreen ? 'Collapse to drawer' : 'Open as page'}
-              title={isFullscreen ? 'Collapse to drawer' : 'Open as page'}
-            >
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
             <button type="button" className="tm-drawer-close" onClick={onClose} aria-label="Close drawer" title="Close (Esc)">
               <X size={18} />
             </button>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      {body}
+      {false && <CardContent>
         {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-stack">
 
           <div className="tm-stack-section tm-driver-section">
@@ -6146,7 +6449,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             </div>
           </details>
 
-          {isFullscreen ? (
+          {false ? (
             <details className="tm-stack-section tm-section-collapsible" open>
               <summary className="tm-section-summary">
                 <span className="tm-section-title">Historical Records</span>
@@ -6160,7 +6463,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             </details>
           ) : null}
 
-          {isFullscreen ? (
+          {false ? (
             <details className="tm-stack-section tm-section-collapsible" open>
               <summary className="tm-section-summary">
                 <span className="tm-section-title">Incident History (full)</span>
@@ -6194,7 +6497,7 @@ function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, hist
             </details>
           ) : null}
         </div>}
-      </CardContent>
+      </CardContent>}
     </Card>
   </div>;
 }
@@ -6239,7 +6542,7 @@ function SearchableSelect({ label, value, options, onChange, placeholder = 'Sear
     setQuery('');
   };
 
-  return <label className="field searchable-field" ref={wrapperRef}><span>{label}</span><button type="button" className={`searchable-trigger ${open ? 'is-open' : ''}`} title={selectedOption?.preview || selectedOption?.label || placeholder} onClick={() => setOpen((current) => !current)}><span className={`searchable-trigger-text ${selectedOption ? '' : 'is-placeholder'}`}>{selectedOption?.label || placeholder}</span><span className="searchable-trigger-icon">v</span></button>{open ? <div className="searchable-dropdown"><div className="searchable-dropdown-search"><Search size={14} /><input ref={searchInputRef} type="text" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} /></div><div className="searchable-dropdown-list">{filteredOptions.length ? filteredOptions.map((option) => <button key={`${label}-${option.value || 'empty'}`} type="button" className={`searchable-option ${option.value === value ? 'is-selected' : ''}`} title={option.preview || option.label} onMouseDown={(event) => event.preventDefault()} onClick={() => pickOption(option.value)}>{option.label}</button>) : <div className="searchable-empty">No match found</div>}</div></div> : null}</label>;
+  return <label className="field searchable-field" ref={wrapperRef}><span>{label}</span><button type="button" className={`searchable-trigger ${open ? 'is-open' : ''}`} title={selectedOption?.preview || selectedOption?.label || placeholder} onClick={() => setOpen((current) => !current)}><span className={`searchable-trigger-text ${selectedOption ? '' : 'is-placeholder'}`}>{selectedOption?.label || placeholder}</span><span className="searchable-trigger-icon">v</span></button>{open ? <div className="searchable-dropdown"><div className="searchable-dropdown-search"><Search size={14} /><input ref={searchInputRef} type="text" aria-label={`Search ${label}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} /></div><div className="searchable-dropdown-list">{filteredOptions.length ? filteredOptions.map((option) => <button key={`${label}-${option.value || 'empty'}`} type="button" className={`searchable-option ${option.value === value ? 'is-selected' : ''}`} title={option.preview || option.label} onMouseDown={(event) => event.preventDefault()} onClick={() => pickOption(option.value)}>{option.label}</button>) : <div className="searchable-empty">No match found</div>}</div></div> : null}</label>;
 }
 
 function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', shellClassName = '', pagination = null }) {
@@ -6272,11 +6575,11 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
     const rowProps = getRowProps ? getRowProps(row, absoluteRowIndex) : {};
     const { key, className: rowClassName, ...restRowProps } = rowProps || {};
     return <tr key={key || `row-${absoluteRowIndex}`} className={rowClassName || ''} {...restRowProps}>{row.map((cell, cellIndex) => <td key={`cell-${absoluteRowIndex}-${cellIndex}`}>{cell}</td>)}</tr>;
-  })}</tbody></table>{pagination ? <div className="table-pagination"><div className="table-pagination-meta"><span>Rows per page</span><select value={rowsPerPage} onChange={(event) => {
+  })}</tbody></table>{pagination ? <div className="table-pagination"><div className="table-pagination-meta"><span>Rows per page</span><select aria-label="Rows per page" value={rowsPerPage} onChange={(event) => {
     const nextRowsPerPage = Number(event.target.value || initialRowsPerPage);
     setRowsPerPage(nextRowsPerPage);
     setPage(1);
-  }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
+  }}>{rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></div><div className="table-pagination-meta">Page {page} of {totalPages}</div><div className="table-pagination-controls"><button type="button" className="table-page-button" aria-label="First page" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button><button type="button" className="table-page-button" aria-label="Previous page" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button><button type="button" className="table-page-button" aria-label="Next page" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button><button type="button" className="table-page-button" aria-label="Last page" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button></div></div> : null}</div>;
 }
 
 
