@@ -11357,9 +11357,14 @@ body.fleet-workspace-resizing * {
 
 .tm-search-compact input {
   width: 100%;
-  padding-left: 32px;
+  padding-left: 36px;
   height: 34px;
   font-size: 12.5px;
+}
+
+.tm-search-compact input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .tm-filter-toggle {
@@ -11537,7 +11542,7 @@ body.fleet-workspace-resizing * {
   border-radius: var(--radius-lg);
   background: var(--surface);
   overflow: hidden;
-  min-height: 360px;
+  min-height: 280px;
 }
 
 .tm-kanban-col--critical {
@@ -11630,8 +11635,9 @@ body.fleet-workspace-resizing * {
   gap: 6px;
   padding: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 320px);
-  min-height: 240px;
+  overflow-x: hidden;
+  max-height: calc(100vh - 340px);
+  min-height: 200px;
 }
 
 .tm-kanban-col-body::-webkit-scrollbar { width: 4px; }
@@ -11680,10 +11686,11 @@ body.fleet-workspace-resizing * {
   display: grid;
   gap: 5px;
   align-content: start;
-  overflow: hidden;
+  overflow: visible;
   transition: border-color 140ms ease, box-shadow 140ms ease;
   font: inherit;
   color: inherit;
+  flex-shrink: 0;
 }
 
 .tm-card > * { min-width: 0; }
