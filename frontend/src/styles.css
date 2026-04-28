@@ -1736,6 +1736,8 @@ textarea:focus {
 }
 
 .chart-shell {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1782,6 +1784,7 @@ textarea:focus {
 
 .chart-stage {
   position: relative;
+  z-index: 1;
   width: 100%;
   min-width: 0;
   overflow: visible;
@@ -1831,7 +1834,7 @@ textarea:focus {
   border: 1px solid var(--tooltip-border);
   box-shadow: var(--tooltip-shadow);
   pointer-events: none;
-  z-index: 3;
+  z-index: 50;
 }
 
 .chart-tooltip strong {
@@ -6329,7 +6332,7 @@ textarea:focus {
 .trip-monitor-progress-shell {
   position: relative;
   padding-top: 20px;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .trip-monitor-progress-track {
@@ -6340,7 +6343,6 @@ textarea:focus {
   height: 2px;
   background: var(--border);
   z-index: 0;
-  min-width: 760px;
 }
 
 .trip-monitor-progress-track-fill {
@@ -6353,11 +6355,11 @@ textarea:focus {
 .trip-monitor-progress {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 18px;
-  align-items: start;
-  min-width: 760px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 14px;
+  align-items: stretch;
+  min-width: 0;
 }
 
 .trip-monitor-progress-step {
@@ -6366,6 +6368,7 @@ textarea:focus {
   justify-items: center;
   text-align: center;
   min-width: 0;
+  flex: 1 1 150px;
 }
 
 .trip-monitor-progress-marker {
@@ -6389,6 +6392,10 @@ textarea:focus {
   border-radius: 999px;
   background: currentColor;
   display: block;
+}
+
+.trip-monitor-progress-connector {
+  display: none;
 }
 
 .trip-monitor-progress-step.is-completed .trip-monitor-progress-marker,
@@ -6421,6 +6428,50 @@ textarea:focus {
   line-height: 1.35;
   color: var(--text-secondary);
   max-width: 140px;
+}
+
+@media (max-width: 860px) {
+  .trip-monitor-progress-shell {
+    padding-top: 8px;
+    overflow-x: hidden;
+  }
+
+  .trip-monitor-progress-track {
+    display: none;
+  }
+
+  .trip-monitor-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .trip-monitor-progress-connector {
+    display: block;
+    width: 2px;
+    height: 14px;
+    margin-left: 16px;
+    background: var(--border);
+  }
+
+  .trip-monitor-progress-step {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px 12px;
+    justify-items: start;
+    align-items: start;
+    text-align: left;
+  }
+
+  .trip-monitor-progress-copy {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .trip-monitor-progress-copy small {
+    max-width: none;
+  }
 }
 
 .trip-monitor-progress-step.is-pending .trip-monitor-progress-marker {
@@ -6686,11 +6737,11 @@ textarea:focus {
   }
 
   .trip-monitor-progress {
-    min-width: 560px;
+    min-width: 0;
   }
 
   .trip-monitor-progress-track {
-    min-width: 560px;
+    min-width: 0;
   }
 }
 
@@ -14825,13 +14876,24 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     font-size: 12px;
   }
 
-  /* Prevent horizontal overflow on very narrow screens */
-  .bridge-shell .panel-card,
-  .bridge-shell .sf-card,
-  .bridge-shell .overview-chart-card,
+  /* Prevent horizontal overflow on very narrow screens, except for charts which need visible tooltips */
   .bridge-shell .overview-kpi-card {
     min-width: 0;
     overflow: hidden;
+  }
+  .bridge-shell .panel-card,
+  .bridge-shell .sf-card,
+  .bridge-shell .overview-chart-card {
+    min-width: 0;
+    overflow: visible;
+    overflow-x: clip; /* clip horizontal, allow vertical overflow for dropdowns/tooltips */
+  }
+
+  .bridge-shell .panel-card:has(.chart-shell),
+  .bridge-shell .sf-card:has(.chart-shell),
+  .bridge-shell .overview-chart-card:has(.overview-trend-chart),
+  .bridge-shell .overview-chart-card:has(.overview-chart-tooltip) {
+    overflow: visible;
   }
 }
 
@@ -15683,4 +15745,452 @@ body {
 .bridge-shell .unit-map-canvas,
 .bridge-shell .fleet-status-map-canvas {
   contain: strict;
+}
+
+/* =====================================================================
+   MOBILE TABLE CONDENSING — Trip Monitor Drawer
+   ===================================================================== */
+@media (max-width: 768px) {
+  /* Hide specific columns in Historical Records table */
+  .tm-drawer-panel .data-table th:nth-child(4), /* Lokasi */
+  .tm-drawer-panel .data-table td:nth-child(4),
+  .tm-drawer-panel .data-table th:nth-child(6), /* Aksi */
+  .tm-drawer-panel .data-table td:nth-child(6) {
+    display: none;
+  }
+  
+  /* Incident history table condensing */
+  .tm-drawer-panel .trip-monitor-incident-history-card .data-table th:nth-child(3), /* Waktu Selesai */
+  .tm-drawer-panel .trip-monitor-incident-history-card .data-table td:nth-child(3),
+  .tm-drawer-panel .trip-monitor-incident-history-card .data-table th:nth-child(5), /* Lokasi */
+  .tm-drawer-panel .trip-monitor-incident-history-card .data-table td:nth-child(5) {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   VERTICAL TIMELINE — Trip Monitor Shipping Progress
+   ===================================================================== */
+@media (max-width: 768px) {
+  .trip-monitor-progress-shell {
+    padding-top: 10px;
+    overflow-x: hidden;
+  }
+  
+  /* Hide the horizontal track */
+  .trip-monitor-progress-track {
+    display: none;
+  }
+  
+  /* Change grid to vertical stack */
+  .trip-monitor-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+  
+  .trip-monitor-progress-step {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    text-align: left;
+    justify-items: start;
+    position: relative;
+  }
+  
+  /* Vertical track line connecting dots */
+  .trip-monitor-progress-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 34px;
+    bottom: -16px;
+    width: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .trip-monitor-progress-step.is-completed:not(:last-child)::after {
+    background: var(--primary);
+  }
+  
+  .trip-monitor-progress-copy {
+    justify-items: start;
+    padding-top: 2px;
+  }
+  
+  .trip-monitor-progress-copy small {
+    max-width: none;
+  }
+  
+  .trip-monitor-progress-stops {
+    text-align: left;
+    margin-left: 0;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Command bar + page hero collision prevention
+   ===================================================================== */
+
+/* ---- Tablet ≤960px: command bar stacks properly ---- */
+@media (max-width: 960px) {
+  /* Command bar: stack into rows, no overlap */
+  .bridge-shell .command-bar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    height: auto !important;
+    min-height: 44px;
+    padding: 8px 12px 8px 48px !important;
+    gap: 8px !important;
+  }
+
+  /* Title row: full width, fixed height */
+  .bridge-shell .command-bar-left {
+    flex: 1 1 100% !important;
+    height: auto !important;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    border-bottom: none !important;
+    padding-bottom: 0;
+  }
+
+  /* Search: full width on its own row */
+  .bridge-shell .command-bar-center {
+    flex: 1 1 100% !important;
+    order: 3;
+    padding: 0 !important;
+  }
+
+  /* Right controls: wrap into a row below */
+  .bridge-shell .command-bar-right {
+    flex: 1 1 100% !important;
+    order: 4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 !important;
+    justify-content: space-between;
+  }
+
+  /* Date range: shrink to fit */
+  .bridge-shell .command-bar-range {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* Actions: stay together */
+  .bridge-shell .command-bar-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+  }
+
+  /* Divider: hide on mobile */
+  .bridge-shell .command-bar-divider {
+    display: none;
+  }
+
+  /* Hamburger: don't overlap content */
+  .bridge-mobile-toggle {
+    z-index: 110;
+  }
+}
+
+/* ---- Phone ≤600px: even more compact ---- */
+@media (max-width: 600px) {
+  .bridge-shell .command-bar {
+    padding: 6px 8px 6px 44px !important;
+    gap: 6px !important;
+  }
+
+  .bridge-shell .command-bar-left {
+    min-height: 28px;
+  }
+
+  .bridge-shell .command-bar-title-text {
+    font-size: 13px !important;
+  }
+
+  /* Search: smaller */
+  .bridge-shell .command-bar-search {
+    height: 32px !important;
+  }
+
+  /* Hide kbd shortcut hint on phone */
+  .bridge-shell .command-bar-search-kbd {
+    display: none !important;
+  }
+
+  /* Date range: compact */
+  .bridge-shell .command-bar-range {
+    height: 32px;
+    padding: 0 6px;
+    gap: 4px;
+  }
+  .bridge-shell .command-bar-range input[type='date'] {
+    width: 80px !important;
+    font-size: 10.5px !important;
+  }
+  .bridge-shell .command-bar-range-sep {
+    display: none;
+  }
+  .bridge-shell .command-bar-range-icon {
+    display: none;
+  }
+
+  /* Icon buttons: 36px touch targets */
+  .bridge-shell .command-bar-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px;
+  }
+
+  /* Poll button: compact */
+  .bridge-shell .command-bar-actions .action {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Trip Monitor page hero
+   ===================================================================== */
+@media (max-width: 960px) {
+  /* Hero: stack title and actions vertically */
+  .tm-page-hero {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .tm-page-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .tm-page-hero-actions .sf-btn,
+  .tm-page-hero-actions button {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  /* Subtitle: wrap properly */
+  .tm-page-subtitle {
+    word-break: break-word;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 600px) {
+  .tm-page-title {
+    font-size: 16px !important;
+  }
+
+  .tm-page-subtitle {
+    font-size: 11.5px !important;
+  }
+
+  /* Metrics: 2-col, tighter */
+  .tm-metrics-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .tm-metric {
+    padding: 8px 10px !important;
+  }
+
+  .tm-metric-value {
+    font-size: 16px !important;
+  }
+
+  /* Severity tabs: horizontal scroll, no wrap */
+  .tm-severity-tabs {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px !important;
+    padding-bottom: 4px;
+  }
+  .tm-severity-tabs::-webkit-scrollbar { display: none; }
+
+  .tm-severity-pill {
+    flex-shrink: 0;
+    padding: 5px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Controls row: stack */
+  .tm-controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .tm-controls-right {
+    flex-direction: row !important;
+    gap: 6px;
+  }
+
+  .tm-search-compact {
+    flex: 1;
+    min-width: 0 !important;
+  }
+
+  .tm-search-compact input {
+    height: 36px !important;
+  }
+
+  /* Filter drawer: single column */
+  .tm-filter-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tm-filter-context {
+    font-size: 10px;
+    word-break: break-all;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Other page heroes (Astro, TempErrors, StopIdle)
+   ===================================================================== */
+@media (max-width: 600px) {
+  .astro-page-hero,
+  .temperr-page-hero,
+  .stopidle-page-hero {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .astro-page-hero-actions,
+  .temperr-page-hero-actions,
+  .stopidle-page-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .astro-page-hero-actions .sf-btn,
+  .temperr-page-hero-actions .sf-btn,
+  .stopidle-page-hero-actions .sf-btn,
+  .astro-page-hero-actions button,
+  .temperr-page-hero-actions button,
+  .stopidle-page-hero-actions button {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .astro-page-title,
+  .temperr-page-title,
+  .stopidle-page-title {
+    font-size: 16px !important;
+  }
+
+  /* StopIdle form: single column */
+  .stopidle-form {
+    grid-template-columns: 1fr !important;
+  }
+  .stopidle-field--narrow {
+    max-width: none !important;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Overview page
+   ===================================================================== */
+@media (max-width: 600px) {
+  .overview-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px;
+  }
+
+  .overview-title {
+    font-size: 16px !important;
+  }
+
+  .overview-toolbar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .overview-account-field {
+    min-width: 0 !important;
+    width: 100%;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Kanban board
+   ===================================================================== */
+@media (max-width: 600px) {
+  .tm-kanban {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+
+  .tm-kanban-col {
+    min-height: 200px !important;
+  }
+
+  .tm-kanban-col-body {
+    max-height: 320px !important;
+    padding: 6px !important;
+    gap: 4px !important;
+  }
+
+  .tm-kanban-col-header {
+    padding: 8px 10px !important;
+  }
+
+  .tm-card {
+    padding: 6px 8px 6px 12px !important;
+  }
+}
+
+/* =====================================================================
+   MOBILE LAYOUT FIX — Fleet workspace
+   ===================================================================== */
+@media (max-width: 600px) {
+  .fleet-workspace-list-toolbar {
+    padding: 8px 8px 0 !important;
+  }
+
+  .fleet-workspace-pills {
+    padding: 6px 8px 0 !important;
+    gap: 4px !important;
+  }
+
+  .fleet-workspace-pill {
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .fleet-workspace-detail-head {
+    padding: 8px 10px 6px !important;
+  }
+
+  .fleet-workspace-detail-metrics .mini-metric {
+    padding: 4px 10px !important;
+    min-width: 70px !important;
+  }
+
+  .fleet-workspace-detail-metrics .mini-metric > strong {
+    font-size: 13px !important;
+  }
+
+  .fleet-workspace-detail-metrics .mini-metric > span {
+    font-size: 9px !important;
+  }
 }
