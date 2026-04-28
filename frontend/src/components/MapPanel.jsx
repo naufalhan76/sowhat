@@ -152,8 +152,9 @@ const FleetMapCanvas = React.memo(function FleetMapCanvas({
     const layer = leaflet.layerGroup().addTo(map);
     mapRef.current = map;
     layerRef.current = layer;
-    window.setTimeout(() => map.invalidateSize(), 80);
+    const sizeTimer = window.setTimeout(() => map.invalidateSize(), 80);
     return () => {
+      clearTimeout(sizeTimer);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -199,7 +200,8 @@ const FleetMapCanvas = React.memo(function FleetMapCanvas({
       else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
       lastFitKeyRef.current = plottedRowsFitKey;
     }
-    window.setTimeout(() => map.invalidateSize(), 50);
+    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 50);
+    return () => clearTimeout(resizeTimer);
   }, [leaflet, plottedRows, plottedRowsFitKey, getMapStatusMeta, resolveFleetRegion, buildTruckDivIcon, fmtNum]);
 
   /* Expose map actions to parent */

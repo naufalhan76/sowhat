@@ -1784,6 +1784,10 @@ textarea:focus {
   position: relative;
   width: 100%;
   min-width: 0;
+  overflow: visible;
+}
+
+.chart-stage .chart-svg {
   overflow: hidden;
 }
 
@@ -15096,4 +15100,587 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
 @media (max-width: 600px) {
   .cmdpal-backdrop { padding-top: 16px; }
   .cmdpal { width: calc(100vw - 16px); max-height: 70vh; }
+}
+
+/* =====================================================================
+   POLISH LAYER — Micro-interactions, entrance animations, visual depth
+   ===================================================================== */
+
+html { scroll-behavior: smooth; }
+
+.bridge-shell .workspace > * {
+  animation: ws-content-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.bridge-shell .workspace > *:nth-child(1) { animation-delay: 0ms; }
+.bridge-shell .workspace > *:nth-child(2) { animation-delay: 40ms; }
+.bridge-shell .workspace > *:nth-child(3) { animation-delay: 80ms; }
+.bridge-shell .workspace > *:nth-child(4) { animation-delay: 120ms; }
+.bridge-shell .workspace > *:nth-child(5) { animation-delay: 160ms; }
+.bridge-shell .workspace > *:nth-child(6) { animation-delay: 200ms; }
+.bridge-shell .workspace > *:nth-child(n+7) { animation-delay: 240ms; }
+@keyframes ws-content-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bridge-shell .navrail-item {
+  transition: background 0.14s cubic-bezier(0.16, 1, 0.3, 1), color 0.14s ease, transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bridge-shell .navrail-item:active { transform: scale(0.97); }
+.bridge-shell .navrail-item:hover .navrail-item-glyph {
+  transform: scale(1.1);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.bridge-shell .navrail-item-glyph {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.14s ease;
+}
+
+.bridge-shell .navrail-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 0 3px 3px 0;
+  animation: nav-accent-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes nav-accent-enter {
+  from { height: 0; opacity: 0; }
+  to { height: 18px; opacity: 1; }
+}
+
+.bridge-shell .navrail-mark {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+.bridge-shell .navrail-brand:hover .navrail-mark {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3), 0 4px 14px -4px rgba(16, 185, 129, 0.5);
+}
+
+.bridge-shell .action:active:not(:disabled),
+.bridge-shell .sf-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+  transition: transform 0.06s ease;
+}
+
+.bridge-shell .action-primary,
+.bridge-shell .sf-btn-primary {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 4px 12px -6px rgba(16, 185, 129, 0.5);
+  transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.08s ease;
+}
+.bridge-shell .action-primary:hover:not(:disabled),
+.bridge-shell .sf-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 6px 18px -6px rgba(16, 185, 129, 0.6);
+}
+
+.bridge-shell .panel-card,
+.bridge-shell .sf-card,
+.bridge-shell .overview-chart-card,
+.bridge-shell .overview-wh-card {
+  transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+}
+.bridge-shell .panel-card:hover,
+.bridge-shell .sf-card:hover,
+.bridge-shell .overview-chart-card:hover,
+.bridge-shell .overview-wh-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.12) !important;
+}
+
+.bridge-shell .mini-metric,
+.bridge-shell .stat-card,
+.bridge-shell .overview-kpi-card,
+.bridge-shell .tm-metric,
+.bridge-shell .temperr-metric,
+.bridge-shell .astro-metric,
+.bridge-shell .stopidle-metric {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bridge-shell .mini-metric::after,
+.bridge-shell .stat-card::after,
+.bridge-shell .overview-kpi-card::after,
+.bridge-shell .tm-metric::after,
+.bridge-shell .temperr-metric::after,
+.bridge-shell .astro-metric::after,
+.bridge-shell .stopidle-metric::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--primary);
+  opacity: 0;
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bridge-shell .mini-metric:hover::after,
+.bridge-shell .stat-card:hover::after,
+.bridge-shell .overview-kpi-card:hover::after,
+.bridge-shell .tm-metric:hover::after,
+.bridge-shell .temperr-metric:hover::after,
+.bridge-shell .astro-metric:hover::after,
+.bridge-shell .stopidle-metric:hover::after {
+  opacity: 1;
+  transform: scaleY(1);
+}
+.bridge-shell .mini-metric-danger::after, .bridge-shell .overview-kpi-card.danger::after,
+.bridge-shell .tm-metric--critical::after, .bridge-shell .temperr-metric--danger::after { background: var(--danger-text); }
+.bridge-shell .mini-metric-warning::after, .bridge-shell .overview-kpi-card.warning::after,
+.bridge-shell .tm-metric--warning::after, .bridge-shell .temperr-metric--warning::after { background: var(--warning-text); }
+.bridge-shell .overview-kpi-card.success::after, .bridge-shell .tm-metric--normal::after { background: var(--success-text); }
+
+.bridge-shell .command-bar-search {
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bridge-shell .command-bar-search:focus-within { max-width: 480px; }
+
+.bridge-shell .command-bar-icon-btn {
+  transition: background 0.14s ease, color 0.14s ease, transform 0.1s ease, box-shadow 0.14s ease;
+}
+.bridge-shell .command-bar-icon-btn:hover { box-shadow: 0 0 0 2px var(--surface-hover); }
+.bridge-shell .command-bar-icon-btn:active { transform: scale(0.9); }
+
+.bridge-shell .filter-pill, .bridge-shell .fleet-workspace-pill, .bridge-shell .tm-severity-pill {
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+}
+.bridge-shell .filter-pill:active, .bridge-shell .fleet-workspace-pill:active, .bridge-shell .tm-severity-pill:active { transform: scale(0.95); }
+
+.bridge-shell .fleet-workspace-row {
+  transition: background 0.14s cubic-bezier(0.16, 1, 0.3, 1), transform 0.14s ease;
+}
+.bridge-shell .fleet-workspace-row:hover { transform: translateX(2px); }
+.bridge-shell .fleet-workspace-row:active { transform: translateX(2px) scale(0.995); }
+
+.bridge-shell .tm-card {
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bridge-shell .tm-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.15); }
+.bridge-shell .tm-card:active { transform: translateY(0) scale(0.98); }
+
+.toast { animation: toast-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tm-float-panel { animation: float-panel-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes float-panel-enter {
+  from { opacity: 0; transform: scale(0.9) translateY(16px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.bridge-shell ::-webkit-scrollbar { width: 6px; height: 6px; }
+.bridge-shell ::-webkit-scrollbar-track { background: transparent; }
+.bridge-shell ::-webkit-scrollbar-thumb { background: rgba(120, 120, 130, 0.18); border-radius: 999px; border: 1px solid transparent; background-clip: padding-box; }
+.bridge-shell ::-webkit-scrollbar-thumb:hover { background: rgba(120, 120, 130, 0.35); background-clip: padding-box; }
+
+.bridge-shell ::selection { background: rgba(16, 185, 129, 0.2); color: var(--text-dark); }
+[data-theme='light'] .bridge-shell ::selection { background: rgba(5, 150, 105, 0.18); }
+
+.bridge-shell input, .bridge-shell select, .bridge-shell textarea {
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.bridge-shell .status-strip-on { position: relative; }
+.bridge-shell .status-strip-on::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-right: 6px;
+  box-shadow: 0 0 6px var(--primary);
+  animation: status-pulse 2s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.bridge-shell .overview-kpi-card { animation: kpi-card-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.bridge-shell .overview-kpi-card:nth-child(1) { animation-delay: 60ms; }
+.bridge-shell .overview-kpi-card:nth-child(2) { animation-delay: 120ms; }
+.bridge-shell .overview-kpi-card:nth-child(3) { animation-delay: 180ms; }
+.bridge-shell .overview-kpi-card:nth-child(4) { animation-delay: 240ms; }
+@keyframes kpi-card-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bridge-shell .overview-chart-card { animation: chart-card-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 300ms; }
+@keyframes chart-card-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bridge-shell .sf-chip, .bridge-shell .pill {
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.bridge-shell .sf-chip:hover, .bridge-shell .pill:hover { transform: translateY(-1px); }
+
+.bridge-shell .empty-state-icon { animation: empty-float 3s ease-in-out infinite; }
+@keyframes empty-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.bridge-shell { transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.bridge-shell .navrail-profile-avatar { transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease; }
+.bridge-shell .navrail-profile-button:hover .navrail-profile-avatar { transform: scale(1.08); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3); }
+
+.bridge-shell .navrail-theme-toggle { transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.1s ease; }
+.bridge-shell .navrail-theme-toggle:active { transform: scale(0.97); }
+.bridge-shell .navrail-theme-thumb { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.bridge-shell .navrail-theme-toggle:hover .navrail-theme-thumb { transform: rotate(15deg) scale(1.1); }
+
+.bridge-shell .spinner-arc { animation: spinner-rotate 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+.bridge-shell .searchable-dropdown { animation: dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes dropdown-enter {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.bridge-shell .searchable-option { transition: background 0.1s ease, color 0.1s ease, padding-left 0.14s ease; }
+.bridge-shell .searchable-option:hover { padding-left: 16px; }
+
+body {
+  background-image: radial-gradient(ellipse 80% 50% at 100% 0%, rgba(16, 185, 129, 0.03), transparent 60%), radial-gradient(ellipse 60% 40% at 0% 100%, rgba(6, 182, 212, 0.02), transparent 60%);
+  background-attachment: fixed;
+}
+[data-theme='light'] body {
+  background-image: radial-gradient(ellipse 80% 50% at 100% 0%, rgba(5, 150, 105, 0.04), transparent 60%), radial-gradient(ellipse 60% 40% at 0% 100%, rgba(6, 182, 212, 0.025), transparent 60%);
+}
+
+.bridge-shell .data-table tbody tr { transition: background 0.12s ease; }
+.bridge-shell .tm-kanban-col-header { background: linear-gradient(180deg, var(--severity-bg), transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bridge-shell .workspace > *, .bridge-shell .overview-kpi-card, .bridge-shell .overview-chart-card,
+  .bridge-shell .tm-float-panel, .bridge-shell .empty-state-icon, .bridge-shell .status-strip-on::before,
+  .toast, .bridge-shell .searchable-dropdown { animation: none !important; }
+  .bridge-shell .navrail-item, .bridge-shell .navrail-item-glyph, .bridge-shell .navrail-mark,
+  .bridge-shell .navrail-profile-avatar, .bridge-shell .navrail-theme-thumb, .bridge-shell .action,
+  .bridge-shell .sf-btn, .bridge-shell .panel-card, .bridge-shell .sf-card, .bridge-shell .mini-metric,
+  .bridge-shell .tm-card, .bridge-shell .fleet-workspace-row, .bridge-shell .command-bar-icon-btn,
+  .bridge-shell .command-bar-search, .bridge-shell .sf-chip, .bridge-shell .pill { transition: none !important; }
+}
+
+/* =====================================================================
+   POLISH LAYER — Responsive overrides
+   Disable hover transforms on touch, tighten spacing, improve mobile UX
+   ===================================================================== */
+
+/* ---- Touch devices: disable hover-only transforms ---- */
+@media (hover: none) {
+  .bridge-shell .panel-card:hover,
+  .bridge-shell .sf-card:hover,
+  .bridge-shell .overview-chart-card:hover,
+  .bridge-shell .overview-wh-card:hover {
+    transform: none;
+    box-shadow: none !important;
+  }
+  .bridge-shell .tm-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .bridge-shell .fleet-workspace-row:hover {
+    transform: none;
+  }
+  .bridge-shell .sf-chip:hover,
+  .bridge-shell .pill:hover {
+    transform: none;
+  }
+  .bridge-shell .navrail-item:hover .navrail-item-glyph {
+    transform: none;
+  }
+  .bridge-shell .navrail-brand:hover .navrail-mark {
+    transform: none;
+    box-shadow: none;
+  }
+  .bridge-shell .navrail-profile-button:hover .navrail-profile-avatar {
+    transform: none;
+    box-shadow: none;
+  }
+  .bridge-shell .navrail-theme-toggle:hover .navrail-theme-thumb {
+    transform: none;
+  }
+  .bridge-shell .searchable-option:hover {
+    padding-left: 12px;
+  }
+  .bridge-shell .command-bar-icon-btn:hover {
+    box-shadow: none;
+  }
+  .bridge-shell .action-primary:hover:not(:disabled),
+  .bridge-shell .sf-btn-primary:hover:not(:disabled) {
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 4px 12px -6px rgba(16, 185, 129, 0.5);
+  }
+}
+
+/* ---- Tablet: ≤960px ---- */
+@media (max-width: 960px) {
+  /* Faster entrance animations on mobile */
+  .bridge-shell .workspace > * {
+    animation-duration: 0.25s;
+  }
+  .bridge-shell .overview-kpi-card {
+    animation-duration: 0.25s;
+  }
+  .bridge-shell .overview-chart-card {
+    animation-duration: 0.3s;
+    animation-delay: 150ms;
+  }
+
+  /* Disable search expand on mobile — already full width */
+  .bridge-shell .command-bar-search:focus-within {
+    max-width: none;
+  }
+
+  /* Mobile nav drawer: smoother slide + backdrop */
+  .bridge-shell > .navrail,
+  .bridge-shell .navrail {
+    transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  .bridge-shell.mobile-nav-open > .navrail,
+  .bridge-shell.mobile-nav-open .navrail {
+    box-shadow: 16px 0 48px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Mobile backdrop fade */
+  .bridge-mobile-backdrop {
+    transition: opacity 0.22s ease;
+  }
+
+  /* Mobile hamburger button: subtle press feedback */
+  .bridge-mobile-toggle {
+    transition: background 0.12s ease, transform 0.1s ease;
+  }
+  .bridge-mobile-toggle:active {
+    transform: scale(0.9);
+  }
+
+  /* Status strip: stack gracefully */
+  .bridge-shell .status-strip {
+    height: auto;
+    min-height: var(--statusstrip-height);
+    padding: 6px 12px;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  /* Toast: position above status bar, full width on mobile */
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--statusstrip-height, 28px) + 12px);
+  }
+  .toast {
+    max-width: none;
+    width: 100%;
+  }
+
+  /* Card hover lift: disable on tablet (mostly touch) */
+  .bridge-shell .panel-card:hover,
+  .bridge-shell .sf-card:hover {
+    transform: none;
+    box-shadow: none !important;
+  }
+}
+
+/* ---- Phone: ≤600px ---- */
+@media (max-width: 600px) {
+  /* Kill all entrance animation delays on phone — instant feel */
+  .bridge-shell .workspace > * {
+    animation-delay: 0ms !important;
+    animation-duration: 0.2s;
+  }
+  .bridge-shell .overview-kpi-card {
+    animation-delay: 0ms !important;
+    animation-duration: 0.2s;
+  }
+  .bridge-shell .overview-chart-card {
+    animation-delay: 0ms !important;
+    animation-duration: 0.2s;
+  }
+
+  /* Tighter workspace gap */
+  .bridge-shell .workspace {
+    gap: 12px;
+  }
+
+  /* Fleet row: no translateX on phone */
+  .bridge-shell .fleet-workspace-row:hover {
+    transform: none;
+  }
+  .bridge-shell .fleet-workspace-row:active {
+    transform: scale(0.99);
+  }
+
+  /* Scrollbar: hide on phone (use native) */
+  .bridge-shell ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* Command bar icon buttons: 44px touch targets */
+  .bridge-shell .command-bar-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* NavRail items: 44px touch targets */
+  .bridge-shell .navrail-item {
+    min-height: 44px;
+    padding: 10px 8px;
+  }
+
+  /* Status strip: single line, smaller text */
+  .bridge-shell .status-strip {
+    font-size: 10.5px;
+    padding: 4px 8px;
+  }
+
+  /* Modal/drawer: full width on phone */
+  .trip-monitor-detail-drawer,
+  .tm-drawer-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 0;
+  }
+
+  /* Toast: flush to edges */
+  .toast-container {
+    left: 6px;
+    right: 6px;
+    bottom: calc(var(--statusstrip-height, 28px) + 8px);
+  }
+}
+
+/* ---- Safe area insets for notched phones ---- */
+@supports (padding: env(safe-area-inset-top)) {
+  @media (max-width: 960px) {
+    .bridge-shell .command-bar {
+      padding-top: env(safe-area-inset-top);
+    }
+    .bridge-shell .status-strip {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .bridge-shell > .navrail,
+    .bridge-shell .navrail {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+}
+
+/* ---- Landscape phone: constrain heights ---- */
+@media (max-height: 500px) and (max-width: 960px) {
+  .bridge-shell .workspace {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .bridge-shell .overview-kpi-grid {
+    gap: 6px;
+  }
+  .bridge-shell .overview-kpi-card {
+    padding: 10px 12px;
+  }
+  .bridge-shell .overview-kpi-card > strong {
+    font-size: 18px !important;
+  }
+}
+
+/* =====================================================================
+   PERFORMANCE LAYER — CSS rendering optimization for low-spec devices
+   ===================================================================== */
+
+/* content-visibility: auto — skip rendering off-screen heavy elements */
+.bridge-shell .data-table tbody,
+.bridge-shell .fleet-workspace-rows,
+.bridge-shell .tm-kanban-col-body,
+.bridge-shell .mp-region-list,
+.bridge-shell .trip-monitor-comment-list,
+.bridge-shell .trip-monitor-stops-timeline-list,
+.bridge-shell .astro-report-table-shell,
+.bridge-shell .temp-error-table-shell,
+.bridge-shell .searchable-dropdown-list,
+.bridge-shell .tm-stack {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+/* contain: layout style paint — isolate repaints on heavy containers */
+.bridge-shell .workspace {
+  contain: layout style;
+}
+.bridge-shell .tm-kanban-col {
+  contain: layout style paint;
+}
+.bridge-shell .fleet-workspace-list {
+  contain: layout style paint;
+}
+.bridge-shell .fleet-workspace-detail {
+  contain: layout style;
+}
+
+/* Reduce paint complexity on fixed/sticky elements */
+.bridge-shell .command-bar {
+  will-change: auto;
+  contain: layout style;
+}
+.bridge-shell .status-strip {
+  contain: layout style;
+}
+
+/* GPU-promote only elements that actually animate transforms */
+.bridge-shell .navrail {
+  will-change: transform;
+}
+.bridge-mobile-backdrop {
+  will-change: opacity;
+}
+
+/* font-display: swap — already in Google Fonts URL param, but enforce locally */
+@font-face {
+  font-family: 'Inter';
+  font-display: swap;
+  src: local('Inter');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-display: swap;
+  src: local('JetBrains Mono');
+}
+
+/* Minimize DOM reflow on table layouts */
+.bridge-shell .data-table {
+  table-layout: fixed;
+}
+.bridge-shell .astro-report-table {
+  table-layout: fixed;
+}
+
+/* Optimize scrolling containers */
+.bridge-shell .workspace,
+.bridge-shell .fleet-workspace-rows,
+.bridge-shell .tm-kanban-col-body,
+.bridge-shell .mp-region-list,
+.bridge-shell .tm-stack,
+.bridge-shell .navrail-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Reduce paint on map containers */
+.bridge-shell .mp-map-canvas,
+.bridge-shell .unit-map-canvas,
+.bridge-shell .fleet-status-map-canvas {
+  contain: strict;
 }
