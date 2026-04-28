@@ -49,7 +49,6 @@ function useActivePanelRoute() {
   }, [navigate, activePanel]);
   return [activePanel, setActivePanel];
 }
-
 // Compatibility wrappers - old call sites pass `variant`/`color`/`onPress` style props.
 // Map these to the new component primitives without changing 5800 lines of JSX.
 const Button = ({ children, variant, color, className = '', onPress, onClick, ...props }) => {
