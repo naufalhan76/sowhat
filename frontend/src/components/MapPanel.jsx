@@ -332,12 +332,13 @@ export function MapPanel({
     <section className={`mp-page ${sidebarOpen ? '' : 'mp-page--collapsed'}`}>
       {/* ── Sidebar (fixed left column) ── */}
       <aside className={`mp-sidebar ${sidebarOpen ? 'is-open' : ''}`}>
-        {/* Header */}
-        <div className="mp-sidebar-header">
+        {/* Header — tappable on mobile to toggle bottom sheet */}
+        <div className="mp-sidebar-header" onClick={() => setSidebarOpen((v) => !v)} role="button" tabIndex={0}>
           <h2 className="mp-sidebar-title">Fleet map</h2>
-          <button type="button" className="mp-sidebar-close mp-mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Tutup sidebar">
-            <X size={14} />
-          </button>
+          <div className="mp-sidebar-header-right">
+            <span className="mp-sidebar-unit-count">{(mapFleetRows || []).length} units</span>
+            <ChevronDown size={14} className={`mp-sidebar-chevron ${sidebarOpen ? 'is-open' : ''}`} />
+          </div>
         </div>
 
         {/* Search */}
@@ -426,15 +427,7 @@ export function MapPanel({
 
       </div>
 
-      {/* Mobile sidebar toggle — outside map area for z-index */}
-      <button
-        type="button"
-        className="mp-sidebar-toggle"
-        onClick={() => setSidebarOpen((v) => !v)}
-        aria-label={sidebarOpen ? 'Tutup sidebar' : 'Buka sidebar'}
-      >
-        {sidebarOpen ? <X size={16} /> : <Layers size={16} />}
-      </button>
+      {/* Legacy sidebar toggle — hidden, bottom sheet header handles toggle now */}
     </section>
   );
 }
