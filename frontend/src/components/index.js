@@ -13,5 +13,6 @@ export { ConfigPanel } from './ConfigPanel.jsx';
 export { AdminPanel } from './AdminPanel.jsx';
 export { HistoricalPanel } from './HistoricalPanel.jsx';
 export { AstroReportPanel } from './AstroReportPanel.jsx';
+export { MapPanel } from './MapPanel.jsx';
 export { TempErrorsPanel } from './TempErrorsPanel.jsx';
 export { StopIdlePanel } from './StopIdlePanel.jsx';
