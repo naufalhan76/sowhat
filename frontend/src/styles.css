@@ -8758,7 +8758,7 @@ html, body {
   background: var(--surface);
   border-color: var(--border);
 }
-.command-bar-search-icon { color: var(--text-muted); flex: 0 0 auto; position: static; pointer-events: auto; }
+.command-bar-search-icon { color: var(--text-muted); flex: 0 0 auto; position: static; left: auto; top: auto; transform: none; pointer-events: auto; }
 .command-bar-search input {
   flex: 1;
   border: 0;
