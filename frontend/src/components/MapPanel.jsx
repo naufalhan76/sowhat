@@ -46,45 +46,59 @@ const REGION_PAGE_SIZE = 6;
 
 /* ── Region card ── */
 function RegionCard({ region, rows, getMapStatusMeta, expanded, onToggle, onZoomRegion, onPanToUnit }) {
+  const [collapsed, setCollapsed] = useState(false);
   const visibleRows = expanded ? rows : rows.slice(0, REGION_PAGE_SIZE);
   const hasMore = rows.length > REGION_PAGE_SIZE;
 
   return (
-    <div className="mp-region-card">
-      <button type="button" className="mp-region-header" onClick={() => onZoomRegion(rows)} title={`Zoom ke ${region}`}>
+    <div className={`mp-region-card ${collapsed ? 'is-collapsed' : ''}`}>
+      <button 
+        type="button" 
+        className="mp-region-header" 
+        onClick={() => setCollapsed(!collapsed)} 
+        title={`Toggle ${region}`}
+      >
         <span className="mp-region-name">{region}</span>
-        <span className="mp-region-count">{rows.length}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="mp-region-count" onClick={(e) => { e.stopPropagation(); onZoomRegion(rows); }} title={`Zoom ke ${region}`}>{rows.length}</span>
+          {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+        </div>
       </button>
-      <div className="mp-region-units">
-        {visibleRows.map((row) => {
-          const meta = getMapStatusMeta(row);
-          return (
-            <button
-              type="button"
-              key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`}
-              className="mp-region-unit"
-              onClick={() => onPanToUnit(row)}
-              title={`Pan ke ${row.label || row.id}`}
-            >
-              <span className="mp-region-dot" style={{ backgroundColor: meta.color }} />
-              <div className="mp-region-unit-info">
-                <strong>{row.label || row.id}</strong>
-                <span>{meta.label}</span>
-              </div>
+      
+      {!collapsed && (
+        <>
+          <div className="mp-region-units">
+            {visibleRows.map((row) => {
+              const meta = getMapStatusMeta(row);
+              return (
+                <button
+                  type="button"
+                  key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`}
+                  className="mp-region-unit"
+                  onClick={() => onPanToUnit(row)}
+                  title={`Pan ke ${row.label || row.id}`}
+                >
+                  <span className="mp-region-dot" style={{ backgroundColor: meta.color }} />
+                  <div className="mp-region-unit-info">
+                    <strong>{row.label || row.id}</strong>
+                    <span>{meta.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {hasMore && !expanded ? (
+            <button type="button" className="mp-region-more" onClick={onToggle}>
+              +{rows.length - REGION_PAGE_SIZE} lainnya <ChevronDown size={12} />
             </button>
-          );
-        })}
-      </div>
-      {hasMore && !expanded ? (
-        <button type="button" className="mp-region-more" onClick={onToggle}>
-          +{rows.length - REGION_PAGE_SIZE} lainnya <ChevronDown size={12} />
-        </button>
-      ) : null}
-      {hasMore && expanded ? (
-        <button type="button" className="mp-region-more" onClick={onToggle}>
-          Lebih sedikit <ChevronUp size={12} />
-        </button>
-      ) : null}
+          ) : null}
+          {hasMore && expanded ? (
+            <button type="button" className="mp-region-more" onClick={onToggle}>
+              Lebih sedikit <ChevronUp size={12} />
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

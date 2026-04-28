@@ -3247,9 +3247,8 @@ textarea:focus {
 
 .mp-search-input input {
   width: 100%;
-  padding: 7px 10px 7px 34px;
-  height: 32px;
-  font-size: 12.5px;
+  padding: 8px 10px 8px 36px;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--surface-raised);
@@ -11221,7 +11220,7 @@ html, body {
 }
 .fleet-workspace-search input {
   width: 100%;
-  padding: 8px 10px 8px 32px;
+  padding: 8px 10px 8px 34px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-raised);
@@ -16504,10 +16503,10 @@ body {
 
   /* Expanded: 30% of viewport */
   .mp-sidebar.is-open {
-    flex: 3 1 0% !important;
+    flex: 1 1 auto !important;
     min-height: 120px;
-    max-height: 40dvh;
-    overflow-y: auto !important;
+    max-height: 50dvh;
+    overflow-y: hidden !important; /* Allow internal scrolling instead of full component scroll */
   }
 
   /* Collapsed: just the header bar */
