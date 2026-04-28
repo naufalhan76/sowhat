@@ -37,6 +37,12 @@ export function TripMonitorFloatingPanel({
   onBringToFront,
   onMove,
   onResize,
+  renderTemperatureChart,
+  renderUnitRouteMap,
+  fmtDate,
+  fmtNum,
+  fmtCoord,
+  formatMinutesText,
 }) {
   const panelRef = useRef(null);
 
@@ -229,6 +235,12 @@ export function TripMonitorFloatingPanel({
             onOpenFleet={onOpenFleet}
             onOpenMap={onOpenMap}
             onOpenHistorical={onOpenHistorical}
+            renderTemperatureChart={renderTemperatureChart}
+            renderUnitRouteMap={renderUnitRouteMap}
+            fmtDate={fmtDate}
+            fmtNum={fmtNum}
+            fmtCoord={fmtCoord}
+            formatMinutesText={formatMinutesText}
             mode="floating"
           />
         )}

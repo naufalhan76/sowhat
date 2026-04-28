@@ -1782,6 +1782,9 @@ textarea:focus {
 
 .chart-stage {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .chart-svg {
@@ -1789,6 +1792,26 @@ textarea:focus {
   height: auto;
   display: block;
   border-radius: var(--radius-lg);
+}
+
+@media (max-width: 600px) {
+  .chart-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chart-tools {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chart-legend {
+    font-size: 10px;
+    gap: 4px;
+  }
+  .chart-zoom-controls {
+    gap: 4px;
+  }
 }
 
 .chart-tooltip {
@@ -3578,8 +3601,8 @@ textarea:focus {
   display: none;
   position: absolute;
   top: 10px;
-  left: 10px;
-  z-index: 6;
+  left: 310px;
+  z-index: 25;
   appearance: none;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -3644,7 +3667,8 @@ textarea:focus {
 
   .mp-sidebar-toggle {
     display: inline-flex;
-    z-index: 15;
+    left: 10px;
+    z-index: 25;
   }
 
   .mp-fit-all-btn {
@@ -11579,15 +11603,18 @@ html, body {
   margin-bottom: 4px;
 }
 
+/* Unit picker (mobile only) */
 .fleet-workspace-detail-picker {
   display: none;
   flex: 1;
   min-width: 0;
-  max-width: 200px;
+  max-width: 220px;
+  position: relative;
 }
 
 .fleet-workspace-detail-picker .searchable-field {
   margin-bottom: 0;
+  position: relative;
 }
 
 .fleet-workspace-detail-picker .searchable-field > span {
@@ -11595,15 +11622,30 @@ html, body {
 }
 
 .fleet-workspace-detail-picker .searchable-trigger {
-  height: 28px;
-  font-size: 11.5px;
-  padding: 0 8px;
+  height: 30px;
+  font-size: 12px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
 }
 
 .fleet-workspace-detail-picker .searchable-dropdown {
-  min-width: 240px;
-  right: 0;
-  left: auto;
+  position: fixed;
+  top: auto;
+  left: 12px;
+  right: 12px;
+  bottom: 60px;
+  width: auto;
+  min-width: 0;
+  max-height: 50vh;
+  border-radius: 8px;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25);
+  z-index: 200;
+}
+
+.fleet-workspace-detail-picker .searchable-dropdown-list {
+  max-height: calc(50vh - 52px);
 }
 
 .fleet-workspace-detail-chips .pill {
@@ -14470,11 +14512,17 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     display: block;
   }
 
-  /* Command bar: compact for mobile */
+  /* Command bar: two-row layout on tablet */
   .bridge-shell .command-bar {
-    padding: 0 12px 0 48px; /* leave room for hamburger btn */
-    gap: 8px;
-    height: 48px !important;
+    padding: 0 12px 0 48px;
+    gap: 0;
+    height: auto !important;
+    flex-wrap: wrap !important;
+  }
+  .bridge-shell .command-bar-left {
+    flex: 1 1 100%;
+    height: 44px;
+    border-bottom: 1px solid var(--border);
   }
   .bridge-shell .command-bar-title-text {
     font-size: 14px;
@@ -14483,30 +14531,30 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     display: none;
   }
   .bridge-shell .command-bar-center {
-    flex: 0 0 auto;
-  }
-  .bridge-shell .command-bar-right {
-    gap: 4px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .bridge-shell .command-bar-right::-webkit-scrollbar {
-    display: none;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 0;
   }
   .bridge-shell .command-bar-search {
-    width: 160px;
-    min-width: 120px;
-    max-width: 160px;
-    flex: 0 0 auto;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
   }
   .bridge-shell .command-bar-search-kbd {
-    font-size: 10px;
-    padding: 1px 4px;
+    font-size: 9px;
+    padding: 1px 3px;
+  }
+  .bridge-shell .command-bar-right {
+    flex: 0 0 auto;
+    gap: 4px;
+    padding: 6px 0;
   }
   .bridge-shell .command-bar-range input[type='date'] {
-    width: 90px;
+    width: 85px;
     font-size: 11px !important;
+  }
+  .bridge-shell .command-bar-divider {
+    height: 16px;
   }
 
   /* Workspace: tighter padding */
@@ -14608,47 +14656,53 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     grid-template-columns: 1fr !important;
   }
 
-  /* Command bar: compact, keep ALL components visible */
+  /* Command bar: phone — search full-width row, actions scroll */
   .bridge-shell .command-bar {
     padding: 0 6px 0 44px;
-    gap: 4px;
   }
-  .bridge-shell .command-bar-center {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .bridge-shell .command-bar-search {
-    width: 100% !important;
-    max-width: none !important;
-    min-width: 0 !important;
-  }
-  .bridge-shell .command-bar-search-kbd {
-    font-size: 9px;
-    padding: 1px 3px;
-  }
-  .bridge-shell .command-bar-range {
-    flex: 0 0 auto;
-    gap: 2px;
-  }
-  .bridge-shell .command-bar-range input[type='date'] {
-    width: 80px;
-    font-size: 10px !important;
-    padding: 2px 4px;
-  }
-  .bridge-shell .command-bar-range-sep {
-    display: none;
+  .bridge-shell .command-bar-left {
+    height: 40px;
   }
   .bridge-shell .command-bar-title-text {
     font-size: 13px;
   }
+  .bridge-shell .command-bar-center {
+    flex: 1 1 100%;
+    order: 3;
+    padding: 0 0 6px;
+  }
+  .bridge-shell .command-bar-search {
+    height: 32px;
+  }
+  .bridge-shell .command-bar-search-kbd {
+    display: none;
+  }
   .bridge-shell .command-bar-right {
+    flex: 0 0 auto;
     gap: 2px;
+    padding: 6px 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
   .bridge-shell .command-bar-right::-webkit-scrollbar {
     display: none;
+  }
+  .bridge-shell .command-bar-range {
+    gap: 2px;
+    padding: 0 6px;
+    height: 30px;
+  }
+  .bridge-shell .command-bar-range input[type='date'] {
+    width: 78px;
+    font-size: 10px !important;
+  }
+  .bridge-shell .command-bar-range-sep {
+    display: none;
+  }
+  .bridge-shell .command-bar-icon-btn {
+    width: 30px;
+    height: 30px;
   }
 
   /* Workspace: minimal padding */
