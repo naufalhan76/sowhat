@@ -1,3 +1,4 @@
+import React, { useMemo } from 'react';
 import { AlertTriangle, AlertCircle, ShieldCheck } from 'lucide-react';
 import { KANBAN_COLUMNS } from './helpers.jsx';
 import { TripMonitorUnitCard } from './TripMonitorUnitCard.jsx';
@@ -17,11 +18,11 @@ const COLUMN_META = {
   },
 };
 
-export function TripMonitorKanban({ rows = [], selectedRowId, onOpen, severityCounts }) {
-  const grouped = KANBAN_COLUMNS.map((column) => ({
+export const TripMonitorKanban = React.memo(function TripMonitorKanban({ rows = [], selectedRowId, onOpen, severityCounts }) {
+  const grouped = useMemo(() => KANBAN_COLUMNS.map((column) => ({
     ...column,
     rows: rows.filter((row) => column.match(String(row?.severity || '').trim())),
-  }));
+  })), [rows]);
 
   return (
     <div className="tm-kanban">
@@ -61,4 +62,4 @@ export function TripMonitorKanban({ rows = [], selectedRowId, onOpen, severityCo
       })}
     </div>
   );
-}
+});

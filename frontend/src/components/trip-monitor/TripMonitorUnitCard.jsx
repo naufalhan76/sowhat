@@ -1,3 +1,4 @@
+import React from 'react';
 import { AlertCircle, Thermometer, MapPin } from 'lucide-react';
 
 import { normalizeTemperatureRange } from './helpers.jsx';
@@ -14,7 +15,7 @@ function compactDriverStatus(value) {
     .join(' · ');
 }
 
-export function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
+export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
   const unitLabel = row?.unitLabel || row?.unitId || row?.normalizedPlate || '-';
   const shippingStatus = row?.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
   const activeStopName = row?.metadata?.shippingStatus?.activeStopName || '';
@@ -76,4 +77,4 @@ export function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
       {row?.unmatchedReason ? <div className="tm-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
     </button>
   );
-}
+});

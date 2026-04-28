@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, Clock3, Route, Truck, X } from 'lucide-react';
 import { Surface, SurfaceHeader, SurfaceBody, Action, Pill } from '../index.js';
 import {
@@ -113,6 +113,25 @@ function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', s
       ) : null}
     </div>
   );
+}
+
+function useIsVisible(options = {}) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      { rootMargin: '100px', threshold: 0, ...options },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, visible];
 }
 
 function normalizeSeverity(value) {
@@ -240,10 +259,13 @@ export function TripMonitorDetailModal({
   } = derived;
 
   const totalIncidents = incidentHistory.length;
-  const mapContent = fleetRow?.id && renderUnitRouteMap
+  const [mapSentinelRef, mapVisible] = useIsVisible();
+  const [chartSentinelRef, chartVisible] = useIsVisible();
+
+  const mapContent = fleetRow?.id && renderUnitRouteMap && mapVisible
     ? renderUnitRouteMap({ row: fleetRow, records: historyDetail?.records || [], busy: historyBusy, rangeLabel: historyLabel, stops: mapStops, hoveredStopKey, onHoverStop: setHoveredStopKey })
     : null;
-  const temperatureContent = fleetRow?.id && renderTemperatureChart
+  const temperatureContent = fleetRow?.id && renderTemperatureChart && chartVisible
     ? renderTemperatureChart({ records: historyDetail?.records || [], busy: historyBusy, title: 'Temperature trend', description: `Historical Solofleet mengikuti topbar range ${historyLabel}.`, compact: true, chartHeight: 240, thresholdMin: normalizedJobTempRange.min, thresholdMax: normalizedJobTempRange.max, thresholdLabel: 'TMS range' })
     : null;
 
@@ -267,9 +289,9 @@ export function TripMonitorDetailModal({
             {appStatus && appStatus !== '-' ? <p className="tm-route-line">Driver app: {appStatus}</p> : null}
           </div>
 
-          <div className="tm-stack-section tm-map-section">
+          <div className="tm-stack-section tm-map-section" ref={mapSentinelRef}>
             <div className="tm-map-frame">
-              {fleetRow?.id ? (mapContent || <div className="empty-state">Map renderer belum tersedia.</div>) : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
+              {fleetRow?.id ? (mapVisible ? (mapContent || <div className="empty-state">Map renderer belum tersedia.</div>) : <div className="empty-state">Loading map...</div>) : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
             </div>
             <div className="tm-action-row">
               <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)} disabled={!fleetRow?.id}><Route size={14} /> Track Route</button>
@@ -329,9 +351,9 @@ export function TripMonitorDetailModal({
             </div>
           </div>
 
-          <details className="tm-stack-section tm-section-collapsible">
+          <details className="tm-stack-section tm-section-collapsible" ref={chartSentinelRef}>
             <summary className="tm-section-summary"><span className="tm-section-title">Temperature Trend</span><span className="tm-section-meta"><span className="tm-section-count tm-range-chip">{historyLabel}</span><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
-            <div className="tm-section-content">{fleetRow?.id ? (temperatureContent || <div className="empty-state">Temperature renderer belum tersedia.</div>) : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}</div>
+            <div className="tm-section-content">{fleetRow?.id ? (chartVisible ? (temperatureContent || <div className="empty-state">Temperature renderer belum tersedia.</div>) : <div className="empty-state">Loading chart...</div>) : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}</div>
           </details>
 
           <details className="tm-stack-section tm-section-collapsible">
