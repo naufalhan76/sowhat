@@ -1,6 +1,6 @@
 
 import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
-import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid, ReferenceLine, ReferenceArea } from 'recharts';
+import { AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid, ReferenceLine, ReferenceArea } from 'recharts';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
@@ -4850,10 +4850,47 @@ function niceTicks(min, max, count = 5) {
 }
 
 const TemperatureChart = React.memo(function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
+  const chartId = useId().replace(/:/g, '');
+  const stageRef = useRef(null);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const gradientTemp1Id = `${chartId}-colorTemp1`;
+  const gradientTemp2Id = `${chartId}-colorTemp2`;
   const fullSeries = useMemo(() => (records || [])
-    .filter((record) => record.temp1 !== null || record.temp2 !== null)
-    .map((record) => ({ ...record, timestamp: toTimestampMs(record.timestamp) || null }))
+    .map((record) => {
+      const timestamp = toTimestampMs(record?.timestamp) || null;
+      const temp1 = record?.temp1 === null || record?.temp1 === undefined || record?.temp1 === '' ? null : Number(record.temp1);
+      const temp2 = record?.temp2 === null || record?.temp2 === undefined || record?.temp2 === '' ? null : Number(record.temp2);
+      if (!Number.isFinite(timestamp) || (!Number.isFinite(temp1) && !Number.isFinite(temp2))) {
+        return null;
+      }
+      return { ...record, timestamp, temp1: Number.isFinite(temp1) ? temp1 : null, temp2: Number.isFinite(temp2) ? temp2 : null };
+    })
+    .filter(Boolean)
     .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0)), [records]);
+
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return undefined;
+    const updateSize = () => {
+      const nextWidth = Math.floor(node.clientWidth || 0);
+      const nextHeight = Math.floor(node.clientHeight || 0);
+      setChartSize((current) => current.width === nextWidth && current.height === nextHeight
+        ? current
+        : { width: nextWidth, height: nextHeight });
+    };
+    updateSize();
+    const frameId = window.requestAnimationFrame(updateSize);
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => updateSize())
+      : null;
+    observer?.observe(node);
+    window.addEventListener('resize', updateSize);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [compact, chartHeight, fullSeries.length]);
 
   if (busy) return <div className="chart-empty">Loading chart...</div>;
   if (!fullSeries.length) return <div className="chart-empty">Belum ada historical temperature yang cukup buat digambar.</div>;
@@ -4878,30 +4915,34 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
           </div>
         </div>
       </div>
-      <div className="chart-stage" style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: compact ? 180 : 200 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={fullSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+      <div
+        ref={stageRef}
+        className="chart-stage"
+        style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: compact ? 180 : 200 }}
+      >
+        {chartSize.width > 0 && chartSize.height > 0 ? (
+          <AreaChart width={chartSize.width} height={chartSize.height} data={fullSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <defs>
-        <linearGradient id="colorTemp1" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientTemp1Id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%" stopColor="var(--chart-temp1)" stopOpacity={0.6}/>
           <stop offset="95%" stopColor="var(--chart-temp1)" stopOpacity={0}/>
         </linearGradient>
-        <linearGradient id="colorTemp2" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientTemp2Id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%" stopColor="var(--chart-temp2)" stopOpacity={0.6}/>
           <stop offset="95%" stopColor="var(--chart-temp2)" stopOpacity={0}/>
         </linearGradient>
       </defs>
       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-      <XAxis dataKey="timestamp" tickFormatter={(v) => new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} minTickGap={30} />
+      <XAxis type="number" scale="time" domain={['dataMin', 'dataMax']} dataKey="timestamp" tickFormatter={(v) => new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} minTickGap={30} />
       <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${Math.round(v)}°`} width={40} />
       <Tooltip labelFormatter={(v) => new Date(v).toLocaleString()} formatter={(val, name) => [`${val}°C`, name === 'temp1' ? 'Temp 1' : 'Temp 2']} />
       
       {thresholdMin != null && <ReferenceLine y={thresholdMin} stroke="var(--chart-threshold-low)" strokeDasharray="3 3" />}
       {thresholdMax != null && <ReferenceLine y={thresholdMax} stroke="var(--chart-threshold-high)" strokeDasharray="3 3" />}
-      <Area type="monotone" dataKey="temp1" stroke="var(--chart-temp1)" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp1)" isAnimationActive={false} />
-      <Area type="monotone" dataKey="temp2" stroke="var(--chart-temp2)" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp2)" isAnimationActive={false} />
+      <Area type="monotone" dataKey="temp1" stroke="var(--chart-temp1)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp1Id})`} isAnimationActive={false} />
+      <Area type="monotone" dataKey="temp2" stroke="var(--chart-temp2)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp2Id})`} isAnimationActive={false} />
           </AreaChart>
-        </ResponsiveContainer>
+        ) : null}
       </div>
     </div>
   );
