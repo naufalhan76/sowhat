@@ -27,6 +27,7 @@ import { AdminPanel } from './components/AdminPanel.jsx';
 import { HistoricalPanel } from './components/HistoricalPanel.jsx';
 import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
 import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
+import { tripMonitorStopKey } from './components/trip-monitor/helpers.jsx';
 import { AstroReportPanel } from './components/AstroReportPanel.jsx';
 import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
@@ -4398,8 +4399,9 @@ function FleetStatusMap({ rows }) {
     const layer = leaflet.layerGroup().addTo(map);
     mapRef.current = map;
     layerRef.current = layer;
-    window.setTimeout(() => map.invalidateSize(), 80);
+    const sizeTimer = window.setTimeout(() => { if (mapRef.current) map.invalidateSize(); }, 80);
     return () => {
+      clearTimeout(sizeTimer);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -4437,7 +4439,8 @@ function FleetStatusMap({ rows }) {
       else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
       lastFitKeyRef.current = plottedRowsFitKey;
     }
-    window.setTimeout(() => map.invalidateSize(), 50);
+    const resizeTimer = window.setTimeout(() => { if (mapRef.current) map.invalidateSize(); }, 50);
+    return () => clearTimeout(resizeTimer);
   }, [leaflet, plottedRows, plottedRowsFitKey]);
 
   return <div className="unit-map-shell unit-map-shell-dark fleet-status-map-shell">
@@ -4543,8 +4546,9 @@ const UnitRouteMap = React.memo(function UnitRouteMap({ row, records, busy, rang
     ['dragstart', 'zoomstart', 'movestart', 'touchstart'].forEach((eventName) => map.on(eventName, markUserInteracted));
     mapRef.current = map;
     layerRef.current = layer;
-    window.setTimeout(() => map.invalidateSize(), 80);
+    const sizeTimer = window.setTimeout(() => map.invalidateSize(), 80);
     return () => {
+      clearTimeout(sizeTimer);
       ['dragstart', 'zoomstart', 'movestart', 'touchstart'].forEach((eventName) => map.off(eventName, markUserInteracted));
       layer.clearLayers();
       map.remove();
@@ -4648,7 +4652,8 @@ const UnitRouteMap = React.memo(function UnitRouteMap({ row, records, busy, rang
       }
       lastFitKeyRef.current = mapFitKey;
     }
-    window.setTimeout(() => map.invalidateSize(), 50);
+    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 50);
+    return () => clearTimeout(resizeTimer);
   }, [leaflet, trackPoints, currentPoint, showRoute, stopMarkers, mapFitKey]);
 
   useEffect(() => {
@@ -5021,7 +5026,9 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
     }
   };
 
-  const tooltipLeft = hoveredPoint ? `${Math.max(12, Math.min(88, (hoveredPoint.x / width) * 100))}%` : '50%';
+  const tooltipPct = hoveredPoint ? (hoveredPoint.x / width) * 100 : 50;
+  const tooltipLeft = hoveredPoint ? `${Math.max(8, Math.min(92, tooltipPct))}%` : '50%';
+  const tooltipTransformX = tooltipPct > 75 ? 'translateX(-85%)' : tooltipPct < 25 ? 'translateX(-15%)' : 'translateX(-50%)';
   const tooltipTop = hoveredPoint ? `${Math.max(12, Math.min(72, ((Math.min(hoveredPoint.temp1Y ?? height, hoveredPoint.temp2Y ?? height) - 18) / height) * 100))}%` : '12%';
   const selectionStart = dragState ? Math.min(dragState.startX, dragState.currentX) : 0;
   const selectionWidth = dragState ? Math.abs(dragState.currentX - dragState.startX) : 0;
@@ -5116,7 +5123,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
           {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4" fill="var(--chart-temp2)" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
         </g> : null}
       </svg>
-      {hoveredPoint ? <div className="chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}>
+      {hoveredPoint ? <div className="chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop, transform: `${tooltipTransformX} translateY(-110%)` }}>
         <strong>{fmtDate(hoveredPoint.record.timestamp)}</strong>
         {hoveredPoint.record.temp1 !== null && hoveredPoint.record.temp1 !== undefined ? <span>Temp 1: {fmtNum(hoveredPoint.record.temp1, 2)} C</span> : null}
         {hoveredPoint.record.temp2 !== null && hoveredPoint.record.temp2 !== undefined ? <span>Temp 2: {fmtNum(hoveredPoint.record.temp2, 2)} C</span> : null}
