@@ -8045,7 +8045,7 @@ textarea:focus {
 .command-bar-search input {
   width: 100%;
   height: 32px;
-  padding: 0 56px 0 30px;
+  padding: 0 56px 0 34px;
   background: var(--surface-hover);
   border: 1px solid var(--border);
   border-radius: 6px;

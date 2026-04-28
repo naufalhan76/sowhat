@@ -1,5 +1,6 @@
 
 import React, { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, useDeferredValue } from 'react';
+import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid, ReferenceLine, ReferenceArea } from 'recharts';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Box, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
@@ -4849,292 +4850,62 @@ function niceTicks(min, max, count = 5) {
 }
 
 const TemperatureChart = React.memo(function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
-  const chartId = useId().replace(/:/g, '');
-  const chartContainerRef = useRef(null);
-  const [containerWidth, setContainerWidth] = useState(860);
-  const normalizedThresholdRange = normalizeTemperatureRange(thresholdMin, thresholdMax);
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
     .map((record) => ({ ...record, timestamp: toTimestampMs(record.timestamp) || null }))
     .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0)), [records]);
-  const [zoomRange, setZoomRange] = useState({ start: 0, end: 0 });
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const [dragState, setDragState] = useState(null);
-
-  useEffect(() => {
-    setZoomRange({ start: 0, end: Math.max(0, fullSeries.length - 1) });
-    setHoverIndex(null);
-    setDragState(null);
-  }, [fullSeries.length, fullSeries[0]?.timestamp, fullSeries[fullSeries.length - 1]?.timestamp]);
-
-  useEffect(() => {
-    const node = chartContainerRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') return undefined;
-    const measure = () => {
-      const w = node.getBoundingClientRect().width;
-      if (w > 0) setContainerWidth(Math.round(w));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   if (busy) return <div className="chart-empty">Loading chart...</div>;
   if (!fullSeries.length) return <div className="chart-empty">Belum ada historical temperature yang cukup buat digambar.</div>;
 
-  const totalPoints = fullSeries.length;
-  const rangeStart = Math.max(0, Math.min(zoomRange.start, totalPoints - 1));
-  const rangeEnd = Math.max(rangeStart, Math.min(zoomRange.end, totalPoints - 1));
-  const series = fullSeries.slice(rangeStart, rangeEnd + 1);
-  const width = Math.max(300, containerWidth);
-  const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
-    ? Number(chartHeight)
-    : compact ? 180 : 240;
-  const padding = { top: 18, right: 24, bottom: 44, left: 56 };
-  const thresholdValues = [normalizedThresholdRange.min, normalizedThresholdRange.max].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
-    const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
-    const rawMin = Math.min(...temps);
-    const rawMax = Math.max(...temps);
-    const pad = Math.max(1, (rawMax - rawMin) * 0.15 || 1);
-    const yTicks = niceTicks(rawMin - pad, rawMax + pad, 5);
-    const minY = yTicks[0];
-    const maxY = yTicks[yTicks.length - 1];
-    const isNegativeRange = normalizedThresholdRange.min < 0 && normalizedThresholdRange.max <= 0;
-    const minLabel = isNegativeRange ? `${thresholdLabel} max` : `${thresholdLabel} min`;
-    const maxLabel = isNegativeRange ? `${thresholdLabel} min` : `${thresholdLabel} max`;
-
-    const thresholdGuides = [
-      normalizedThresholdRange.min !== null && Number.isFinite(Number(normalizedThresholdRange.min)) ? { key: 'min', value: Number(normalizedThresholdRange.min), color: 'var(--chart-threshold-low)', label: minLabel } : null,
-      normalizedThresholdRange.max !== null && Number.isFinite(Number(normalizedThresholdRange.max)) ? { key: 'max', value: Number(normalizedThresholdRange.max), color: 'var(--chart-threshold-high)', label: maxLabel } : null,
-    ].filter(Boolean);
-  const timeStart = series[0].timestamp;
-  const timeEnd = series[series.length - 1].timestamp;
-  const xFor = (timestamp) => timeStart === timeEnd ? padding.left : padding.left + ((timestamp - timeStart) / (timeEnd - timeStart)) * (width - padding.left - padding.right);
-  const yFor = (value) => value === null || value === undefined ? null : height - padding.bottom - ((value - minY) / (maxY - minY || 1)) * (height - padding.top - padding.bottom);
-  const buildPath = (field) => {
-    const pts = [];
-    for (const point of series) {
-      const y = yFor(point[field]);
-      if (y === null) continue;
-      pts.push({ x: xFor(point.timestamp), y });
-    }
-    if (!pts.length) return '';
-    if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-    const tension = 0.18;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] || pts[i];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] || p2;
-      const c1x = p1.x + (p2.x - p0.x) * tension;
-      const c1y = p1.y + (p2.y - p0.y) * tension;
-      const c2x = p2.x - (p3.x - p1.x) * tension;
-      const c2y = p2.y - (p3.y - p1.y) * tension;
-      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-    }
-    return d;
-  };
-  const temp1Path = buildPath('temp1');
-  const temp2Path = buildPath('temp2');
-  const guideValues = yTicks;
-  const xTickCount = compact ? 5 : 6;
-  const timeGuides = timeStart === timeEnd
-    ? [timeStart]
-    : Array.from({ length: xTickCount }, (_, i) => timeStart + ((timeEnd - timeStart) * i) / (xTickCount - 1));
-  const spansMultipleDays = timeStart && timeEnd && new Date(timeStart).toDateString() !== new Date(timeEnd).toDateString();
-  const plottedPoints = series.map((record, index) => ({
-    record,
-    absoluteIndex: rangeStart + index,
-    x: xFor(record.timestamp),
-    temp1Y: yFor(record.temp1),
-    temp2Y: yFor(record.temp2),
-  }));
-  const hoveredPoint = hoverIndex === null ? null : plottedPoints.find((point) => point.absoluteIndex === hoverIndex) || null;
-  const windowSize = rangeEnd - rangeStart + 1;
-  const canZoomIn = totalPoints > 8 && windowSize > 8;
-  const canZoomOut = windowSize < totalPoints;
-  const autoRefreshSeconds = 60;
-  const clampPlotX = (x) => Math.max(padding.left, Math.min(width - padding.right, x));
-  const eventToSvgX = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return clampPlotX(((event.clientX - rect.left) / rect.width) * width);
-  };
-  const findNearestPoint = (x) => plottedPoints.reduce((best, point) => {
-    if (!best) return point;
-    return Math.abs(point.x - x) < Math.abs(best.x - x) ? point : best;
-  }, null);
-  const xToAbsoluteIndex = (x) => {
-    const nearest = findNearestPoint(x);
-    return nearest ? nearest.absoluteIndex : rangeStart;
-  };
-
-  const setRangeAround = (anchorIndex, nextWindowSize) => {
-    const clampedWindow = Math.max(8, Math.min(totalPoints, nextWindowSize));
-    let start = Math.max(0, anchorIndex - Math.floor(clampedWindow / 2));
-    let end = Math.min(totalPoints - 1, start + clampedWindow - 1);
-    start = Math.max(0, end - clampedWindow + 1);
-    setZoomRange({ start, end });
-  };
-
-  const zoomIn = () => {
-    if (!canZoomIn) return;
-    const anchor = hoverIndex ?? Math.floor((rangeStart + rangeEnd) / 2);
-    setRangeAround(anchor, Math.floor(windowSize * 0.65));
-  };
-
-  const zoomOut = () => {
-    if (!canZoomOut) return;
-    const anchor = hoverIndex ?? Math.floor((rangeStart + rangeEnd) / 2);
-    setRangeAround(anchor, Math.ceil(windowSize * 1.45));
-  };
-
-  const resetZoom = () => {
-    setZoomRange({ start: 0, end: totalPoints - 1 });
-    setDragState(null);
-  };
-
-  const handlePointerMove = (event) => {
-    const x = eventToSvgX(event);
-    const nearest = findNearestPoint(x);
-    setHoverIndex(nearest ? nearest.absoluteIndex : null);
-    setDragState((current) => current ? { ...current, currentX: x } : current);
-  };
-
-  const handlePointerDown = (event) => {
-    if (event.button !== 0) return;
-    const x = eventToSvgX(event);
-    setDragState({ startX: x, currentX: x });
-    const nearest = findNearestPoint(x);
-    setHoverIndex(nearest ? nearest.absoluteIndex : null);
-  };
-
-  const handlePointerUp = () => {
-    if (!dragState) return;
-    const startX = clampPlotX(dragState.startX);
-    const endX = clampPlotX(dragState.currentX);
-    setDragState(null);
-    if (Math.abs(endX - startX) < 14) return;
-    const nextStart = xToAbsoluteIndex(Math.min(startX, endX));
-    const nextEnd = xToAbsoluteIndex(Math.max(startX, endX));
-    if (nextEnd <= nextStart) return;
-    setZoomRange({ start: nextStart, end: nextEnd });
-    setHoverIndex(Math.round((nextStart + nextEnd) / 2));
-  };
-
-  const handlePointerLeave = () => {
-    if (!dragState) {
-      setHoverIndex(null);
-    }
-  };
-
-  const tooltipPct = hoveredPoint ? (hoveredPoint.x / width) * 100 : 50;
-  const tooltipLeft = hoveredPoint ? `${Math.max(8, Math.min(92, tooltipPct))}%` : '50%';
-  const tooltipTransformX = tooltipPct > 75 ? 'translateX(-85%)' : tooltipPct < 25 ? 'translateX(-15%)' : 'translateX(-50%)';
-  const tooltipTop = hoveredPoint ? `${Math.max(12, Math.min(72, ((Math.min(hoveredPoint.temp1Y ?? height, hoveredPoint.temp2Y ?? height) - 18) / height) * 100))}%` : '12%';
-  const selectionStart = dragState ? Math.min(dragState.startX, dragState.currentX) : 0;
-  const selectionWidth = dragState ? Math.abs(dragState.currentX - dragState.startX) : 0;
-
-  return <div className={compact ? 'chart-shell chart-shell-compact' : 'chart-shell'}>
-    <div className="chart-meta">
-      <div>
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
-      <div className="chart-tools">
-        <div className="chart-legend">
+  return (
+    <div className={compact ? 'chart-shell chart-shell-compact' : 'chart-shell'}>
+      <div className="chart-meta">
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        <div className="chart-tools">
+          <div className="chart-legend">
             <span><i className="legend-dot legend-dot-temp1" /> Temp 1</span>
             <span><i className="legend-dot legend-dot-temp2" /> Temp 2</span>
-            {thresholdGuides.map((guide) => <span key={guide.key}><i className="legend-dot legend-dot-threshold" style={{ background: guide.color }} /> {guide.label}</span>)}
-            <span className="chart-refresh-note">Drag chart untuk box zoom</span>
-            <span className="chart-refresh-note">Auto refresh {autoRefreshSeconds}s</span>
+            {(thresholdMin != null || thresholdMax != null) && (
+              <span>
+                <i className="legend-dot legend-dot-threshold" style={{ background: 'var(--chart-threshold-high)' }} /> 
+                {thresholdLabel}
+              </span>
+            )}
           </div>
-        <div className="chart-zoom-controls">
-          <Button variant="light" onPress={zoomIn} disabled={!canZoomIn}>Zoom in</Button>
-          <Button variant="light" onPress={zoomOut} disabled={!canZoomOut}>Zoom out</Button>
-          <Button variant="light" onPress={resetZoom} disabled={!canZoomOut}>Reset</Button>
         </div>
       </div>
+      <div className="chart-stage" style={{ width: '100%', height: compact ? 180 : (chartHeight || 240) }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={fullSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <defs>
+        <linearGradient id="colorTemp1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="var(--chart-temp1)" stopOpacity={0.6}/>
+          <stop offset="95%" stopColor="var(--chart-temp1)" stopOpacity={0}/>
+        </linearGradient>
+        <linearGradient id="colorTemp2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="var(--chart-temp2)" stopOpacity={0.6}/>
+          <stop offset="95%" stopColor="var(--chart-temp2)" stopOpacity={0}/>
+        </linearGradient>
+      </defs>
+      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+      <XAxis dataKey="timestamp" tickFormatter={(v) => new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} minTickGap={30} />
+      <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${Math.round(v)}°`} width={40} />
+      <Tooltip labelFormatter={(v) => new Date(v).toLocaleString()} formatter={(val, name) => [`${val}°C`, name === 'temp1' ? 'Temp 1' : 'Temp 2']} />
+      
+      {thresholdMin != null && <ReferenceLine y={thresholdMin} stroke="var(--chart-threshold-low)" strokeDasharray="3 3" />}
+      {thresholdMax != null && <ReferenceLine y={thresholdMax} stroke="var(--chart-threshold-high)" strokeDasharray="3 3" />}
+      <Area type="monotone" dataKey="temp1" stroke="var(--chart-temp1)" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp1)" isAnimationActive={false} />
+      <Area type="monotone" dataKey="temp2" stroke="var(--chart-temp2)" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp2)" isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
-    <div className="chart-stage" ref={chartContainerRef}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" role="img" aria-label="Temperature trend chart" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerLeave}>
-        <defs>
-          <linearGradient id={`fillTemp1-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-temp1)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--chart-temp1)" stopOpacity="0.0" />
-          </linearGradient>
-          <linearGradient id={`fillTemp2-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-temp2)" stopOpacity="0.16" />
-            <stop offset="100%" stopColor="var(--chart-temp2)" stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="0" width={width} height={height} rx="10" fill="var(--chart-panel-fill)" />
-        <line x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-        <line x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-        {guideValues.map((value, index) => {
-            const y = yFor(value);
-            if (y === null || y < padding.top - 0.5 || y > height - padding.bottom + 0.5) return null;
-            return <g key={`guide-${index}`}>
-              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="2 4" />
-              <line x1={padding.left - 4} x2={padding.left} y1={y} y2={y} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}°</text>
-            </g>;
-          })}
-        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
-        {thresholdGuides.length === 2 ? (() => {
-          const yMin = yFor(thresholdGuides[0].value);
-          const yMax = yFor(thresholdGuides[1].value);
-          if (yMin === null || yMax === null) return null;
-          const top = Math.min(yMin, yMax);
-          const bottom = Math.max(yMin, yMax);
-          return <rect key={`threshold-band-${thresholdGuides[0].value}-${thresholdGuides[1].value}`} className="chart-threshold-band" x={padding.left} y={top} width={width - padding.left - padding.right} height={Math.max(0, bottom - top)} fill="var(--chart-threshold-band)" pointerEvents="none" />;
-        })() : null}
-        {thresholdGuides.map((guide) => {
-            const y = yFor(guide.value);
-            if (y === null) return null;
-            return <g key={`threshold-${guide.key}`}>
-              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1" strokeDasharray="6 5" opacity="0.75" />
-              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} · {fmtNum(guide.value, 1)}°</text>
-            </g>;
-          })}
-        {timeGuides.map((value, index) => {
-          const x = xFor(value);
-          const isFirst = index === 0;
-          const isLast = index === timeGuides.length - 1;
-          const showDate = spansMultipleDays && (isFirst || isLast);
-          return <g key={`time-${index}`}>
-            <line x1={x} x2={x} y1={height - padding.bottom} y2={height - padding.bottom + 4} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-            <text x={x} y={height - padding.bottom + 18} fontSize="11" textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'} fill="var(--chart-guide-text)" className="chart-axis-tick">{fmtClock(value)}</text>
-            {showDate ? <text x={x} y={height - padding.bottom + 32} fontSize="10" textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'} fill="var(--chart-axis-label)" className="chart-axis-label">{fmtDateOnly(value)}</text> : null}
-          </g>;
-        })}
-        <text x={padding.left + (width - padding.left - padding.right) / 2} y={height - 4} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label">Time</text>
-        {(() => {
-          const animKey = `${totalPoints}-${rangeStart}-${rangeEnd}-${timeStart}-${timeEnd}`;
-          return <g key={animKey}>
-            {temp1Path ? <path className="chart-area-anim" d={`${temp1Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp1-${chartId})`} /> : null}
-            {temp2Path ? <path className="chart-area-anim" d={`${temp2Path} L ${xFor(timeEnd)} ${height - padding.bottom} L ${xFor(timeStart)} ${height - padding.bottom} Z`} fill={`url(#fillTemp2-${chartId})`} /> : null}
-            {temp2Path ? <path className="chart-path-anim" pathLength="1" d={temp2Path} fill="none" stroke="var(--chart-temp2)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /> : null}
-            {temp1Path ? <path className="chart-path-anim" pathLength="1" d={temp1Path} fill="none" stroke="var(--chart-temp1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
-          </g>;
-        })()}
-        {dragState && selectionWidth > 0 ? <rect x={selectionStart} y={padding.top} width={selectionWidth} height={height - padding.top - padding.bottom} fill="rgba(16,185,129,0.10)" stroke="rgba(16,185,129,0.55)" strokeDasharray="4 4" rx="4" /> : null}
-        {hoveredPoint ? <g>
-          <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={padding.top} y2={height - padding.bottom} stroke="var(--chart-crosshair-stroke)" strokeDasharray="3 4" />
-          {hoveredPoint.temp1Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp1Y} r="4" fill="var(--chart-temp1)" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
-          {hoveredPoint.temp2Y !== null ? <circle cx={hoveredPoint.x} cy={hoveredPoint.temp2Y} r="4" fill="var(--chart-temp2)" stroke="var(--chart-point-stroke)" strokeWidth="2" /> : null}
-        </g> : null}
-      </svg>
-      {hoveredPoint ? <div className="chart-tooltip" style={{ left: tooltipLeft, top: tooltipTop, transform: `${tooltipTransformX} translateY(-110%)` }}>
-        <strong>{fmtDate(hoveredPoint.record.timestamp)}</strong>
-        {hoveredPoint.record.temp1 !== null && hoveredPoint.record.temp1 !== undefined ? <span>Temp 1: {fmtNum(hoveredPoint.record.temp1, 2)} C</span> : null}
-        {hoveredPoint.record.temp2 !== null && hoveredPoint.record.temp2 !== undefined ? <span>Temp 2: {fmtNum(hoveredPoint.record.temp2, 2)} C</span> : null}
-        {hoveredPoint.record.speed !== null && hoveredPoint.record.speed !== undefined ? <span>Speed: {fmtNum(hoveredPoint.record.speed, 0)} km/h</span> : null}
-      </div> : null}
-    </div>
-  </div>;
-});
+  );
+});;
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
