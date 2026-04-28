@@ -1852,7 +1852,7 @@ textarea:focus {
 
 
 
-/* Ã¢â€ â‚¬Ã¢â€ â‚¬ Historical toolbar (consolidated) Ã¢â€ â‚¬Ã¢â€ â‚¬ */
+/* -- -- -- Historical toolbar (consolidated) -- -- -- */
 .historical-toolbar {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -4157,7 +4157,7 @@ textarea:focus {
     gap: 14px;
   }
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬ Controls inside popover Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* -- Controls inside popover -- */
   .command-center.mobile-topbar-expanded .topbar-controls {
     display: flex;
     flex-direction: column;
@@ -4188,7 +4188,7 @@ textarea:focus {
     width: 100%;
   }
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬ Actions inside popover Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* -- Actions inside popover -- */
   .command-center.mobile-topbar-expanded .topbar-actions {
     display: flex;
     flex-direction: column;
@@ -4623,7 +4623,7 @@ textarea:focus {
   }
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Astro Report Panel Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* -- Astro Report Panel -- */
 .astro-report-panel {
   overflow: visible;
 }

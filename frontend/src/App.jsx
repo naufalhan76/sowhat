@@ -1585,7 +1585,7 @@ export default function App() {
     if (dashboardAbortRef.current) dashboardAbortRef.current.abort();
   }, []);
 
-  // Global Ctrl+K / Cmd+K â†’ command palette
+  // Global Ctrl+K / Cmd+K -> command palette
   useEffect(() => {
     const handleGlobalKey = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
@@ -4267,7 +4267,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             <h2>{row.label || row.alias || '-'}</h2>
             <span className={`fleet-workspace-detail-state fleet-workspace-detail-state-${state.tone}`}>{state.label}</span>
           </div>
-          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} Â· {row.locationSummary || row.zoneName || 'No location'}</p>
+          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
             {row.unitCategoryLabel ? <Chip variant="flat">{row.unitCategoryLabel}</Chip> : null}
             {row.customerName ? <Chip variant="flat">{row.customerName}</Chip> : null}
@@ -4338,7 +4338,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             compact
             thresholdMin={tmsThreshold?.min ?? null}
             thresholdMax={tmsThreshold?.max ?? null}
-            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS Â· ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
+            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS · ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
           />
         </div>
       </div>
@@ -5027,10 +5027,10 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
             return <g key={`guide-${index}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="2 4" />
               <line x1={padding.left - 4} x2={padding.left} y1={y} y2={y} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}Â°</text>
+              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}°</text>
             </g>;
           })}
-        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (Â°C)</text>
+        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
         {thresholdGuides.length === 2 ? (() => {
           const yMin = yFor(thresholdGuides[0].value);
           const yMax = yFor(thresholdGuides[1].value);
@@ -5044,7 +5044,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
             if (y === null) return null;
             return <g key={`threshold-${guide.key}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1" strokeDasharray="6 5" opacity="0.75" />
-              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} Â· {fmtNum(guide.value, 1)}Â°</text>
+              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} · {fmtNum(guide.value, 1)}°</text>
             </g>;
           })}
         {timeGuides.map((value, index) => {
