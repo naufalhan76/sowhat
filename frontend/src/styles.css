@@ -1784,10 +1784,6 @@ textarea:focus {
   position: relative;
   width: 100%;
   min-width: 0;
-  overflow: visible;
-}
-
-.chart-stage .chart-svg {
   overflow: hidden;
 }
 
