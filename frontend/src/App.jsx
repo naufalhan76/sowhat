@@ -47,7 +47,7 @@ function useActivePanelRoute() {
   return [activePanel, setActivePanel];
 }
 
-// Compatibility wrappers â€” old call sites pass `variant`/`color`/`onPress` style props.
+// Compatibility wrappers - old call sites pass `variant`/`color`/`onPress` style props.
 // Map these to the new component primitives without changing 5800 lines of JSX.
 const Button = ({ children, variant, color, className = '', onPress, onClick, ...props }) => {
   const handle = onClick || onPress;
@@ -3126,7 +3126,7 @@ export default function App() {
       <div className="auth-split-left">
         <div className="auth-brand-showcase">
           <div className="auth-brand-logo"><span className="brand-mark">S</span></div>
-          <p className="auth-brand-tagline">Loading workspaceâ€¦</p>
+          <p className="auth-brand-tagline">Loading workspace...</p>
           <div className="auth-brand-spinner"><UISpinner /></div>
         </div>
         <div className="auth-topo-lines" aria-hidden="true">
@@ -3143,7 +3143,7 @@ export default function App() {
         <div className="auth-card">
           <div className="auth-loader">
             <UISpinner />
-            <p className="auth-loader-text">Memuatâ€¦</p>
+            <p className="auth-loader-text">Memuat...</p>
           </div>
         </div>
       </div>
@@ -3156,7 +3156,7 @@ export default function App() {
         <div className="auth-brand-showcase">
           <div className="auth-brand-logo"><span className="brand-mark">S</span></div>
           <h2 className="auth-brand-headline">Sowhat</h2>
-          <p className="auth-brand-tagline">Fleet intelligence, temperature compliance, and operational clarity â€” in one workspace.</p>
+          <p className="auth-brand-tagline">Fleet intelligence, temperature compliance, and operational clarity - in one workspace.</p>
           <div className="auth-brand-stats" aria-hidden="true">
             <div className="auth-brand-stat">
               <span className="auth-brand-stat-value">24/7</span>
@@ -3227,7 +3227,7 @@ export default function App() {
                 type="password"
                 value={webLoginForm.password}
                 onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="Password"
                 autoComplete="current-password"
                 aria-invalid={authModal.open || undefined}
               />
@@ -3468,7 +3468,7 @@ export default function App() {
             range={range}
             onRefreshBoard={refreshTripMonitorBoard}
             onSyncTms={triggerTmsSync}
-            onOpenDetail={(row) => openTripMonitorDetail(row.rowId)}
+            onOpenDetail={(rowId) => openTripMonitorDetail(rowId)}
             isAdmin={isAdmin}
             fmtDate={fmtDate}
           /> : null}
@@ -3493,7 +3493,7 @@ export default function App() {
             rangeLabel={`${range.startDate} to ${range.endDate}`}
             tripMonitorRows={tripMonitorRows}
           /> : null}
-          {/* Fleet legacy table block â€” DEPRECATED, kept disabled for reference; remove after parity confirmed */}
+          {/* Fleet legacy table block - DEPRECATED, kept disabled for reference; remove after parity confirmed */}
           {false ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
@@ -3973,7 +3973,7 @@ export default function App() {
         />)}
         {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
-      {/* Fleet detail modal removed â€” selected unit detail now renders inline inside FleetWorkspace */}
+      {/* Fleet detail modal removed - selected unit detail now renders inline inside FleetWorkspace */}
       
       <StatusFooter
         isPolling={!!status?.runtime?.isPolling}
