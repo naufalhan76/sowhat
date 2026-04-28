@@ -3087,6 +3087,8 @@ textarea:focus {
 .mp-map-area {
   position: relative;
   min-width: 0;
+  isolation: isolate;
+  z-index: 0;
 }
 
 .mp-map-canvas-wrap {
@@ -3608,7 +3610,16 @@ textarea:focus {
     height: calc(100vh - 80px);
   }
 
-  /* Sidebar becomes a slide-over panel on mobile */
+  /* Map takes full space — isolate stacking context */
+  .mp-map-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+  }
+
+  /* Sidebar becomes a slide-over panel on mobile — above map */
   .mp-sidebar {
     position: absolute;
     top: 0;
@@ -3616,10 +3627,11 @@ textarea:focus {
     bottom: 0;
     width: 300px;
     max-width: calc(100% - 48px);
-    z-index: 10;
+    z-index: 20;
     border-right: 1px solid var(--border);
     border-radius: 0;
     background: var(--surface);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
   }
 
   .mp-sidebar:not(.is-open) {
@@ -3632,12 +3644,7 @@ textarea:focus {
 
   .mp-sidebar-toggle {
     display: inline-flex;
-  }
-
-  /* Map takes full space */
-  .mp-map-area {
-    flex: 1 1 auto;
-    min-height: 0;
+    z-index: 15;
   }
 
   .mp-fit-all-btn {
@@ -11092,9 +11099,13 @@ html, body {
     border-right: none;
   }
 
-  /* Show back button on mobile */
+  /* Show back button + unit picker on mobile */
   .fleet-workspace-detail-back {
     display: inline-flex !important;
+  }
+
+  .fleet-workspace-detail-picker {
+    display: flex;
   }
 }
 
@@ -11558,6 +11569,43 @@ html, body {
 .fleet-workspace-detail-back:hover {
   color: var(--primary);
 }
+
+/* Nav row: back + unit picker */
+.fleet-workspace-detail-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.fleet-workspace-detail-picker {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.fleet-workspace-detail-picker .searchable-field {
+  margin-bottom: 0;
+}
+
+.fleet-workspace-detail-picker .searchable-field > span {
+  display: none;
+}
+
+.fleet-workspace-detail-picker .searchable-trigger {
+  height: 28px;
+  font-size: 11.5px;
+  padding: 0 8px;
+}
+
+.fleet-workspace-detail-picker .searchable-dropdown {
+  min-width: 240px;
+  right: 0;
+  left: auto;
+}
+
 .fleet-workspace-detail-chips .pill {
   font-size: 10.5px;
   padding: 1px 6px;
@@ -14453,10 +14501,8 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     flex: 0 0 auto;
   }
   .bridge-shell .command-bar-search-kbd {
-    display: none;
-  }
-  .bridge-shell .command-bar-divider {
-    display: none;
+    font-size: 10px;
+    padding: 1px 4px;
   }
   .bridge-shell .command-bar-range input[type='date'] {
     width: 90px;
@@ -14546,9 +14592,12 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     display: flex;
   }
 
-  /* Fleet detail: show back button on mobile */
+  /* Fleet detail: show back button + unit picker on mobile */
   .fleet-workspace-detail-back {
     display: inline-flex !important;
+  }
+  .fleet-workspace-detail-picker {
+    display: flex;
   }
 }
 
@@ -14559,19 +14608,47 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     grid-template-columns: 1fr !important;
   }
 
-  /* Command bar: minimal */
+  /* Command bar: compact, keep ALL components visible */
   .bridge-shell .command-bar {
-    padding: 0 8px 0 44px;
-    gap: 6px;
+    padding: 0 6px 0 44px;
+    gap: 4px;
   }
   .bridge-shell .command-bar-center {
-    display: none; /* hide search on very small screens */
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .bridge-shell .command-bar-search {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .bridge-shell .command-bar-search-kbd {
+    font-size: 9px;
+    padding: 1px 3px;
   }
   .bridge-shell .command-bar-range {
-    display: none; /* hide date range on very small screens */
+    flex: 0 0 auto;
+    gap: 2px;
+  }
+  .bridge-shell .command-bar-range input[type='date'] {
+    width: 80px;
+    font-size: 10px !important;
+    padding: 2px 4px;
+  }
+  .bridge-shell .command-bar-range-sep {
+    display: none;
   }
   .bridge-shell .command-bar-title-text {
     font-size: 13px;
+  }
+  .bridge-shell .command-bar-right {
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .bridge-shell .command-bar-right::-webkit-scrollbar {
+    display: none;
   }
 
   /* Workspace: minimal padding */

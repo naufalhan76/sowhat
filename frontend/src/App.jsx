@@ -4173,6 +4173,8 @@ function FleetWorkspace({
             onSeeHistorical={() => onSeeHistorical(selectedRow)}
             onBack={onBack}
             tripMonitorRows={tripMonitorRows}
+            allRows={filteredRows}
+            onSelectUnit={onSelectUnit}
           />
         ) : (
           <div className="fleet-workspace-detail-empty">
@@ -4185,7 +4187,7 @@ function FleetWorkspace({
   );
 }
 
-function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, onBack, tripMonitorRows = [] }) {
+function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, onBack, tripMonitorRows = [], allRows = [], onSelectUnit }) {
   const [splitRatio, setSplitRatio] = useState(() => readFleetWorkspaceSplit());
   const splitContainerRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -4258,11 +4260,35 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
     return { min: range.min, max: range.max, jobOrderId: match.jobOrderId || null };
   }, [tripMonitorRows, row?.label, row?.alias, row?.id]);
 
+  const unitPickerOptions = useMemo(() => allRows.map((r) => ({
+    value: unitRowKey(r),
+    label: r.label || r.alias || r.id || '-',
+    preview: `${r.label || r.id} · ${health(r).label}`,
+  })), [allRows]);
+
   return (
     <div className="fleet-workspace-detail-shell">
       <header className="fleet-workspace-detail-head">
         <div className="fleet-workspace-detail-title">
-          {onBack ? <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button> : null}
+          {onBack ? (
+            <div className="fleet-workspace-detail-nav">
+              <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button>
+              {onSelectUnit && allRows.length > 1 ? (
+                <div className="fleet-workspace-detail-picker">
+                  <SearchableSelect
+                    label=""
+                    value={detailKey}
+                    options={unitPickerOptions}
+                    onChange={(nextKey) => {
+                      const target = allRows.find((r) => unitRowKey(r) === nextKey);
+                      if (target) onSelectUnit(target);
+                    }}
+                    placeholder="Cari unit..."
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="fleet-workspace-detail-name-row">
             <h2>{row.label || row.alias || '-'}</h2>
             <span className={`fleet-workspace-detail-state fleet-workspace-detail-state-${state.tone}`}>{state.label}</span>
@@ -4816,6 +4842,8 @@ function niceTicks(min, max, count = 5) {
 
 const TemperatureChart = React.memo(function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
+  const chartContainerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(860);
   const normalizedThresholdRange = normalizeTemperatureRange(thresholdMin, thresholdMax);
   const fullSeries = useMemo(() => (records || [])
     .filter((record) => record.temp1 !== null || record.temp2 !== null)
@@ -4831,6 +4859,19 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
     setDragState(null);
   }, [fullSeries.length, fullSeries[0]?.timestamp, fullSeries[fullSeries.length - 1]?.timestamp]);
 
+  useEffect(() => {
+    const node = chartContainerRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const w = node.getBoundingClientRect().width;
+      if (w > 0) setContainerWidth(Math.round(w));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   if (busy) return <div className="chart-empty">Loading chart...</div>;
   if (!fullSeries.length) return <div className="chart-empty">Belum ada historical temperature yang cukup buat digambar.</div>;
 
@@ -4838,7 +4879,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
   const rangeStart = Math.max(0, Math.min(zoomRange.start, totalPoints - 1));
   const rangeEnd = Math.max(rangeStart, Math.min(zoomRange.end, totalPoints - 1));
   const series = fullSeries.slice(rangeStart, rangeEnd + 1);
-  const width = 860;
+  const width = Math.max(300, containerWidth);
   const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
     ? Number(chartHeight)
     : compact ? 180 : 240;
@@ -5006,7 +5047,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
         </div>
       </div>
     </div>
-    <div className="chart-stage">
+    <div className="chart-stage" ref={chartContainerRef}>
       <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label="Temperature trend chart" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={handlePointerUp} onMouseLeave={handlePointerLeave}>
         <defs>
           <linearGradient id={`fillTemp1-${chartId}`} x1="0" y1="0" x2="0" y2="1">
