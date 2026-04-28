@@ -17,7 +17,16 @@ import {
   Section,
   EmptyState,
   Spinner as UISpinner,
+  Skeleton, SkeletonGroup,
+  ErrorBoundary,
+  CommandPalette,
 } from './components/index.js';
+import { ApiMonitorPanel } from './components/ApiMonitorPanel.jsx';
+import { ConfigPanel } from './components/ConfigPanel.jsx';
+import { AdminPanel } from './components/AdminPanel.jsx';
+import { HistoricalPanel } from './components/HistoricalPanel.jsx';
+import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
+import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
 
 const ROUTE_PANEL_IDS = new Set([
   'overview', 'fleet', 'trip-monitor', 'map', 'astro-report', 'temp-errors',
@@ -38,7 +47,7 @@ function useActivePanelRoute() {
   return [activePanel, setActivePanel];
 }
 
-// Compatibility wrappers — old call sites pass `variant`/`color`/`onPress` style props.
+// Compatibility wrappers â€” old call sites pass `variant`/`color`/`onPress` style props.
 // Map these to the new component primitives without changing 5800 lines of JSX.
 const Button = ({ children, variant, color, className = '', onPress, onClick, ...props }) => {
   const handle = onClick || onPress;
@@ -61,6 +70,18 @@ const Chip = ({ children, variant, color = 'default', className = '', ...props }
 
 const Link = ({ children, className = '', ...props }) => <a className={`sf-link ${className}`} {...props}>{children}</a>;
 const Spinner = ({ size }) => <UISpinner size={size === 'sm' ? 'sm' : 'md'} />;
+
+const StatGridSkeleton = ({ count = 4 }) => (
+  <div className="stat-strip">
+    {Array.from({ length: count }, (_, i) => (
+      <div key={i} className="stat-card" style={{ minHeight: 80 }}>
+        <Skeleton width="60%" height="12px" />
+        <Skeleton width="40%" height="22px" style={{ marginTop: 8 }} />
+        <Skeleton width="80%" height="12px" style={{ marginTop: 8 }} />
+      </div>
+    ))}
+  </div>
+);
 
 const BrandLockup = ({ compact = false }) => <div className={`brand-lockup ${compact ? 'brand-lockup-compact' : ''}`}>
   <span className="brand-mark">S</span>
@@ -872,6 +893,7 @@ export default function App() {
   const [mobileTopbarExpanded, setMobileTopbarExpanded] = useState(false);
   const [compactTopbar, setCompactTopbar] = useState(false);
   const [expandedFleetRowKey, setExpandedFleetRowKey] = useState('');
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const [historicalSearch, setHistoricalSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const deferredHistoricalSearch = useDeferredValue(historicalSearch);
@@ -934,6 +956,7 @@ export default function App() {
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
+  const dashboardAbortRef = useRef(null);
   const tripMonitorBoardRequestRef = useRef(0);
   const tripMonitorNextZRef = useRef(100);
   const fleetRows = status?.fleet?.rows || [];
@@ -1480,6 +1503,22 @@ export default function App() {
     ...(isAdmin ? [{ id: 'config', label: 'Config', icon: Settings }, { id: 'admin', label: 'Admin', icon: Settings }] : []),
   ]), [isAdmin]);
 
+  const cmdPaletteCommands = useMemo(() => [
+    ...navItems.map((item, index) => ({
+      id: `nav-${item.id}`,
+      label: item.label,
+      icon: item.icon,
+      section: 'Panel',
+      shortcut: index < 9 ? `${index + 1}` : undefined,
+      onSelect: () => setActivePanel(item.id),
+    })),
+    { id: 'action-poll', label: 'Poll now', icon: Zap, section: 'Aksi', onSelect: () => loadDashboard(true, false).catch(() => {}) },
+    { id: 'action-refresh', label: 'Refresh dashboard', icon: RefreshCw, section: 'Aksi', onSelect: () => loadDashboard(false, false).catch(() => {}) },
+    { id: 'action-theme', label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', icon: theme === 'dark' ? Sun : MoonStar, section: 'Aksi', onSelect: () => setTheme((c) => c === 'light' ? 'dark' : 'light') },
+    { id: 'action-export-fleet', label: 'Export fleet CSV', icon: PackageSearch, section: 'Aksi', onSelect: () => exportFleet?.() },
+    { id: 'action-export-alerts', label: 'Export temp error CSV', icon: AlertTriangle, section: 'Aksi', onSelect: () => exportAlerts?.() },
+  ], [navItems, theme, setActivePanel, setTheme]);
+
   const stopBusy = () => {
     if (busyTimeoutRef.current) {
       window.clearTimeout(busyTimeoutRef.current);
@@ -1501,7 +1540,7 @@ export default function App() {
       setBusy(false);
       setBusyMessage('Sedang memproses aksi...');
       setAuthModal({ open: true, message: 'Aksi dihentikan karena melebihi batas tunggu 5 menit. Coba ulang lagi.' });
-      setBanner({ tone: 'error', message: 'Action timed out after 5 minutes.' });
+      setBanner({ tone: 'error', message: 'Aksi dihentikan karena melebihi batas tunggu 5 menit.' });
     }, 5 * 60 * 1000);
   };
 
@@ -1525,22 +1564,35 @@ export default function App() {
       setWebSessionUser(null);
       setLoaded(true);
       setBanner({ tone: 'error', message: error.message });
-      setAuthModal({ open: true, message: error.message || 'Initial dashboard load failed.' });
+      setAuthModal({ open: true, message: error.message || 'Gagal memuat dashboard.' });
     });
   }, []);
 
   useEffect(() => {
     if (!banner.message) return undefined;
+    const delay = banner.tone === 'error' ? 6000 : 4200;
     const timer = window.setTimeout(() => {
       setBanner((current) => current.message === banner.message ? { ...current, message: '' } : current);
-    }, 4200);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [banner.message, banner.tone]);
 
   useEffect(() => () => {
     if (busyTimeoutRef.current) window.clearTimeout(busyTimeoutRef.current);
+    if (dashboardAbortRef.current) dashboardAbortRef.current.abort();
   }, []);
 
+  // Global Ctrl+K / Cmd+K â†’ command palette
+  useEffect(() => {
+    const handleGlobalKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        setCmdPaletteOpen((current) => !current);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1611,10 +1663,13 @@ export default function App() {
     });
   }, [astroRoutes]);
   const loadDashboard = async (syncConfig = false, quiet = false) => {
+    if (dashboardAbortRef.current) dashboardAbortRef.current.abort();
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
     if (!quiet) startBusy();
     try {
       const query = new URLSearchParams({ startDate: range.startDate, endDate: range.endDate });
-      const nextStatus = await api('/api/status');
+      const nextStatus = await api('/api/status', { signal: controller.signal });
       if (!nextStatus.webAuth?.sessionUser) {
         startTransition(() => {
           setStatus(nextStatus);
@@ -1629,7 +1684,7 @@ export default function App() {
         return;
       }
 
-      const [nextReport, nextMonitor] = await Promise.all([api(`/api/report?${query.toString()}`), api('/api/monitor')]);
+      const [nextReport, nextMonitor] = await Promise.all([api(`/api/report?${query.toString()}`, { signal: controller.signal }), api('/api/monitor', { signal: controller.signal })]);
       startTransition(() => {
         const nextActiveAccountId = nextStatus.config?.activeAccountId || 'primary';
         setStatus(nextStatus);
@@ -1647,10 +1702,14 @@ export default function App() {
         if (!stopForm.unitId && nextStatus.fleet?.rows?.length) {
           setStopForm((current) => ({ ...current, accountId: nextStatus.fleet.rows[0].accountId || 'primary', unitId: nextStatus.fleet.rows[0].id }));
         }
-        if (!quiet && nextStatus.webAuth?.sessionUser) setBanner({ tone: 'success', message: 'Dashboard refreshed.' });
+        if (!quiet && nextStatus.webAuth?.sessionUser) setBanner({ tone: 'success', message: 'Dashboard diperbarui.' });
       });
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      throw error;
     } finally {
       if (!quiet) stopBusy();
+      if (dashboardAbortRef.current === controller) dashboardAbortRef.current = null;
     }
   };
 
@@ -1977,8 +2036,8 @@ export default function App() {
         await loadAdminUsers(true).catch(() => {});
       }
     } catch (error) {
-      setAuthModal({ open: true, message: error.message || 'Web login failed.' });
-      setBanner({ tone: 'error', message: error.message || 'Web login failed.' });
+      setAuthModal({ open: true, message: error.message || 'Login gagal. Periksa username dan password.' });
+      setBanner({ tone: 'error', message: error.message || 'Login gagal.' });
     } finally {
       stopBusy();
     }
@@ -1992,7 +2051,7 @@ export default function App() {
         setWebSessionUser(null);
         setWebUsers([]);
         setActivePanel('overview');
-        setBanner({ tone: 'success', message: 'Logged out from web dashboard.' });
+        setBanner({ tone: 'success', message: 'Berhasil logout dari dashboard.' });
       });
     } finally {
       stopBusy();
@@ -2094,8 +2153,8 @@ export default function App() {
       });
       await loadDashboard(true, true);
     } catch (error) {
-      setAuthModal({ open: true, message: error.message || 'Solofleet login failed. Check email/password.' });
-      setBanner({ tone: 'error', message: error.message || 'Login failed.' });
+      setAuthModal({ open: true, message: error.message || 'Login Solofleet gagal. Periksa email dan password.' });
+      setBanner({ tone: 'error', message: error.message || 'Login Solofleet gagal.' });
     } finally {
       stopBusy();
     }
@@ -3064,10 +3123,28 @@ export default function App() {
 
   if (!loaded) {
     return <div className="auth-shell" data-state="loading">
-      <div className="auth-card">
-        <div className="auth-loader">
-          <UISpinner />
-          <p className="auth-loader-text">Loading workspace…</p>
+      <div className="auth-split-left">
+        <div className="auth-brand-showcase">
+          <div className="auth-brand-logo"><span className="brand-mark">S</span></div>
+          <p className="auth-brand-tagline">Loading workspaceâ€¦</p>
+          <div className="auth-brand-spinner"><UISpinner /></div>
+        </div>
+        <div className="auth-topo-lines" aria-hidden="true">
+          <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className="auth-topo-svg">
+            <circle cx="80" cy="320" r="180" stroke="currentColor" strokeWidth="0.5" opacity="0.12" />
+            <circle cx="80" cy="320" r="130" stroke="currentColor" strokeWidth="0.5" opacity="0.09" />
+            <circle cx="80" cy="320" r="80" stroke="currentColor" strokeWidth="0.5" opacity="0.06" />
+            <circle cx="340" cy="60" r="120" stroke="currentColor" strokeWidth="0.5" opacity="0.10" />
+            <circle cx="340" cy="60" r="70" stroke="currentColor" strokeWidth="0.5" opacity="0.07" />
+          </svg>
+        </div>
+      </div>
+      <div className="auth-split-right">
+        <div className="auth-card">
+          <div className="auth-loader">
+            <UISpinner />
+            <p className="auth-loader-text">Memuatâ€¦</p>
+          </div>
         </div>
       </div>
     </div>;
@@ -3075,67 +3152,96 @@ export default function App() {
 
   if (loaded && !webSessionUser) {
     return <div className="auth-shell" data-state="signin">
-      <button
-        type="button"
-        className="auth-theme-toggle"
-        onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
-        aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-      >
-        {theme === 'light' ? <MoonStar size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
-      </button>
-
-      <div className="auth-card">
-        <div className="auth-card-brand">
-          <BrandLockup />
+      <div className="auth-split-left">
+        <div className="auth-brand-showcase">
+          <div className="auth-brand-logo"><span className="brand-mark">S</span></div>
+          <h2 className="auth-brand-headline">Sowhat</h2>
+          <p className="auth-brand-tagline">Fleet intelligence, temperature compliance, and operational clarity â€” in one workspace.</p>
+          <div className="auth-brand-stats" aria-hidden="true">
+            <div className="auth-brand-stat">
+              <span className="auth-brand-stat-value">24/7</span>
+              <span className="auth-brand-stat-label">Live monitoring</span>
+            </div>
+            <div className="auth-brand-stat">
+              <span className="auth-brand-stat-value">0.3s</span>
+              <span className="auth-brand-stat-label">Avg response</span>
+            </div>
+            <div className="auth-brand-stat">
+              <span className="auth-brand-stat-value">99.8%</span>
+              <span className="auth-brand-stat-label">Uptime</span>
+            </div>
+          </div>
         </div>
-        <h1 className="auth-title">Sign in</h1>
-        <p className="auth-subtitle">Use your Sowhat workspace account.</p>
+        <div className="auth-topo-lines" aria-hidden="true">
+          <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className="auth-topo-svg">
+            <circle cx="80" cy="320" r="180" stroke="currentColor" strokeWidth="0.5" opacity="0.12" />
+            <circle cx="80" cy="320" r="130" stroke="currentColor" strokeWidth="0.5" opacity="0.09" />
+            <circle cx="80" cy="320" r="80" stroke="currentColor" strokeWidth="0.5" opacity="0.06" />
+            <circle cx="340" cy="60" r="120" stroke="currentColor" strokeWidth="0.5" opacity="0.10" />
+            <circle cx="340" cy="60" r="70" stroke="currentColor" strokeWidth="0.5" opacity="0.07" />
+          </svg>
+        </div>
+      </div>
 
-        <form className="auth-form" onSubmit={(event) => { event.preventDefault(); loginToWeb(); }}>
-          <label className="auth-field">
-            <span className="auth-field-label">Username</span>
-            <input
-              type="text"
-              value={webLoginForm.username}
-              onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))}
-              placeholder="admin"
-              autoComplete="username"
-              autoFocus
-            />
-          </label>
-          <label className="auth-field">
-            <span className="auth-field-label">Password</span>
-            <input
-              type="password"
-              value={webLoginForm.password}
-              onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))}
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-          </label>
-          <Action variant="primary" size="md" type="submit" className="auth-submit">
-            Continue
-          </Action>
-        </form>
+      <div className="auth-split-right">
+        <button
+          type="button"
+          className="auth-theme-toggle"
+          onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+        >
+          {theme === 'light' ? <MoonStar size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
+        </button>
+
+        <div className="auth-card">
+          <h1 className="auth-title">Sign in</h1>
+          <p className="auth-subtitle">Masuk ke workspace Sowhat.</p>
+
+          {authModal.open ? (
+            <div className="auth-error" role="alert">
+              <AlertCircle size={15} strokeWidth={1.75} />
+              <span>{authModal.message}</span>
+              <button type="button" className="auth-error-dismiss" onClick={() => setAuthModal({ open: false, message: '' })} aria-label="Tutup">
+                <X size={13} strokeWidth={2} />
+              </button>
+            </div>
+          ) : null}
+
+          <form className="auth-form" onSubmit={(event) => { event.preventDefault(); loginToWeb(); }}>
+            <label className="auth-field">
+              <span className="auth-field-label">Username</span>
+              <input
+                type="text"
+                value={webLoginForm.username}
+                onChange={(event) => setWebLoginForm((current) => ({ ...current, username: event.target.value }))}
+                placeholder="admin"
+                autoComplete="username"
+                autoFocus
+                aria-invalid={authModal.open || undefined}
+              />
+            </label>
+            <label className="auth-field">
+              <span className="auth-field-label">Password</span>
+              <input
+                type="password"
+                value={webLoginForm.password}
+                onChange={(event) => setWebLoginForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                autoComplete="current-password"
+                aria-invalid={authModal.open || undefined}
+              />
+            </label>
+            <Action variant="primary" size="md" type="submit" className="auth-submit" loading={busy} disabled={busy || !webLoginForm.username.trim()}>
+              Sign in
+            </Action>
+          </form>
+
+          <p className="auth-footer-note">Protected workspace. Unauthorized access prohibited.</p>
+        </div>
       </div>
 
       {busyOverlay}
-      {authModal.open ? <div className="auth-modal-backdrop">
-        <Card className="auth-modal-card">
-          <CardHeader className="panel-card-header">
-            <div>
-              <h2>Sign in failed</h2>
-              <p>{authModal.message}</p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="inline-buttons">
-              <Button color="primary" onPress={() => setAuthModal({ open: false, message: '' })}>Close</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div> : null}
     </div>;
   }
 
@@ -3176,6 +3282,7 @@ export default function App() {
       />
 
       <main className="workspace">
+        <ErrorBoundary key={activePanel}>
         {showOverviewChrome ? <div className="overview-chrome">
           <div className="stat-strip">
             {[
@@ -3199,207 +3306,172 @@ export default function App() {
           
 
                     {activePanel === 'overview' ? (
-  <Card className="panel-card overview-dashboard-card">
-    <CardHeader className="panel-card-header">
-      <div>
-        <h2>Overview dashboard</h2>
-        <p>Ringkasan operasional per account. Data live + date range topbar.</p>
+  <div className="overview-workspace">
+    {/* Header row */}
+    <div className="overview-header">
+      <div className="overview-header-left">
+        <h2 className="overview-title">Overview</h2>
+        <p className="overview-subtitle">Operational summary across fleet, temperature, and compliance.</p>
       </div>
       <div className="overview-toolbar">
         <label className="field overview-account-field">
-          <span>Show account</span>
+          <span>Account</span>
           <select value={overviewAccountId} onChange={(event) => setOverviewAccountId(event.target.value)}>
             {overviewAccountOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
       </div>
-    </CardHeader>
-    <CardContent>
-      {/* Row 1: KPI cards */}
-      <div className="overview-kpi-grid">
-        <div className="overview-kpi-card info">
-          <span>Total units</span>
-          <strong>{overviewAccountStats.totalConfiguredUnits || 0}</strong>
-          <small>Unit configured di account ini</small>
-        </div>
-        <div className="overview-kpi-card danger">
-          <span>Temp error</span>
-          <strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong>
-          <small>{overviewAccountStats.tempErrorUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit error</small>
-        </div>
-        <div className="overview-kpi-card success">
-          <span>Moving</span>
-          <strong>{fmtPct(overviewAccountStats.movingRate)}</strong>
-          <small>{overviewAccountStats.movingUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang jalan</small>
-        </div>
-        <div className="overview-kpi-card warning">
-          <span>Idle</span>
-          <strong>{fmtPct(overviewAccountStats.idleRate)}</strong>
-          <small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} unit sedang diam</small>
-        </div>
+    </div>
+
+    {/* KPI strip */}
+    {!status ? <StatGridSkeleton count={4} /> : (
+    <div className="overview-kpi-grid">
+      <div className="overview-kpi-card overview-kpi-card-wide info" style={{ '--kpi-index': 0 }}>
+        <span>Total units</span>
+        <strong>{overviewAccountStats.totalConfiguredUnits || 0}</strong>
+        <small>Configured in this account</small>
       </div>
-
-      {/* Row 2: Hero - Temp chart (wide) + Fleet donut (narrow) */}
-      <div className="overview-hero-row">
-        <div className="overview-chart-card overview-hero-chart">
-          <div className="overview-chart-head">
-            <div>
-              <h3>Temp report</h3>
-              <p>Tren temp error dan unit paling sering incident.</p>
-            </div>
-            <Chip color={busy ? 'warning' : 'default'}>{busy ? 'Loading...' : `${overviewTempTrend.length} day(s)`}</Chip>
-          </div>
-          <div className="overview-chart-stack">
-            <OverviewTempTrendChart points={overviewTempTrend} busy={busy} />
-          </div>
-          <div className="overview-mini-summary overview-mini-summary-compact">
-            <div className="mini-metric"><span>Incidents</span><strong>{overviewTempSummary.totalIncidents || 0}</strong></div>
-            <div className="mini-metric"><span>Affected units</span><strong>{overviewTempSummary.affectedUnits || 0}</strong></div>
-            <div className="mini-metric"><span>Total min</span><strong>{formatMinutesText(overviewTempSummary.totalMinutes || 0)}</strong></div>
-            <div className="mini-metric"><span>Longest</span><strong>{formatMinutesText(overviewTempSummary.longestMinutes || 0)}</strong></div>
-          </div>
-        </div>
-
-        <div className="overview-chart-card overview-hero-donut">
-          <div className="overview-chart-head">
-            <div>
-              <h3>Fleet composition</h3>
-              <p>Snapshot live hari ini.</p>
-            </div>
-            <Chip>{overviewAccountStats.totalConfiguredUnits || 0} unit</Chip>
-          </div>
-          <div className="overview-donut-layout">
-            <OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} />
-            <div className="overview-legend">
-              {overviewDonutSegments.map((segment) => (
-                <div key={segment.key} className="overview-legend-row">
-                  <span className={`overview-legend-dot ${segment.tone}`} />
-                  <div>
-                    <strong>{segment.label}</strong>
-                    <small>{segment.value} unit</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="overview-kpi-card danger" style={{ '--kpi-index': 1 }}>
+        <span>Temp error</span>
+        <strong>{fmtPct(overviewAccountStats.tempErrorRate)}</strong>
+        <small>{overviewAccountStats.tempErrorUnits}/{overviewAccountStats.totalConfiguredUnits || 0} units</small>
       </div>
+      <div className="overview-kpi-card success" style={{ '--kpi-index': 2 }}>
+        <span>Moving</span>
+        <strong>{fmtPct(overviewAccountStats.movingRate)}</strong>
+        <small>{overviewAccountStats.movingUnits}/{overviewAccountStats.totalConfiguredUnits || 0} units</small>
+      </div>
+      <div className="overview-kpi-card warning" style={{ '--kpi-index': 3 }}>
+        <span>Idle</span>
+        <strong>{fmtPct(overviewAccountStats.idleRate)}</strong>
+        <small>{overviewAccountStats.idleUnits}/{overviewAccountStats.totalConfiguredUnits || 0} units</small>
+      </div>
+    </div>
+    )}
 
-      {/* Row 3: Astro KPI Per Warehouse - Full-width Horizontal Grid */}
-      <div className="overview-chart-card overview-astro-fullwidth">
+    {/* Hero: Temp chart (wide) + Fleet donut (narrow) */}
+    <div className="overview-hero-row">
+      <div className="overview-chart-card overview-hero-chart">
         <div className="overview-chart-head">
           <div>
-            <h3>Astro KPI per Warehouse</h3>
-            <p>Data ditampilkan sequential per warehouse.</p>
+            <h3>Temperature incidents</h3>
+            <p>Trend across selected date range.</p>
           </div>
-          <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
-            {overviewAstroBusy ? 'Mengambil data...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
-          </Chip>
+          <Chip color={busy ? 'warning' : 'default'}>{busy ? 'Loading...' : `${overviewTempTrend.length} day(s)`}</Chip>
         </div>
-        <div className="overview-wh-grid-horizontal">
-          {(() => {
-            const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
-            const kpiLines = [
-              { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
-              { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
-              { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
-            ];
-
-            return TARGET_WH.map((whKey, index) => {
-              const warehouseData = overviewAstroByWarehouse.find(wh =>
-                (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
-              );
-              const isRevealed = !overviewAstroBusy && index < revealedWhCount;
-
-              return (
-                <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`}>
-                  <h4 className="overview-wh-card-title">WH {whKey}</h4>
-                  {isRevealed ? (
-                    warehouseData ? (
-                      <OverviewMultiLineChart
-                        points={warehouseData.trend || []}
-                        busy={false}
-                        lines={kpiLines}
-                        emptyMessage="Belum ada trend WH."
-                        maxFloor={100}
-                        tooltipTitle={(point) => formatChartDayTitle(point?.day)}
-                      />
-                    ) : (
-                      <div className="overview-chart-empty">Belum ada data untuk WH {whKey}.</div>
-                    )
-                  ) : (
-                    <div className="wh-card-shimmer">
-                      <div className="wh-shimmer-bar" />
-                      <div className="wh-shimmer-bar short" />
-                      <span className="wh-loading-text">Sedang Menarik Data...</span>
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
+        <div className="overview-chart-stack">
+          <OverviewTempTrendChart points={overviewTempTrend} busy={busy} />
+        </div>
+        <div className="overview-mini-summary overview-mini-summary-compact">
+          <div className="mini-metric"><span>Incidents</span><strong>{overviewTempSummary.totalIncidents || 0}</strong></div>
+          <div className="mini-metric"><span>Affected</span><strong>{overviewTempSummary.affectedUnits || 0}</strong></div>
+          <div className="mini-metric"><span>Total</span><strong>{formatMinutesText(overviewTempSummary.totalMinutes || 0)}</strong></div>
+          <div className="mini-metric"><span>Longest</span><strong>{formatMinutesText(overviewTempSummary.longestMinutes || 0)}</strong></div>
         </div>
       </div>
-    </CardContent>
-  </Card>
-) : null}
-          {activePanel === 'trip-monitor' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
+
+      <div className="overview-chart-card overview-hero-donut">
+        <div className="overview-chart-head">
+          <div>
+            <h3>Fleet composition</h3>
+            <p>Live snapshot today.</p>
+          </div>
+          <Chip>{overviewAccountStats.totalConfiguredUnits || 0} unit</Chip>
+        </div>
+        <div className="overview-donut-layout">
+          <OverviewDonutChart segments={overviewDonutSegments} total={overviewAccountStats.totalConfiguredUnits || 0} />
+          <div className="overview-legend">
+            {overviewDonutSegments.map((segment) => (
+              <div key={segment.key} className="overview-legend-row">
+                <span className={`overview-legend-dot ${segment.tone}`} />
                 <div>
-                  <h2>Trip Monitor</h2>
-                  <p>Board exception-based untuk unit yang masih punya JO aktif di TMS.</p>
+                  <strong>{segment.label}</strong>
+                  <small>{segment.value} unit</small>
                 </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" onPress={refreshTripMonitorBoard}>{tripMonitorBusy ? <><Spinner size="sm" /> Refreshing</> : 'Refresh board'}</Button>
-                  {isAdmin ? <Button color="primary" onPress={triggerTmsSync}>Sync TMS</Button> : null}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="trip-monitor-toolbar">
-                  <div className="trip-monitor-filter-tabs">
-                    <button type="button" className={`trip-monitor-filter-pill ${tripMonitorFilters.severity === 'all' ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: 'all' }))}>All <span>{tripMonitorSeverityCounts.total || 0}</span></button>
-                    {TMS_BOARD_COLUMNS.map((column) => <button type="button" key={column.key} className={`trip-monitor-filter-pill trip-monitor-filter-pill-${column.key} ${tripMonitorFilters.severity === column.key ? 'is-active' : ''}`} onClick={() => setTripMonitorFilters((current) => ({ ...current, severity: column.key }))}>{column.label} <span>{tripMonitorSeverityCounts.bySeverity?.[column.key] || 0}</span></button>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Astro KPI Per Warehouse */}
+    <div className="overview-section">
+      <div className="overview-section-head">
+        <div>
+          <h3>Astro KPI per Warehouse</h3>
+          <p>Sequential data per warehouse location.</p>
+        </div>
+        <Chip color={overviewAstroBusy ? 'warning' : revealedWhCount < 4 ? 'warning' : 'default'}>
+          {overviewAstroBusy ? 'Loading...' : revealedWhCount < 4 ? `${revealedWhCount}/4 WH` : `${overviewAstroByWarehouse.length} WH`}
+        </Chip>
+      </div>
+      <div className="overview-wh-grid-horizontal">
+        {(() => {
+          const TARGET_WH = ['BGO', 'CBN', 'PGS', 'SRG'];
+          const kpiLines = [
+            { key: 'whArrivalTimeRate', colorHex: '#4FC3F7', label: 'WH Arrival Time' },
+            { key: 'whArrivalTempRate', colorHex: '#81C784', label: 'WH Temp Pass' },
+            { key: 'podArrivalRate', colorHex: '#FFB74D', label: 'POD Arrival Time' },
+          ];
+
+          return TARGET_WH.map((whKey, index) => {
+            const warehouseData = overviewAstroByWarehouse.find(wh =>
+              (wh.whName || wh.warehouse || '').toUpperCase().includes(whKey)
+            );
+            const isRevealed = !overviewAstroBusy && index < revealedWhCount;
+
+            return (
+              <div key={`wh-${whKey}`} className={`overview-wh-card ${isRevealed ? 'wh-card-revealed' : 'wh-card-loading'}`} style={{ '--wh-index': index }}>
+                <h4 className="overview-wh-card-title">WH {whKey}</h4>
+                {isRevealed ? (
+                  warehouseData ? (
+                    <OverviewMultiLineChart
+                      points={warehouseData.trend || []}
+                      busy={false}
+                      lines={kpiLines}
+                      emptyMessage="No trend data for this WH."
+                      maxFloor={100}
+                      tooltipTitle={(point) => formatChartDayTitle(point?.day)}
+                    />
+                  ) : (
+                    <div className="overview-chart-empty">No data for WH {whKey}.</div>
+                  )
+                ) : (
+                  <div className="wh-card-shimmer">
+                    <div className="wh-shimmer-bar" />
+                    <div className="wh-shimmer-bar short" />
+                    <span className="wh-loading-text">Loading data...</span>
                   </div>
-                  <div className="trip-monitor-toolbar-grid">
-                    <label className="historical-field">
-                      <span>Customer</span>
-                      <select value={tripMonitorFilters.customer} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, customer: event.target.value }))}>
-                        {tripMonitorCustomerOptions.map((option) => <option key={`customer-${option}`} value={option}>{option === 'all' ? 'All customers' : option}</option>)}
-                      </select>
-                    </label>
-                    <label className="historical-field">
-                      <span>Incident</span>
-                      <select value={tripMonitorFilters.incidentCode} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, incidentCode: event.target.value }))}>
-                        <option value="all">All incidents</option>
-                        {tripMonitorIncidentOptions.filter((option) => option !== 'all').map((option) => <option key={option} value={option}>{tmsIncidentLabel(option)}</option>)}
-                      </select>
-                    </label>
-                    <label className="historical-field historical-search-field">
-                      <span>Search</span>
-                      <div className="search-box historical-search-box">
-                        <Search size={16} className="search-icon" />
-                        <input type="search" value={tripMonitorFilters.search} onChange={(event) => setTripMonitorFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Cari nopol, JO, origin, destination..." />
-                      </div>
-                    </label>
-                    <div className="historical-field trip-monitor-legend-field">
-                      <span>Incident legend</span>
-                      <TripMonitorIncidentLegend
-                        codes={TMS_INCIDENT_LEGEND_CODES}
-                        className="trip-monitor-toolbar-legend"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="historical-summary astro-summary">Tenant: {tmsConfig?.tenantLabel || tmsForm.tenantLabel || '-'} | TMS window: {tripMonitorSummary.windowStart || '-'} to {tripMonitorSummary.windowEnd || '-'} | Topbar range: {range.startDate || '-'} to {range.endDate || '-'} | Status: {tripMonitorIncludedStatusesLabel} | Last sync: {tripMonitorSummary.lastSync?.syncedAt ? fmtDate(tripMonitorSummary.lastSync.syncedAt) : 'Belum pernah'} | Auto-sync: {tripMonitorSummary.autoSync ? `Aktif / ${tripMonitorSummary.syncIntervalMinutes || 15} min` : 'Off'} | Rows: {tripMonitorVisibleRows.length}</div>
-                <TripMonitorKanban
-                  rows={tripMonitorVisibleRows}
-                  selectedRowId={tripMonitorPanels.length ? tripMonitorPanels.reduce((front, panel) => front.zIndex > panel.zIndex ? front : panel).rowId : null}
-                  onOpen={(row) => openTripMonitorDetail(row.rowId)}
-                />
-              </CardContent>
-            </Card>
-          </> : null}
+                )}
+              </div>
+            );
+          });
+        })()}
+      </div>
+    </div>
+  </div>
+) : null}
+          {activePanel === 'trip-monitor' ? <TripMonitorPanel
+            tripMonitorFilters={tripMonitorFilters}
+            setTripMonitorFilters={setTripMonitorFilters}
+            tripMonitorSeverityCounts={tripMonitorSeverityCounts}
+            tripMonitorCustomerOptions={tripMonitorCustomerOptions}
+            tripMonitorIncidentOptions={tripMonitorIncidentOptions}
+            tripMonitorVisibleRows={tripMonitorVisibleRows}
+            tripMonitorPanels={tripMonitorPanels}
+            tripMonitorBusy={tripMonitorBusy}
+            tripMonitorSummary={tripMonitorSummary}
+            tripMonitorIncludedStatusesLabel={tripMonitorIncludedStatusesLabel}
+            tmsConfig={tmsConfig}
+            tmsForm={tmsForm}
+            range={range}
+            onRefreshBoard={refreshTripMonitorBoard}
+            onSyncTms={triggerTmsSync}
+            onOpenDetail={(row) => openTripMonitorDetail(row.rowId)}
+            isAdmin={isAdmin}
+            fmtDate={fmtDate}
+          /> : null}
           {activePanel === 'fleet' ? <FleetWorkspace
             rows={prioritizedFleet}
             selectedRow={selectedFleetRow}
@@ -3421,7 +3493,7 @@ export default function App() {
             rangeLabel={`${range.startDate} to ${range.endDate}`}
             tripMonitorRows={tripMonitorRows}
           /> : null}
-          {/* Fleet legacy table block — DEPRECATED, kept disabled for reference; remove after parity confirmed */}
+          {/* Fleet legacy table block â€” DEPRECATED, kept disabled for reference; remove after parity confirmed */}
           {false ? <>
             <div className="filter-strip">
               <button type="button" className={`filter-pill ${quickFilter === 'all' ? 'active' : ''}`} onClick={() => handleQuickFilterSelect('all')}>
@@ -3678,759 +3750,195 @@ export default function App() {
             </div>
           </> : null}
           {activePanel === 'temp-errors' ? <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Unit compile by day</h2><p>Section ini selalu 1 hari 1 row. Detail unit tetap dipakai waktu export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile error by day di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card> : null}
-          {activePanel === 'historical' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Historical temperature</h2>
-                  <p>Cari unit, ganti unit, dan ubah rentang tanggal langsung dari halaman ini.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" onPress={() => setActivePanel('fleet')}>Back to Fleet Live</Button>
-                  <Button variant="bordered" onPress={exportHistory}>Export history CSV</Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {fleetRows.length ? <>
-                  <div className="historical-toolbar">
-                    <label className="historical-field historical-search-field">
-                      <span>Search unit</span>
-                      <div className="search-box historical-search-box">
-                        <Search size={16} className="search-icon" />
-                        <input
-                          type="search"
-                          value={historicalSearch}
-                          onChange={(event) => setHistoricalSearch(event.target.value)}
-                          placeholder="Cari account, unit, customer, lokasi..."
-                        />
-                      </div>
-                    </label>
-                    <label className="historical-field historical-unit-field">
-                      <span>Unit</span>
-                      <select value={selectedHistoricalRow ? unitRowKey(selectedHistoricalRow) : ""} onChange={(event) => selectHistoricalUnit(event.target.value)}>
-                        {historicalFleet.map((row) => <option key={row.rowKey || unitRowKey(row)} value={unitRowKey(row)}>{row.accountLabel || row.accountId || "Account"} | {row.id} | {row.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="historical-field historical-date-field">
-                      <span>Start date</span>
-                      <input type="date" value={historicalRangeDraft.startDate} onChange={(event) => setHistoricalRangeDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                    </label>
-                    <label className="historical-field historical-date-field">
-                      <span>End date</span>
-                      <input type="date" value={historicalRangeDraft.endDate} onChange={(event) => setHistoricalRangeDraft((current) => ({ ...current, endDate: event.target.value }))} />
-                    </label>
-                    <div className="historical-action-field">
-                      <span>Action</span>
-                      <Button color="primary" onPress={pullHistoricalData}>{historicalDetailBusy ? <><Spinner size="sm" /> Menarik...</> : "Tarik Data"}</Button>
-                    </div>
-                  </div>
-                  <div className="historical-summary">{historicalFleet.length} unit tersedia buat dipilih dari fleet live. Menampilkan {historicalRangeApplied.startDate} to {historicalRangeApplied.endDate}.</div>
-                  {selectedHistoricalRow && historicalAppliedRow && unitRowKey(selectedHistoricalRow) !== unitRowKey(historicalAppliedRow) ? <div className="subtle-line historical-pending-hint">Pilihan unit atau range berubah. Klik Tarik Data untuk memuat historical terbaru.</div> : null}
-                  {historicalAppliedRow ? <>
-                    <div className="focus-side-meta">
-                      <strong>{historicalAppliedRow.id} | {historicalAppliedRow.label}</strong>
-                      <div className="subtle-line">{historicalAppliedRow.accountLabel || historicalAppliedRow.accountId}</div>
-                      <div className="subtle-line">{historicalAppliedRow.customerName || "No customer profile"}</div>
-                    </div>
-                    <div className="unit-summary-grid historical-metrics-grid">
-                      <SummaryMetric label="Trip km" value={fmtNum(historicalTripMetrics.distanceKm, 1)} />
-                      <SummaryMetric label="Moving" value={formatMinutesText(historicalTripMetrics.movingMinutes)} />
-                      <SummaryMetric label="Stopped" value={formatMinutesText(historicalTripMetrics.stoppedMinutes)} />
-                    </div>
-                    <TemperatureChart records={historicalDetail?.records || []} busy={historicalDetailBusy} title="Historical temperature chart" description="Tarik langsung dari historical Solofleet sesuai range yang dipilih di page ini." />
-                    <div className="spacer-16" />
-                    <DataTable columns={["Status", "Masuk", "Keluar", "Durasi", "Jarak", "Lokasi"]} emptyMessage="Belum ada event geofence yang valid di range ini." rows={historicalGeofenceEvents.map((event) => [event.statusLabel || "-", fmtDate(event.enteredAt), fmtDate(event.leftAt), formatMinutesText(event.durationMinutes), event.distanceMeters != null ? `${fmtNum(event.distanceMeters, 0)} m` : "-", <div><div>{event.locationName || "-"}</div><div className="subtle-line">{event.locationType || "-"}</div></div>])} />
-                    <div className="spacer-16" />
-                    <DataTable pagination={{ initialRowsPerPage: 30, rowsPerPageOptions: [30, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Lat", "Lng", "Power supply", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di range ini." rows={[...(historicalDetail?.records || [])].reverse().map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || "-"}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || "Outside geofence"}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || "-"}</div><div className="subtle-line">{row.zoneName || "No zone"}</div></div>, fmtCoord(row.latitude), fmtCoord(row.longitude), fmtNum(row.powerSupply, 2), row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : "-"])} />
-                  </> : selectedHistoricalRow ? <div className="empty-state">Pilih unit dan range, lalu klik Tarik Data untuk memuat historical dari Solofleet.</div> : <div className="empty-state">Belum ada unit yang cocok dengan filter historical.</div>}
-                </> : <div className="empty-state">Belum ada unit dari fleet live untuk dipilih.</div>}
-              </CardContent>
-            </Card>
-          </> : null}
+          {activePanel === 'historical' ? <HistoricalPanel
+            fleetRows={fleetRows}
+            historicalFleet={historicalFleet}
+            selectedHistoricalRow={selectedHistoricalRow}
+            historicalAppliedRow={historicalAppliedRow}
+            historicalSearch={historicalSearch}
+            setHistoricalSearch={setHistoricalSearch}
+            historicalRangeDraft={historicalRangeDraft}
+            setHistoricalRangeDraft={setHistoricalRangeDraft}
+            historicalRangeApplied={historicalRangeApplied}
+            historicalDetail={historicalDetail}
+            historicalDetailBusy={historicalDetailBusy}
+            historicalTripMetrics={historicalTripMetrics}
+            historicalGeofenceEvents={historicalGeofenceEvents}
+            onSelectUnit={selectHistoricalUnit}
+            onPullData={pullHistoricalData}
+            onExportHistory={exportHistory}
+            onBackToFleet={() => setActivePanel('fleet')}
+            renderTemperatureChart={(props) => <TemperatureChart {...props} />}
+            fmtDate={fmtDate}
+            fmtNum={fmtNum}
+            fmtCoord={fmtCoord}
+            formatMinutesText={formatMinutesText}
+            unitRowKey={unitRowKey}
+          /> : null}
 
           {activePanel === 'pod' ? <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>POD auto capture</h2><p>Snapshot harian kalau unit masuk radius POD dengan speed rendah. Lokasi POD bisa kamu atur sendiri.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportPods}>Export POD CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Time', 'Account', 'Unit', 'Customer', 'POD', 'Distance', 'Speed', 'Location']} emptyMessage="Belum ada POD capture di range ini." rows={podRows.map((row) => [row.day, row.time, row.accountLabel || row.accountId || '-', <div><strong>{row.unitId}</strong><div className="subtle-line">{row.unitLabel}</div></div>, row.customerName || '-', row.podName, `${fmtNum(row.distanceMeters, 0)} m`, fmtNum(row.speed, 0), row.locationSummary || '-'])} /></CardContent></Card> : null}
 
-          {activePanel === 'api-monitor' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>API Monitor</h2><p>Trace ringan untuk lihat endpoint Solofleet API yang ditarik oleh backend, error, dan duration.</p></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Requests</span><strong>{apiMonitor?.totals?.requests ?? 0}</strong></div><div className="mini-metric"><span>Errors</span><strong>{apiMonitor?.totals?.errors ?? 0}</strong></div><div className="mini-metric"><span>Slow</span><strong>{apiMonitor?.totals?.slowRequests ?? 0}</strong></div><div className="mini-metric"><span>Endpoints</span><strong>{apiMonitor?.totals?.uniqueEndpoints ?? 0}</strong></div></div></CardContent></Card>
-            <div className="split-panels split-panels-tall">
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Endpoint summary</h2><p>Hit count, error count, dan average duration per endpoint.</p></div></CardHeader><CardContent><DataTable columns={['Method', 'Path', 'Hits', 'Errors', 'Avg ms', 'Last status', 'Last at', 'Last error']} emptyMessage="Belum ada traffic API tercatat." rows={(apiMonitor?.endpointSummary || []).map((row) => [row.method, row.path, row.hits, row.errorCount, fmtNum(row.avgDurationMs, 1), row.lastStatusCode ?? '-', fmtDate(row.lastAt), row.lastError || '-'])} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Recent requests</h2><p>Request data terbaru ke Solofleet beserta status HTTP-nya.</p></div></CardHeader><CardContent><DataTable columns={['Time', 'Method', 'Path', 'Status', 'Duration', 'Error']} pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} emptyMessage="Belum ada recent request." rows={(apiMonitor?.recent || []).map((row) => [fmtDate(row.timestamp), row.method, `${row.path}${row.query || ''}`, row.statusCode, `${fmtNum(row.durationMs, 0)} ms`, row.error || '-'])} /></CardContent></Card>
-            </div>
-          </> : null}
-          {activePanel === 'config' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Solofleet multi-account</h2><p>Login Solofleet dipisah dari login web. Semua linked account diatur dari sini.</p></div><div className="inline-buttons"><Button color="primary" onPress={() => saveConfig(false)}>Save config</Button></div></CardHeader><CardContent><div className="settings-stack"><label className="field"><span>Active Solofleet account</span><select value={activeAccountId} onChange={(event) => switchAccount(event.target.value)}>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}</select></label><div className="account-config-list">{availableAccounts.map((account) => <div key={account.id} className={`account-config-item ${activeAccountId === account.id ? 'account-config-item-active' : ''}`}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><div className="inline-buttons"><Button variant="bordered" onPress={() => switchAccount(account.id)}>Use</Button><Button variant="bordered" onPress={() => discoverUnits(account.id)}>Discover units</Button>{account.id !== 'primary' ? <Button variant="light" onPress={() => logoutAccount(account.id)}>Remove</Button> : null}</div></div>)}</div></div></CardContent></Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Unit category mapping</h2>
-                  <p>Set kategori unit untuk account aktif. Unit baru hasil discover akan default ke Uncategorized sampai kamu mapping manual.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setUnitCategorySectionOpen((current) => !current)} aria-label={unitCategorySectionOpen ? 'Collapse unit category mapping' : 'Expand unit category mapping'}>
-                    {unitCategorySectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </Button>
-                  {unitCategorySectionOpen ? <Button variant="bordered" onPress={selectVisibleConfiguredUnits}>Select visible</Button> : null}
-                  {unitCategorySectionOpen ? <Button variant="bordered" onPress={clearConfiguredUnitSelection}>Clear selected</Button> : null}
-                  {unitCategorySectionOpen ? <Button color="primary" onPress={() => saveConfig(false)}>Save categories</Button> : null}
-                </div>
-              </CardHeader>
-              {unitCategorySectionOpen ? <CardContent>
-                <div className="settings-stack">
-                  <div className="subtle-line">Account aktif: <strong>{currentAccount?.label || currentAccount?.authEmail || currentAccount?.id || 'primary'}</strong></div>
-                  <label className="field">
-                    <span>Search configured units</span>
-                    <div className="search-box historical-search-box">
-                      <Search size={16} className="search-icon" />
-                      <input type="search" value={unitCategorySearch} onChange={(event) => setUnitCategorySearch(event.target.value)} placeholder="Cari unit id, label, atau category..." />
-                    </div>
-                  </label>
-                  <div className="inline-buttons" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
-                    <label className="field fleet-filter-field" style={{ minWidth: 220 }}>
-                      <span>Bulk set category</span>
-                      <select value={unitCategoryBulkValue} onChange={(event) => setUnitCategoryBulkValue(event.target.value)}>
-                        {UNIT_CATEGORY_OPTIONS.map((option) => <option key={`bulk-${option.value}`} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <Button variant="bordered" onPress={applyCategoryToSelectedUnits}>Apply to selected ({selectedUnitCategoryIds.length})</Button>
-                  </div>
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Select', 'Unit ID', 'Current', 'Set category']}
-                    emptyMessage="Belum ada unit dikonfigurasi di account aktif. Klik Discover units dulu."
-                    rows={filteredConfiguredUnits.map((unit) => [
-                      <input type="checkbox" aria-label={`Select ${unit.label || unit.id}`} checked={selectedUnitCategoryIds.includes(unit.id)} onChange={() => toggleConfiguredUnitSelection(unit.id)} />,
-                      <div><strong>{unit.id}</strong><div className="subtle-line">{unit.label || unit.id}</div></div>,
-                      <Chip color={unitCategoryTone(unit.category)}>{unitCategoryLabel(unit.category)}</Chip>,
-                      <select aria-label={`Category for ${unit.label || unit.id}`} value={normalizeUnitCategory(unit.category)} onChange={(event) => updateConfiguredUnitCategory(unit.id, event.target.value)}>
-                        {UNIT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>,
-                    ])}
-                  />
-                  <div className="astro-sample-block">
-                    <div className="astro-sample-head">
-                      <strong>CSV bulk update</strong>
-                      <div className="inline-buttons astro-sample-actions">
-                        <Button variant="bordered" onPress={() => setUnitCategoryCsvText(['label,category', 'B 9478 SXW,dedicated-astro', 'B 9769 SXW,oncall'].join('\n'))}>Use sample</Button>
-                        <Button variant="bordered" onPress={downloadUnitCategoryCsvTemplate}>Download template</Button>
-                      </div>
-                    </div>
-                    <pre className="astro-sample-pre">{'Recommended header:\nlabel,category\nB 9478 SXW,dedicated-astro\nB 9769 SXW,oncall\n\nTemplate download columns:\nlabel,unitId,category\n\nAlso supported:\nunitId,category\naccountId,label,category\naccountId,unitId,category\naccountId,unitId,label,category'}</pre>
-                  </div>
-                  <label className="field"><span>Bulk category CSV</span><textarea rows="6" value={unitCategoryCsvText} onChange={(event) => setUnitCategoryCsvText(event.target.value)} placeholder="label,category" /></label>
-                  <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" aria-label="Upload unit category CSV" onChange={loadUnitCategoryCsvFile} />
-                    <Button variant="bordered" onPress={importUnitCategoryCsv}>Import CSV merge</Button>
-                  </div>
-                  <div className="subtle-line">CSV category sekarang bisa pakai label / nopol atau unitId. Template download mengikuti unit di account aktif. Kategori tersimpan per account dan per unit.</div>
-                </div>
-              </CardContent> : null}
-            </Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Add / refresh linked account</h2>
-                  <p>Gunakan form ini untuk menambahkan account baru atau memperbarui sesi Solofleet yang sudah ada.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setLinkedAccountSectionOpen((current) => !current)} aria-label={linkedAccountSectionOpen ? 'Collapse linked account form' : 'Expand linked account form'}>
-                    {linkedAccountSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </Button>
-                  {linkedAccountSectionOpen ? <Button color="primary" onPress={() => loginWithSolofleet('linked')}>Add linked account</Button> : null}
-                </div>
-              </CardHeader>
-              {linkedAccountSectionOpen ? <CardContent><div className="form-grid account-login-grid"><label className="field"><span>Label</span><input type="text" value={accountLoginForm.label} onChange={(event) => setAccountLoginForm((current) => ({ ...current, label: event.target.value }))} placeholder="Vendor / Client A" /></label><label className="field"><span>Email</span><input type="email" value={accountLoginForm.email} onChange={(event) => setAccountLoginForm((current) => ({ ...current, email: event.target.value }))} placeholder="nama@company.com" /></label><label className="field"><span>Password</span><input type="password" value={accountLoginForm.password} onChange={(event) => setAccountLoginForm((current) => ({ ...current, password: event.target.value }))} placeholder="Password Solofleet" /></label><label className="field checkbox-field"><input type="checkbox" checked={accountLoginForm.rememberMe} onChange={(event) => setAccountLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))} /><span>Remember me</span></label></div></CardContent> : null}
-            </Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>TMS integration</h2>
-                  <p>Login akun TMS read-only untuk fetch JO aktif dan membangun Trip Monitor kanban.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setTmsConfigSectionOpen((current) => !current)} aria-label={tmsConfigSectionOpen ? 'Collapse TMS integration' : 'Expand TMS integration'}>{tmsConfigSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
-                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={() => loadTmsLogs(false)}>{tmsLogsBusy ? <><Spinner size="sm" /> Logs</> : 'Refresh logs'}</Button> : null}
-                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={logoutTms}>Logout TMS</Button> : null}
-                  {tmsConfigSectionOpen ? <Button variant="bordered" onPress={loginWithTms}>Connect TMS</Button> : null}
-                  {tmsConfigSectionOpen ? <Button color="primary" onPress={saveTmsConfig}>Save TMS config</Button> : null}
-                </div>
-              </CardHeader>
-              {tmsConfigSectionOpen ? <CardContent>
-                <div className="settings-stack">
-                  <div className="subtle-line">{tmsConfig?.hasVerifiedSession ? 'Session verified' : tmsConfig?.hasSessionCookie ? 'Session ada tapi belum diverifikasi' : 'Belum ada session TMS'} | Cookie preview: {tmsConfig?.sessionCookiePreview || '-'} | Last sync: {tmsLogs[0]?.createdAt ? fmtDate(tmsLogs[0].createdAt) : 'Belum ada'}</div>
-                  <div className="form-grid astro-config-grid">
-                    <label className="field"><span>Tenant label</span><input type="text" value={tmsForm.tenantLabel} onChange={(event) => setTmsForm((current) => ({ ...current, tenantLabel: event.target.value }))} placeholder="CargoShare TMS" /></label>
-                    <label className="field"><span>Base URL</span><input type="text" value={tmsForm.baseUrl} onChange={(event) => setTmsForm((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://1903202401.cargoshare.id" /></label>
-                    <label className="field"><span>Username</span><input type="text" value={tmsForm.username} onChange={(event) => setTmsForm((current) => ({ ...current, username: event.target.value }))} placeholder="TMS username" /></label>
-                    <label className="field"><span>Password</span><input type="password" value={tmsForm.password} onChange={(event) => setTmsForm((current) => ({ ...current, password: event.target.value }))} placeholder={tmsConfig?.hasPassword ? 'Kosongkan untuk pakai password tersimpan' : 'TMS password'} /></label>
-                    <label className="field checkbox-field"><input type="checkbox" checked={tmsForm.autoSync} onChange={(event) => setTmsForm((current) => ({ ...current, autoSync: event.target.checked }))} /><span>Auto sync</span></label>
-                    <label className="field"><span>Sync interval (min)</span><input type="number" min="5" value={tmsForm.syncIntervalMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, syncIntervalMinutes: event.target.value }))} /></label>
-                    <label className="field"><span>Geofence radius (m)</span><input type="number" min="50" value={tmsForm.geofenceRadiusMeters} onChange={(event) => setTmsForm((current) => ({ ...current, geofenceRadiusMeters: event.target.value }))} /></label>
-                    <label className="field"><span>Long stop (min)</span><input type="number" min="5" value={tmsForm.longStopMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, longStopMinutes: event.target.value }))} /></label>
-                    <label className="field"><span>App stagnant (min)</span><input type="number" min="5" value={tmsForm.appStagnantMinutes} onChange={(event) => setTmsForm((current) => ({ ...current, appStagnantMinutes: event.target.value }))} /></label>
-                  </div>
-                  <div className="inline-buttons">
-                    <Button variant="bordered" onPress={triggerTmsSync}>Sync now</Button>
-                    <Button variant="bordered" onPress={() => { setActivePanel('trip-monitor'); loadTripMonitorBoard(false).catch(() => {}); }}>Open Trip Monitor</Button>
-                  </div>
-                  <DataTable pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }} columns={['Time', 'Status', 'Summary']} emptyMessage="Belum ada log sync TMS." rows={tmsLogs.map((log) => [fmtDate(log.createdAt), <Chip color={log.status === 'success' ? 'success' : log.status === 'error' ? 'danger' : 'default'}>{log.status || 'info'}</Chip>, <div><div>{log.summary || '-'}</div><div className="subtle-line">{log.message || '-'}</div></div>])} />
-                </div>
-              </CardContent> : null}
-            </Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Automated remote CPU reset</h2>
-                  <p>Kirim cpureset otomatis setiap 3 jam untuk unit yang masih live temp error, hanya pada account yang dipilih.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setRemoteResetSectionOpen((current) => !current)} aria-label={remoteResetSectionOpen ? 'Collapse automated remote CPU reset' : 'Expand automated remote CPU reset'}>
-                    {remoteResetSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </Button>
-                  {remoteResetSectionOpen ? <Button variant="bordered" onPress={() => loadRemoteResetLogs(false)}>Refresh logs</Button> : null}
-                  {remoteResetSectionOpen ? <Button variant="bordered" onPress={runRemoteResetNow} disabled={!remoteResetForm.enabled}>Run reset now</Button> : null}
-                  {remoteResetSectionOpen ? <Button color="primary" onPress={() => saveConfig(false)}>Save reset settings</Button> : null}
-                </div>
-              </CardHeader>
-              {remoteResetSectionOpen ? <CardContent>
-                <div className="settings-stack">
-                  <label className="field checkbox-field"><input type="checkbox" checked={remoteResetForm.enabled} onChange={(event) => setRemoteResetForm((current) => ({ ...current, enabled: event.target.checked }))} /><span>Enable automated CPU reset</span></label>
-                  <div className="metric-strip admin-storage-strip"><div className="mini-metric"><span>Interval</span><strong>3 jam</strong></div><div className="mini-metric"><span>Target</span><strong>Temp error only</strong></div><div className="mini-metric"><span>Max / run</span><strong>10 unit</strong></div><div className="mini-metric"><span>Next run</span><strong>{fmtDate(remoteResetStatus?.nextRunAt) || '-'}</strong></div><div className="mini-metric"><span>Last run</span><strong>{fmtDate(remoteResetStatus?.lastRunAt) || '-'}</strong></div><div className="mini-metric"><span>Selected</span><strong>{(remoteResetForm.selectedAccountIds || []).length}</strong></div></div>
-                  <div className="subtle-line">Rule tetap: hanya saat polling aktif, sequential, jeda 3 detik per request, dan unit yang sama hanya dicoba sekali per window 3 jam.</div>
-                  <div className="settings-stack"><strong>Selected accounts</strong><div className="account-config-list">{availableAccounts.map((account) => { const checked = (remoteResetForm.selectedAccountIds || []).includes(account.id); return <div key={'remote-reset-' + account.id} className={'account-config-item' + (checked ? ' account-config-item-active' : '')}><div><strong>{account.label || account.authEmail || account.id}</strong><div className="subtle-line">{account.authEmail || 'No email saved'}{account.hasVerifiedSession ? ' | verified session' : account.hasSessionCookie ? ' | needs refresh' : ' | disconnected'}</div><div className="subtle-line">{account.units?.length || 0} unit configured</div></div><label className="checkbox-field"><input type="checkbox" checked={checked} onChange={() => toggleRemoteResetAccount(account.id)} /><span>Use</span></label></div>; })}</div></div>
-                  <div className="subtle-line">Last summary: {remoteResetStatus?.lastRunMessage || 'Belum ada run remote reset.'}</div>
-                  <DataTable columns={['Time', 'Account', 'Unit', 'Error', 'Status', 'HTTP', 'Reason']} pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }} emptyMessage="Belum ada remote reset log." rows={remoteResetLogs.map((row) => [fmtDate(row.triggeredAt), row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>, row.errorType || '-', row.status || '-', row.httpStatus ?? '-', row.reason || row.responseExcerpt || '-'])} />
-                </div>
-              </CardContent> : null}
-            </Card>
-            <Card ref={astroLocationCardRef} className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Geofence locations</h2>
-                  <p>Kelola lokasi umum untuk Fleet Live dan Historical, termasuk WH, POD, POOL, POL, REST, dan PELABUHAN.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setAstroLocationSectionOpen((current) => !current)} aria-label={astroLocationSectionOpen ? 'Collapse geofence locations' : 'Expand geofence locations'}>{astroLocationSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
-                  {astroLocationSectionOpen ? <Button color="primary" onPress={saveAstroLocationEntry}>{astroLocationForm.id ? 'Update geofence' : 'Save geofence'}</Button> : null}
-                </div>
-              </CardHeader>
-              {astroLocationSectionOpen ? <CardContent>
-                <div className="settings-stack">
-                  <div className="form-grid astro-config-grid">
-                    <label className="field"><span>Location name</span><input type="text" value={astroLocationForm.name} onChange={(event) => setAstroLocationForm((current) => ({ ...current, name: event.target.value }))} placeholder="Astro WH CBN" /></label>
-                    <label className="field"><span>Latitude</span><input type="number" step="any" value={astroLocationForm.latitude} onChange={(event) => setAstroLocationForm((current) => ({ ...current, latitude: event.target.value }))} placeholder="-6.2" /></label>
-                    <label className="field"><span>Longitude</span><input type="number" step="any" value={astroLocationForm.longitude} onChange={(event) => setAstroLocationForm((current) => ({ ...current, longitude: event.target.value }))} placeholder="106.8" /></label>
-                    <label className="field"><span>Radius (m)</span><input type="number" min="20" value={astroLocationForm.radiusMeters} onChange={(event) => setAstroLocationForm((current) => ({ ...current, radiusMeters: event.target.value }))} /></label>
-                    <label className="field"><span>Type</span><select value={astroLocationForm.type} onChange={(event) => setAstroLocationForm((current) => ({ ...current, type: event.target.value }))}>{GEOFENCE_LOCATION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-                    <label className="field"><span>Scope</span><select value={astroLocationForm.scopeMode} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeMode: event.target.value }))}><option value="global">Global</option><option value="account">By account</option><option value="customer">By customer</option><option value="hybrid">Account + customer</option></select></label>
-                    <label className="field checkbox-field"><input type="checkbox" checked={astroLocationForm.isActive} onChange={(event) => setAstroLocationForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
-                  </div>
-                  <div className="form-grid astro-config-grid">
-                    <label className="field"><span>Account scope</span><input type="text" value={astroLocationForm.scopeAccountIds} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeAccountIds: event.target.value }))} placeholder="primary, vendor-mti" /></label>
-                    <label className="field"><span>Customer scope</span><input type="text" value={astroLocationForm.scopeCustomerNames} onChange={(event) => setAstroLocationForm((current) => ({ ...current, scopeCustomerNames: event.target.value }))} placeholder="Astro, Starbucks" /></label>
-                  </div>
-                  <label className="field"><span>Notes</span><input type="text" value={astroLocationForm.notes} onChange={(event) => setAstroLocationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional note" /></label>
-                  <div className="inline-buttons">
-                    <Button variant="bordered" onPress={() => setAstroLocationForm(EMPTY_ASTRO_LOCATION_FORM)}>Reset form</Button>
-                  </div>
-                  <div className="astro-sample-block">
-                    <div className="astro-sample-head">
-                      <strong>CSV sample</strong>
-                      <div className="inline-buttons astro-sample-actions">
-                        <a className="sf-btn sf-btn-bordered" href="/astro-location-sample.csv" download>Download sample CSV</a>
-                        <Button variant="bordered" onPress={() => setAstroCsvText(ASTRO_LOCATION_SAMPLE_CSV)}>Use sample</Button>
-                      </div>
-                    </div>
-                    <pre className="astro-sample-pre">{ASTRO_LOCATION_SAMPLE_CSV}</pre>
-                  </div>
-                  <label className="field"><span>Bulk CSV import</span><textarea rows="5" value={astroCsvText} onChange={(event) => setAstroCsvText(event.target.value)} placeholder="Nama Tempat, Latitude, Longitude, Radius, Type, Scope Mode, Account Scope, Customer Scope" /></label>
-                  <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" aria-label="Upload location CSV" onChange={loadAstroCsvFile} />
-                    <Button variant="bordered" onPress={() => importAstroLocations(false)}>Import merge</Button>
-                    <Button variant="light" onPress={() => importAstroLocations(true)}>Replace all</Button>
-                  </div>
-                  <label className="field">
-                    <span>Search saved locations</span>
-                    <div className="search-box historical-search-box">
-                      <Search size={16} className="search-icon" />
-                      <input type="search" value={astroLocationSearch} onChange={(event) => setAstroLocationSearch(event.target.value)} placeholder="Cari nama lokasi, type, scope, note..." />
-                    </div>
-                  </label>
-                  {astroFilteredLocationGroups.length ? <div className="astro-group-stack">
-                    <div className="astro-group-summary">
-                      <Chip>{astroLocations.length} lokasi</Chip>
-                      {GEOFENCE_LOCATION_TYPES.map((type) => <Chip key={type} color={type === 'WH' ? 'info' : type === 'POD' ? 'warning' : 'default'}>{type} {geofenceLocationCounts[type] || 0}</Chip>)}
-                    </div>
-                    <div className="inline-buttons astro-bulk-actions">
-                      <Button variant="bordered" onPress={selectVisibleAstroLocations} disabled={!astroFilteredLocationGroups.length}>Select visible</Button>
-                      <Button variant="bordered" onPress={clearSelectedAstroLocations} disabled={!selectedAstroLocationIds.length}>Clear selected</Button>
-                      <Button variant="light" onPress={() => deleteAstroLocations(selectedAstroLocationIds)} disabled={!selectedAstroLocationIds.length}>Delete selected ({selectedAstroLocationIds.length})</Button>
-                    </div>
-                    {astroFilteredLocationGroups.map((group) => {
-                      const expanded = astroLocationExpanded[group.key] === true;
-                      const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
-                      return <div key={group.key} className="astro-group-card">
-                        <div className="astro-group-card-head">
-                          <div>
-                            <strong>{group.title}</strong>
-                            <span>{group.items.length} lokasi</span>
-                          </div>
-                          {group.items.length > ASTRO_GROUP_PREVIEW_LIMIT ? <Button variant="bordered" onPress={() => setAstroLocationExpanded((current) => ({ ...current, [group.key]: !expanded }))}>{expanded ? 'Show less' : `Show all (${group.items.length})`}</Button> : null}
-                        </div>
-                        <div className="astro-card-grid">
-                          {visibleItems.map((location) => <div key={location.id} className="astro-entity-card">
-                            <div className="astro-entity-card-head">
-                              <label className="astro-card-select">
-                                <input type="checkbox" aria-label={`Select ${location.name}`} checked={selectedAstroLocationIds.includes(location.id)} onChange={() => toggleAstroLocationSelection(location.id)} />
-                              </label>
-                              <div>
-                                <strong>{location.name}</strong>
-                                <span>{location.type} | {location.radiusMeters} m | {location.scopeMode || 'global'}</span>
-                              </div>
-                              <Chip color={location.isActive !== false ? 'success' : 'default'}>{location.isActive !== false ? 'Active' : 'Inactive'}</Chip>
-                            </div>
-                            <div className="astro-entity-card-body">
-                              <span>Lat {fmtCoord(location.latitude)}</span>
-                              <span>Lng {fmtCoord(location.longitude)}</span>
-                            </div>
-                            <p className={location.notes ? 'astro-entity-note' : 'astro-entity-note astro-entity-note-muted'}>{location.notes || 'No note'}</p>
-                            <p className="astro-entity-note astro-entity-note-muted">{(location.scopeAccountIds || []).length ? `Account: ${(location.scopeAccountIds || []).join(', ')}` : 'Account: all'} | {(location.scopeCustomerNames || []).length ? `Customer: ${(location.scopeCustomerNames || []).join(', ')}` : 'Customer: all'}</p>
-                            <div className="inline-buttons astro-entity-actions">
-                              <Button variant="bordered" onPress={() => editAstroLocationEntry(location)}>Edit</Button>
-                              <Button variant="light" onPress={() => deleteAstroLocationEntry(location.id)}>Delete</Button>
-                            </div>
-                          </div>)}
-                        </div>
-                      </div>;
-                    })}
-                  </div> : <div className="empty-state">Belum ada Astro location yang cocok dengan pencarian.</div>}
-                </div>
-              </CardContent> : null}
-            </Card>
-            <Card ref={astroRouteCardRef} className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Astro route config</h2>
-                  <p>Atur mapping unit Astro ke WH, POOL, urutan POD, window rit, dan KPI. WH temp min/max SLA wajib diisi.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => setAstroRouteSectionOpen((current) => !current)} aria-label={astroRouteSectionOpen ? 'Collapse Astro route config' : 'Expand Astro route config'}>{astroRouteSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
-                  {astroRouteSectionOpen ? <Button color="primary" onPress={saveAstroRouteEntry}>{astroRouteForm.id ? 'Update route' : 'Save route'}</Button> : null}
-                </div>
-              </CardHeader>
-              {astroRouteSectionOpen ? <CardContent>
-                <div className="settings-stack">
-                  <div className="astro-route-form-section">
-                    <div className="astro-route-form-section-label">Route identity</div>
-                    <div className="form-grid astro-config-grid">
-                      <SearchableSelect label="Account" value={astroRouteForm.accountId} options={astroRouteAccountOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, accountId: nextValue || current.accountId, unitId: '' }))} placeholder="Search account..." />
-                      <SearchableSelect label="Nopol" value={astroRouteForm.unitId} options={[{ value: '', label: 'Select unit' }, ...astroRouteFilteredUnitOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, unitId: nextValue }))} placeholder="Search unit..." />
-                      <label className="field"><span>Customer</span><input type="text" value={astroRouteForm.customerName} onChange={(event) => setAstroRouteForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Astro" /></label>
-                      <SearchableSelect label="WH" value={astroRouteForm.whLocationId} options={[{ value: '', label: 'Select WH' }, ...astroWhOptions]} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, whLocationId: nextValue }))} placeholder="Search WH..." />
-                      <SearchableSelect label="POOL" value={astroRouteForm.poolLocationId} options={astroPoolOptions} onChange={(nextValue) => setAstroRouteForm((current) => ({ ...current, poolLocationId: nextValue }))} placeholder="Search pool..." />
-                      <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.isActive} onChange={(event) => setAstroRouteForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
-                    </div>
-                  </div>
-                  <div className="astro-route-form-section">
-                    <div className="astro-route-form-section-label">Rit 1 schedule &amp; SLA</div>
-                    <div className="form-grid astro-config-grid">
-                      <label className="field"><span>Rit 1 start</span><input type="time" value={astroRouteForm.rit1Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1Start: event.target.value }))} /></label>
-                      <label className="field"><span>Rit 1 end</span><input type="time" value={astroRouteForm.rit1End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1End: event.target.value }))} /></label>
-                      <label className="field"><span>Rit 1 WH SLA</span><input type="time" value={astroRouteForm.rit1WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit1WhArrivalTimeSla: event.target.value }))} /></label>
-                    </div>
-                  </div>
-                  <div className="astro-route-form-section">
-                    <div className="astro-route-form-section-label">Rit 2 schedule &amp; temp SLA</div>
-                    <div className="form-grid astro-config-grid">
-                      <label className="field checkbox-field"><input type="checkbox" checked={astroRouteForm.rit2Enabled} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Enabled: event.target.checked }))} /><span>Enable rit 2</span></label>
-                      <label className="field"><span>Rit 2 start</span><input type="time" value={astroRouteForm.rit2Start} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2Start: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                      <label className="field"><span>Rit 2 end</span><input type="time" value={astroRouteForm.rit2End} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2End: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                      <label className="field"><span>Rit 2 WH SLA</span><input type="time" value={astroRouteForm.rit2WhArrivalTimeSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, rit2WhArrivalTimeSla: event.target.value }))} disabled={!astroRouteForm.rit2Enabled} /></label>
-                      <label className="field"><span>WH temp min SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMinSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMinSla: event.target.value }))} placeholder="Required" required /></label>
-                      <label className="field"><span>WH temp max SLA *</span><input type="number" step="0.1" value={astroRouteForm.whArrivalTempMaxSla} onChange={(event) => setAstroRouteForm((current) => ({ ...current, whArrivalTempMaxSla: event.target.value }))} placeholder="Required" required /></label>
-                    </div>
-                  </div>
-                  <div className="astro-pod-list">
-                    <div className="astro-pod-list-head">
-                      <strong>POD sequence & KPI</strong>
-                      <div className="inline-buttons astro-sample-actions">
-                        <span className="subtle-line">Max {ASTRO_ROUTE_MAX_PODS} POD per rit</span>
-                        <Button variant="bordered" onPress={addAstroRoutePod} disabled={(astroRouteForm.podSequence || []).length >= ASTRO_ROUTE_MAX_PODS}>Add POD</Button>
-                      </div>
-                    </div>
-                    {(astroRouteForm.podSequence || ['']).map((podId, index) => <div key={index} className="astro-pod-row astro-pod-row-kpi"><div className="astro-pod-field astro-pod-field-main"><SearchableSelect label={`POD ${index + 1}`} value={podId} options={astroPodOptions} onChange={(nextValue) => updateAstroRoutePod(index, nextValue)} placeholder={`Search POD ${index + 1}...`} /></div><label className="field astro-pod-kpi-field"><span>Rit 1 POD SLA</span><input type="time" value={astroRouteForm.rit1PodArrivalTimeSlas?.[index] || ''} onChange={(event) => updateAstroRoutePodSla('rit1', index, event.target.value)} /></label><label className="field astro-pod-kpi-field"><span>Rit 2 POD SLA</span><input type="time" value={astroRouteForm.rit2PodArrivalTimeSlas?.[index] || ''} onChange={(event) => updateAstroRoutePodSla('rit2', index, event.target.value)} disabled={!astroRouteForm.rit2Enabled} /></label><Button variant="light" onPress={() => removeAstroRoutePod(index)} disabled={(astroRouteForm.podSequence || []).length <= 1}>Remove</Button></div>)}
-                  </div>
-                  <label className="field"><span>Notes</span><input type="text" value={astroRouteForm.notes} onChange={(event) => setAstroRouteForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional note" /></label>
-                  <div className="inline-buttons">
-                    <Button variant="bordered" onPress={() => setAstroRouteForm((current) => ({ ...EMPTY_ASTRO_ROUTE_FORM, accountId: current.accountId || 'primary', podSequence: [''], rit1PodArrivalTimeSlas: createBlankAstroPodSlaArray(1), rit2PodArrivalTimeSlas: createBlankAstroPodSlaArray(1) }))}>Reset route form</Button>
-                  </div>
-                  <div className="astro-sample-block">
-                    <div className="astro-sample-head">
-                      <strong>Route CSV sample</strong>
-                      <div className="inline-buttons astro-sample-actions">
-                        <a className="sf-btn sf-btn-bordered" href="/astro-route-sample.csv" download>Download route sample</a>
-                        <Button variant="bordered" onPress={() => setAstroRouteCsvText(ASTRO_ROUTE_SAMPLE_CSV)}>Use sample</Button>
-                      </div>
-                    </div>
-                    <pre className="astro-sample-pre">{ASTRO_ROUTE_SAMPLE_CSV}</pre>
-                  </div>
-                  <label className="field"><span>Bulk route CSV import</span><textarea rows="6" value={astroRouteCsvText} onChange={(event) => setAstroRouteCsvText(event.target.value)} placeholder="Account ID, Nopol, Customer, WH, POOL, POD1..POD5, Rit1 Start, Rit1 End, Rit1 WH SLA, Rit1 POD SLA..., Rit2 Enabled, Rit2 Start, Rit2 End, Rit2 WH SLA, Rit2 POD SLA..., WH Temp Min SLA, WH Temp Max SLA, Active, Notes" /></label>
-                  <div className="inline-buttons">
-                    <input type="file" accept=".csv,text/csv" aria-label="Upload route CSV" onChange={loadAstroRouteCsvFile} />
-                    <Button variant="bordered" onPress={() => importAstroRoutes(false)}>Import route merge</Button>
-                    <Button variant="light" onPress={() => importAstroRoutes(true)}>Replace all routes</Button>
-                  </div>
-                  <div className="subtle-line">Bulk route CSV fleksibel: SLA time boleh kosong, tapi WH temp min/max SLA wajib diisi. Sistem tetap merge route lama, baca POD1 sampai POD5, lalu cocokkan SLA WH dan SLA POD per rit bila tersedia.</div>
-                  <label className="field">
-                    <span>Search saved routes</span>
-                    <div className="search-box historical-search-box">
-                      <Search size={16} className="search-icon" />
-                      <input type="search" value={astroRouteSearch} onChange={(event) => setAstroRouteSearch(event.target.value)} placeholder="Cari nopol, WH, POD, customer..." />
-                    </div>
-                  </label>
-                  {astroFilteredRouteGroups.length ? <div className="astro-group-stack">
-                    <div className="astro-group-summary">
-                      <Chip>{astroRoutes.length} route</Chip>
-                      <Chip color="info">Account {astroRouteGroups.length}</Chip>
-                      <Chip color="warning">Max POD {ASTRO_ROUTE_MAX_PODS}</Chip>
-                    </div>
-                    <div className="inline-buttons astro-bulk-actions">
-                      <Button variant="bordered" onPress={selectVisibleAstroRoutes} disabled={!astroFilteredRouteGroups.length}>Select visible</Button>
-                      <Button variant="bordered" onPress={clearSelectedAstroRoutes} disabled={!selectedAstroRouteIds.length}>Clear selected</Button>
-                      <Button variant="light" onPress={() => deleteAstroRoutes(selectedAstroRouteIds)} disabled={!selectedAstroRouteIds.length}>Delete selected ({selectedAstroRouteIds.length})</Button>
-                    </div>
-                    {astroFilteredRouteGroups.map((group) => {
-                      const expanded = astroRouteExpanded[group.key] === true;
-                      const visibleItems = expanded ? group.items : group.items.slice(0, ASTRO_GROUP_PREVIEW_LIMIT);
-                      return <div key={group.key} className="astro-group-card">
-                        <div className="astro-group-card-head">
-                          <div>
-                            <strong>{group.title}</strong>
-                            <span>{group.items.length} route</span>
-                          </div>
-                          {group.items.length > ASTRO_GROUP_PREVIEW_LIMIT ? <Button variant="bordered" onPress={() => setAstroRouteExpanded((current) => ({ ...current, [group.key]: !expanded }))}>{expanded ? 'Show less' : `Show all (${group.items.length})`}</Button> : null}
-                        </div>
-                        <div className="astro-card-grid astro-card-grid-routes">
-                          {visibleItems.map((route) => <div key={route.id} className="astro-entity-card astro-route-card">
-                            <div className="astro-entity-card-head">
-                              <label className="astro-card-select">
-                                <input type="checkbox" aria-label={`Select ${route.unitId}`} checked={selectedAstroRouteIds.includes(route.id)} onChange={() => toggleAstroRouteSelection(route.id)} />
-                              </label>
-                              <div>
-                                <strong>{astroUnitLabelByKey.get(`${route.accountId || 'primary'}::${route.unitId}`) || route.unitId}</strong>
-                                <span>{route.customerName || 'Astro'} | {route.unitId}</span>
-                              </div>
-                              <Chip color={route.isActive !== false ? 'success' : 'default'}>{route.isActive !== false ? 'Active' : 'Inactive'}</Chip>
-                            </div>
-                            <div className="astro-route-meta">
-                              <span><strong>WH</strong>{astroLocations.find((location) => location.id === route.whLocationId)?.name || '-'}</span>
-                              <span><strong>POOL</strong>{astroLocations.find((location) => location.id === route.poolLocationId)?.name || '-'}</span>
-                              <span><strong>POD</strong>{(route.podSequence || []).map((locationId) => astroLocations.find((location) => location.id === locationId)?.name || locationId).join(' -> ') || '-'}</span>
-                              <span><strong>Rit 1</strong>{route.rit1 ? `${route.rit1.start} to ${route.rit1.end}` : '-'}</span>
-                              <span><strong>Rit 1 KPI</strong>{route.rit1?.whArrivalTimeSla || 'No WH SLA'} | POD {(route.rit1?.podArrivalTimeSlas || []).filter(Boolean).length || 0}</span>
-                              <span><strong>Rit 2</strong>{route.rit2 ? `${route.rit2.start} to ${route.rit2.end}` : 'Rit 1 only'}</span>
-                              <span><strong>Rit 2 KPI</strong>{route.rit2?.whArrivalTimeSla || 'No WH SLA'} | POD {(route.rit2?.podArrivalTimeSlas || []).filter(Boolean).length || 0}</span>
-                              <span><strong>WH temp KPI</strong>{(route.whArrivalTempMinSla !== null && route.whArrivalTempMinSla !== undefined && route.whArrivalTempMinSla !== '') || (route.whArrivalTempMaxSla !== null && route.whArrivalTempMaxSla !== undefined && route.whArrivalTempMaxSla !== '') ? `${route.whArrivalTempMinSla ?? '-'} to ${route.whArrivalTempMaxSla ?? '-'}` : 'No range'}</span>
-                            </div>
-                            <div className="inline-buttons astro-entity-actions">
-                              <Button variant="bordered" onPress={() => editAstroRouteEntry(route)}>Edit</Button>
-                              <Button variant="light" onPress={() => deleteAstroRouteEntry(route.id)}>Delete</Button>
-                            </div>
-                          </div>)}
-                        </div>
-                      </div>;
-                    })}
-                  </div> : <div className="empty-state">Belum ada Astro route yang cocok dengan pencarian.</div>}
-                </div>
-              </CardContent> : null}
-            </Card>
-            </> : null}
-
-          {activePanel === 'config' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Astro Snapshot Console</h2>
-                  <p>Kelola snapshot KPI Astro ke PostgreSQL. Auto-sync berjalan setiap 3 jam saat polling aktif.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" className="section-chevron-button" onPress={() => {
-                    const next = !astroSnapshotConsoleSectionOpen;
-                    setAstroSnapshotConsoleSectionOpen(next);
-                    if (next) loadAstroSnapshotLogs(true);
-                  }} aria-label={astroSnapshotConsoleSectionOpen ? 'Collapse' : 'Expand'}>
-                    {astroSnapshotConsoleSectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </Button>
-                  {astroSnapshotConsoleSectionOpen ? <Button variant="bordered" onPress={() => loadAstroSnapshotLogs(false)}>Refresh Logs</Button> : null}
-                  {astroSnapshotConsoleSectionOpen ? <Button color="primary" onPress={triggerAstroSnapshotSync}>Sync Now</Button> : null}
-                </div>
-              </CardHeader>
-              {astroSnapshotConsoleSectionOpen ? <CardContent>
-                <div className="metric-strip admin-storage-strip">
-                  <div className="mini-metric"><span>Auto-sync</span><strong style={{ color: astroSnapshotAutoSync?.isPolling ? 'var(--success, #34d399)' : 'var(--text-muted)' }}>{astroSnapshotAutoSync?.isPolling ? 'Active' : 'Inactive'}</strong></div>
-                  <div className="mini-metric"><span>Interval</span><strong>{astroSnapshotAutoSync?.intervalHours || 3} jam</strong></div>
-                  <div className="mini-metric"><span>Last sync</span><strong>{astroSnapshotAutoSync?.lastSyncAt ? fmtDate(astroSnapshotAutoSync.lastSyncAt) : 'Belum pernah'}</strong></div>
-                  <div className="mini-metric"><span>Log entries</span><strong>{astroSnapshotLogs.length}</strong></div>
-                </div>
-                {astroSnapshotLogsBusy ? <div className="overview-chart-empty">Memuat log...</div> : (
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Waktu', 'Range', 'Units', 'Eligible', 'Rows', 'Status', 'Message']}
-                    emptyMessage="Belum ada snapshot log. Klik Sync Now untuk menjalankan snapshot pertama."
-                    rows={astroSnapshotLogs.map((log) => [
-                      fmtDate(log.timestamp),
-                      log.startDate && log.endDate ? `${log.startDate} -> ${log.endDate}` : '-',
-                      log.unitCount ?? '-',
-                      log.eligibleUnitCount ?? '-',
-                      log.rowCount ?? '-',
-                      <Chip color={log.result === 'success' ? 'success' : log.result === 'error' ? 'danger' : 'warning'}>{log.result || '-'}</Chip>,
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        <div>{log.message || '-'}</div>
-                        {Array.isArray(log.dayBreakdown) && log.dayBreakdown.length ? (
-                          <div style={{ display: 'grid', gap: 4, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            {log.dayBreakdown.map((entry) => {
-                              const podParts = Array.isArray(entry.podCaptured)
-                                ? entry.podCaptured
-                                    .map((count, index) => (count ? `POD${index + 1} ${count}` : ''))
-                                    .filter(Boolean)
-                                : [];
-                              return (
-                                <div key={`${log.timestamp}-${entry.day}`}>
-                                  <strong style={{ color: 'var(--text)' }}>{entry.day}</strong>
-                                  {` | active ${entry.activeRows || 0} | eligible ${entry.eligibleRows || 0} | WH ${entry.whCaptured || 0}`}
-                                  {podParts.length ? ` | ${podParts.join(' | ')}` : ''}
-                                  {entry.requestErrorRows ? ` | error ${entry.requestErrorRows}` : ''}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>,
-                    ])}
-                  />
-                )}
-              </CardContent> : null}
-            </Card>
-          </> : null}
-
-          {activePanel === 'admin' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Web profile</h2>
-                  <p>Kelola akun web dashboard yang login-nya beda dari account Solofleet.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" onPress={() => setWebUserForm(EMPTY_WEB_USER_FORM)}>New user</Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="metric-strip admin-storage-strip">
-                  <div className="mini-metric"><span>Signed in as</span><strong>{webSessionUser?.displayName || webSessionUser?.username || '-'}</strong></div>
-                  <div className="mini-metric"><span>Role</span><strong>{webSessionUser?.role || '-'}</strong></div>
-                  <div className="mini-metric"><span>Stored users</span><strong>{webUsers.length}</strong></div>
-                  <div className="mini-metric"><span>Storage</span><strong>{adminStorageProvider || 'local-bootstrap'}</strong></div>
-                  <div className="mini-metric"><span>Temp rollups</span><strong>{adminTempRollups.length}</strong></div>
-                  <div className="mini-metric"><span>POD snapshots</span><strong>{adminPodSnapshots.length}</strong></div>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="split-panels split-panels-tall">
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>Manage web users</h2>
-                    <p>Create, edit, dan delete akun web di sini.</p>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Username', 'Display', 'Role', 'Status', 'Updated', 'Actions']}
-                    emptyMessage="Belum ada web user."
-                    rows={webUsers.map((user) => [
-                      user.username,
-                      user.displayName || '-',
-                      user.role || 'admin',
-                      user.isActive ? 'Active' : 'Disabled',
-                      fmtDate(user.updatedAt),
-                      <div className="inline-buttons">
-                        <Button variant="bordered" onPress={() => setWebUserForm({ id: user.id, username: user.username, displayName: user.displayName || '', password: '', role: user.role || 'admin', isActive: user.isActive !== false })}>Edit</Button>
-                        <Button variant="light" onPress={() => deleteWebUserEntry(user.id)}>Delete</Button>
-                      </div>,
-                    ])}
-                  />
-                </CardContent>
-              </Card>
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>{webUserForm.id ? 'Edit web user' : 'Create web user'}</h2>
-                    <p>Password boleh dikosongkan kalau cuma edit display name / role user yang sudah ada.</p>
-                  </div>
-                  <div className="inline-buttons">
-                    <Button color="primary" onPress={saveWebUserEntry}>Save user</Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="settings-stack">
-                    <label className="field"><span>Username</span><input type="text" value={webUserForm.username} onChange={(event) => setWebUserForm((current) => ({ ...current, username: event.target.value }))} placeholder="admin" /></label>
-                    <label className="field"><span>Display name</span><input type="text" value={webUserForm.displayName} onChange={(event) => setWebUserForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Administrator" /></label>
-                    <label className="field"><span>Password</span><input type="password" value={webUserForm.password} onChange={(event) => setWebUserForm((current) => ({ ...current, password: event.target.value }))} placeholder={webUserForm.id ? 'Kosongkan kalau tidak ganti password' : 'Password baru'} /></label>
-                    <label className="field"><span>Role</span><select value={webUserForm.role} onChange={(event) => setWebUserForm((current) => ({ ...current, role: event.target.value }))}><option value="admin">Admin</option><option value="viewer">Viewer</option></select></label>
-                    <label className="field checkbox-field"><input type="checkbox" checked={webUserForm.isActive} onChange={(event) => setWebUserForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active</span></label>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Database tools</h2>
-                  <p>Kelola data PostgreSQL penting langsung dari dashboard admin.</p>
-                </div>
-                <div className="inline-buttons">
-                  <Button variant="bordered" onPress={() => loadAdminDatabase()}>Refresh DB</Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="metric-strip admin-storage-strip">
-                  <div className="mini-metric"><span>Provider</span><strong>{adminStorageProvider || '-'}</strong></div>
-                  <div className="mini-metric"><span>Rollup rows</span><strong>{adminTempRollups.length}</strong></div>
-                  <div className="mini-metric"><span>POD rows</span><strong>{adminPodSnapshots.length}</strong></div>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="split-panels split-panels-tall">
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>Temp rollups</h2>
-                    <p>Data rollup harian yang dipakai untuk report temp error.</p>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Day', 'Account', 'Unit', 'Type', 'Incidents', 'Window', 'Actions']}
-                    emptyMessage="Belum ada temp rollup di PostgreSQL."
-                    rows={adminTempRollups.map((row) => [
-                      row.day || '-',
-                      row.accountLabel || row.accountId || '-',
-                      <div><strong>{row.unitLabel || row.vehicle || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>,
-                      row.label || row.type || '-',
-                      row.incidents ?? 0,
-                      <div>{fmtDate(row.firstStartTimestamp)}<div className="subtle-line">{fmtDate(row.lastEndTimestamp)}</div></div>,
-                      <div className="inline-buttons"><Button variant="bordered" onPress={() => editAdminRollup(row)}>Edit</Button><Button variant="light" onPress={() => deleteAdminRollupEntry(row.id)}>Delete</Button></div>,
-                    ])}
-                  />
-                </CardContent>
-              </Card>
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>{adminRollupForm.id ? 'Edit temp rollup' : 'New temp rollup'}</h2>
-                    <p>Lengkapi field utama untuk menambah atau memperbarui temp rollup.</p>
-                  </div>
-                  <div className="inline-buttons">
-                    <Button color="primary" onPress={saveAdminRollupEntry}>Save rollup</Button>
-                    <Button variant="bordered" onPress={() => setAdminRollupForm(EMPTY_ADMIN_ROLLUP_FORM)}>Reset</Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="settings-stack">
-                    <div className="form-grid admin-db-grid">
-                      <label className="field"><span>Rollup id</span><input type="text" value={adminRollupForm.id} onChange={(event) => setAdminRollupForm((current) => ({ ...current, id: event.target.value }))} placeholder="auto kalau kosong" /></label>
-                      <label className="field"><span>Day</span><input type="date" value={adminRollupForm.day} onChange={(event) => setAdminRollupForm((current) => ({ ...current, day: event.target.value }))} /></label>
-                      <label className="field"><span>Account id</span><input type="text" value={adminRollupForm.accountId} onChange={(event) => setAdminRollupForm((current) => ({ ...current, accountId: event.target.value }))} placeholder="primary" /></label>
-                      <label className="field"><span>Account label</span><input type="text" value={adminRollupForm.accountLabel} onChange={(event) => setAdminRollupForm((current) => ({ ...current, accountLabel: event.target.value }))} placeholder="Account display name" /></label>
-                      <label className="field"><span>Unit id</span><input type="text" value={adminRollupForm.unitId} onChange={(event) => setAdminRollupForm((current) => ({ ...current, unitId: event.target.value }))} placeholder="COL77" /></label>
-                      <label className="field"><span>Unit label / Nopol</span><input type="text" value={adminRollupForm.unitLabel} onChange={(event) => setAdminRollupForm((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="B 9749 SXW" /></label>
-                      <label className="field"><span>Vehicle</span><input type="text" value={adminRollupForm.vehicle} onChange={(event) => setAdminRollupForm((current) => ({ ...current, vehicle: event.target.value }))} placeholder="Vehicle label" /></label>
-                      <label className="field"><span>Type</span><select value={adminRollupForm.type} onChange={(event) => setAdminRollupForm((current) => ({ ...current, type: event.target.value }))}><option value="temp1">temp1</option><option value="temp2">temp2</option><option value="temp1+temp2">temp1+temp2</option></select></label>
-                      <label className="field"><span>Label</span><input type="text" value={adminRollupForm.label} onChange={(event) => setAdminRollupForm((current) => ({ ...current, label: event.target.value }))} placeholder="TEMP1 ERROR" /></label>
-                      <label className="field"><span>Incidents</span><input type="number" min="0" value={adminRollupForm.incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, incidents: event.target.value }))} /></label>
-                      <label className="field"><span>Temp1 incidents</span><input type="number" min="0" value={adminRollupForm.temp1Incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Incidents: event.target.value }))} /></label>
-                      <label className="field"><span>Temp2 incidents</span><input type="number" min="0" value={adminRollupForm.temp2Incidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Incidents: event.target.value }))} /></label>
-                      <label className="field"><span>Both incidents</span><input type="number" min="0" value={adminRollupForm.bothIncidents} onChange={(event) => setAdminRollupForm((current) => ({ ...current, bothIncidents: event.target.value }))} /></label>
-                      <label className="field"><span>First start</span><input type="datetime-local" value={adminRollupForm.firstStartTimestamp} onChange={(event) => setAdminRollupForm((current) => ({ ...current, firstStartTimestamp: event.target.value }))} /></label>
-                      <label className="field"><span>Last end</span><input type="datetime-local" value={adminRollupForm.lastEndTimestamp} onChange={(event) => setAdminRollupForm((current) => ({ ...current, lastEndTimestamp: event.target.value }))} /></label>
-                      <label className="field"><span>Duration minutes</span><input type="number" step="0.1" value={adminRollupForm.durationMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, durationMinutes: event.target.value }))} /></label>
-                      <label className="field"><span>Total minutes</span><input type="number" step="0.1" value={adminRollupForm.totalMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, totalMinutes: event.target.value }))} /></label>
-                      <label className="field"><span>Longest minutes</span><input type="number" step="0.1" value={adminRollupForm.longestMinutes} onChange={(event) => setAdminRollupForm((current) => ({ ...current, longestMinutes: event.target.value }))} /></label>
-                      <label className="field"><span>Temp1 min</span><input type="number" step="0.1" value={adminRollupForm.temp1Min} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Min: event.target.value }))} /></label>
-                      <label className="field"><span>Temp1 max</span><input type="number" step="0.1" value={adminRollupForm.temp1Max} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp1Max: event.target.value }))} /></label>
-                      <label className="field"><span>Temp2 min</span><input type="number" step="0.1" value={adminRollupForm.temp2Min} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Min: event.target.value }))} /></label>
-                      <label className="field"><span>Temp2 max</span><input type="number" step="0.1" value={adminRollupForm.temp2Max} onChange={(event) => setAdminRollupForm((current) => ({ ...current, temp2Max: event.target.value }))} /></label>
-                      <label className="field"><span>Min speed</span><input type="number" step="0.1" value={adminRollupForm.minSpeed} onChange={(event) => setAdminRollupForm((current) => ({ ...current, minSpeed: event.target.value }))} /></label>
-                      <label className="field"><span>Max speed</span><input type="number" step="0.1" value={adminRollupForm.maxSpeed} onChange={(event) => setAdminRollupForm((current) => ({ ...current, maxSpeed: event.target.value }))} /></label>
-                      <label className="field"><span>Latitude</span><input type="number" step="any" value={adminRollupForm.latitude} onChange={(event) => setAdminRollupForm((current) => ({ ...current, latitude: event.target.value }))} /></label>
-                      <label className="field"><span>Longitude</span><input type="number" step="any" value={adminRollupForm.longitude} onChange={(event) => setAdminRollupForm((current) => ({ ...current, longitude: event.target.value }))} /></label>
-                      <label className="field admin-db-grid-span-2"><span>Location summary</span><input type="text" value={adminRollupForm.locationSummary} onChange={(event) => setAdminRollupForm((current) => ({ ...current, locationSummary: event.target.value }))} placeholder="Jalan, kecamatan, kota" /></label>
-                      <label className="field"><span>Zone</span><input type="text" value={adminRollupForm.zoneName} onChange={(event) => setAdminRollupForm((current) => ({ ...current, zoneName: event.target.value }))} placeholder="Zone name" /></label>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="split-panels split-panels-tall">
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>POD snapshots</h2>
-                    <p>Snapshot geofence POD yang tersimpan di PostgreSQL.</p>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                    columns={['Day', 'Time', 'Unit', 'POD', 'Distance', 'Location', 'Actions']}
-                    emptyMessage="Belum ada POD snapshot di PostgreSQL."
-                    rows={adminPodSnapshots.map((row) => [
-                      row.day || '-',
-                      fmtDate(row.timestamp),
-                      <div><strong>{row.unitLabel || row.unitId || '-'}</strong><div className="subtle-line">{row.unitId || '-'}</div></div>,
-                      <div><strong>{row.podName || row.podId || '-'}</strong><div className="subtle-line">{row.podId || '-'}</div></div>,
-                      row.distanceMeters ?? '-',
-                      row.locationSummary || '-',
-                      <div className="inline-buttons"><Button variant="bordered" onPress={() => editAdminPodSnapshot(row)}>Edit</Button><Button variant="light" onPress={() => deleteAdminPodEntry(row.id)}>Delete</Button></div>,
-                    ])}
-                  />
-                </CardContent>
-              </Card>
-              <Card className="panel-card">
-                <CardHeader className="panel-card-header">
-                  <div>
-                    <h2>{adminPodForm.id ? 'Edit POD snapshot' : 'New POD snapshot'}</h2>
-                    <p>Gunakan editor ini untuk menambah atau mengoreksi snapshot POD.</p>
-                  </div>
-                  <div className="inline-buttons">
-                    <Button color="primary" onPress={saveAdminPodEntry}>Save POD snapshot</Button>
-                    <Button variant="bordered" onPress={() => setAdminPodForm(EMPTY_ADMIN_POD_FORM)}>Reset</Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="settings-stack">
-                    <div className="form-grid admin-db-grid">
-                      <label className="field"><span>Snapshot id</span><input type="text" value={adminPodForm.id} onChange={(event) => setAdminPodForm((current) => ({ ...current, id: event.target.value }))} placeholder="auto kalau kosong" /></label>
-                      <label className="field"><span>Day</span><input type="date" value={adminPodForm.day} onChange={(event) => setAdminPodForm((current) => ({ ...current, day: event.target.value }))} /></label>
-                      <label className="field"><span>Timestamp</span><input type="datetime-local" value={adminPodForm.timestamp} onChange={(event) => setAdminPodForm((current) => ({ ...current, timestamp: event.target.value }))} /></label>
-                      <label className="field"><span>Time label</span><input type="text" value={adminPodForm.time} onChange={(event) => setAdminPodForm((current) => ({ ...current, time: event.target.value }))} placeholder="13:34:22" /></label>
-                      <label className="field"><span>Unit id</span><input type="text" value={adminPodForm.unitId} onChange={(event) => setAdminPodForm((current) => ({ ...current, unitId: event.target.value }))} placeholder="COL77" /></label>
-                      <label className="field"><span>Unit label / Nopol</span><input type="text" value={adminPodForm.unitLabel} onChange={(event) => setAdminPodForm((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="B 9749 SXW" /></label>
-                      <label className="field"><span>Customer name</span><input type="text" value={adminPodForm.customerName} onChange={(event) => setAdminPodForm((current) => ({ ...current, customerName: event.target.value }))} placeholder="Astro" /></label>
-                      <label className="field"><span>POD id</span><input type="text" value={adminPodForm.podId} onChange={(event) => setAdminPodForm((current) => ({ ...current, podId: event.target.value }))} placeholder="pod-1" /></label>
-                      <label className="field"><span>POD name</span><input type="text" value={adminPodForm.podName} onChange={(event) => setAdminPodForm((current) => ({ ...current, podName: event.target.value }))} placeholder="Astro HUB CNR" /></label>
-                      <label className="field"><span>Latitude</span><input type="number" step="any" value={adminPodForm.latitude} onChange={(event) => setAdminPodForm((current) => ({ ...current, latitude: event.target.value }))} /></label>
-                      <label className="field"><span>Longitude</span><input type="number" step="any" value={adminPodForm.longitude} onChange={(event) => setAdminPodForm((current) => ({ ...current, longitude: event.target.value }))} /></label>
-                      <label className="field"><span>Speed</span><input type="number" step="0.1" value={adminPodForm.speed} onChange={(event) => setAdminPodForm((current) => ({ ...current, speed: event.target.value }))} /></label>
-                      <label className="field"><span>Distance meters</span><input type="number" step="0.1" value={adminPodForm.distanceMeters} onChange={(event) => setAdminPodForm((current) => ({ ...current, distanceMeters: event.target.value }))} /></label>
-                      <label className="field admin-db-grid-span-2"><span>Location summary</span><input type="text" value={adminPodForm.locationSummary} onChange={(event) => setAdminPodForm((current) => ({ ...current, locationSummary: event.target.value }))} placeholder="Alamat singkat" /></label>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </> : null}
+          {activePanel === 'api-monitor' ? <ApiMonitorPanel apiMonitor={apiMonitor} fmtDate={fmtDate} fmtNum={fmtNum} /> : null}
+          {activePanel === 'config' ? <ConfigPanel
+            availableAccounts={availableAccounts}
+            activeAccountId={activeAccountId}
+            currentAccount={currentAccount}
+            onSwitchAccount={switchAccount}
+            onDiscoverUnits={discoverUnits}
+            onLogoutAccount={logoutAccount}
+            onSaveConfig={saveConfig}
+            linkedAccountSectionOpen={linkedAccountSectionOpen}
+            setLinkedAccountSectionOpen={setLinkedAccountSectionOpen}
+            accountLoginForm={accountLoginForm}
+            setAccountLoginForm={setAccountLoginForm}
+            onLoginLinkedAccount={() => loginWithSolofleet('linked')}
+            unitCategorySectionOpen={unitCategorySectionOpen}
+            setUnitCategorySectionOpen={setUnitCategorySectionOpen}
+            configuredUnits={configuredUnits}
+            filteredConfiguredUnits={filteredConfiguredUnits}
+            unitCategorySearch={unitCategorySearch}
+            setUnitCategorySearch={setUnitCategorySearch}
+            selectedUnitCategoryIds={selectedUnitCategoryIds}
+            onToggleUnitCategorySelection={toggleConfiguredUnitSelection}
+            onSelectVisibleUnits={selectVisibleConfiguredUnits}
+            onClearUnitSelection={clearConfiguredUnitSelection}
+            unitCategoryBulkValue={unitCategoryBulkValue}
+            setUnitCategoryBulkValue={setUnitCategoryBulkValue}
+            onApplyBulkCategory={applyCategoryToSelectedUnits}
+            unitCategoryCsvText={unitCategoryCsvText}
+            setUnitCategoryCsvText={setUnitCategoryCsvText}
+            onImportUnitCategoryCsv={importUnitCategoryCsv}
+            onLoadUnitCategoryCsvFile={loadUnitCategoryCsvFile}
+            onDownloadUnitCategoryTemplate={downloadUnitCategoryCsvTemplate}
+            UNIT_CATEGORY_OPTIONS={UNIT_CATEGORY_OPTIONS}
+            normalizeUnitCategory={normalizeUnitCategory}
+            unitCategoryLabel={unitCategoryLabel}
+            unitCategoryTone={unitCategoryTone}
+            tmsConfigSectionOpen={tmsConfigSectionOpen}
+            setTmsConfigSectionOpen={setTmsConfigSectionOpen}
+            tmsConfig={tmsConfig}
+            tmsForm={tmsForm}
+            setTmsForm={setTmsForm}
+            tmsLogs={tmsLogs}
+            tmsLogsBusy={tmsLogsBusy}
+            onLoadTmsLogs={loadTmsLogs}
+            onSaveTmsConfig={saveTmsConfig}
+            onLoginTms={loginWithTms}
+            onLogoutTms={logoutTms}
+            onTriggerTmsSync={triggerTmsSync}
+            onOpenTripMonitor={() => { setActivePanel('trip-monitor'); loadTripMonitorBoard(false).catch(() => {}); }}
+            remoteResetSectionOpen={remoteResetSectionOpen}
+            setRemoteResetSectionOpen={setRemoteResetSectionOpen}
+            remoteResetForm={remoteResetForm}
+            setRemoteResetForm={setRemoteResetForm}
+            remoteResetStatus={remoteResetStatus}
+            remoteResetLogs={remoteResetLogs}
+            onLoadRemoteResetLogs={loadRemoteResetLogs}
+            onRunRemoteResetNow={runRemoteResetNow}
+            onToggleRemoteResetAccount={toggleRemoteResetAccount}
+            astroLocationSectionOpen={astroLocationSectionOpen}
+            setAstroLocationSectionOpen={setAstroLocationSectionOpen}
+            astroLocationForm={astroLocationForm}
+            setAstroLocationForm={setAstroLocationForm}
+            EMPTY_ASTRO_LOCATION_FORM={EMPTY_ASTRO_LOCATION_FORM}
+            astroLocations={astroLocations}
+            astroFilteredLocationGroups={astroFilteredLocationGroups}
+            geofenceLocationCounts={geofenceLocationCounts}
+            selectedAstroLocationIds={selectedAstroLocationIds}
+            onToggleAstroLocationSelection={toggleAstroLocationSelection}
+            onSelectVisibleAstroLocations={selectVisibleAstroLocations}
+            onClearAstroLocationSelection={clearSelectedAstroLocations}
+            onSaveAstroLocation={saveAstroLocationEntry}
+            onEditAstroLocation={editAstroLocationEntry}
+            onDeleteAstroLocation={deleteAstroLocationEntry}
+            onDeleteAstroLocations={deleteAstroLocations}
+            astroLocationSearch={astroLocationSearch}
+            setAstroLocationSearch={setAstroLocationSearch}
+            astroLocationExpanded={astroLocationExpanded}
+            setAstroLocationExpanded={setAstroLocationExpanded}
+            astroCsvText={astroCsvText}
+            setAstroCsvText={setAstroCsvText}
+            onLoadAstroCsvFile={loadAstroCsvFile}
+            onImportAstroLocations={importAstroLocations}
+            ASTRO_LOCATION_SAMPLE_CSV={ASTRO_LOCATION_SAMPLE_CSV}
+            GEOFENCE_LOCATION_TYPES={GEOFENCE_LOCATION_TYPES}
+            GEOFENCE_LOCATION_LABELS={GEOFENCE_LOCATION_LABELS}
+            ASTRO_GROUP_PREVIEW_LIMIT={ASTRO_GROUP_PREVIEW_LIMIT}
+            fmtCoord={fmtCoord}
+            astroRouteSectionOpen={astroRouteSectionOpen}
+            setAstroRouteSectionOpen={setAstroRouteSectionOpen}
+            astroRouteForm={astroRouteForm}
+            setAstroRouteForm={setAstroRouteForm}
+            EMPTY_ASTRO_ROUTE_FORM={EMPTY_ASTRO_ROUTE_FORM}
+            astroRoutes={astroRoutes}
+            astroFilteredRouteGroups={astroFilteredRouteGroups}
+            selectedAstroRouteIds={selectedAstroRouteIds}
+            onToggleAstroRouteSelection={toggleAstroRouteSelection}
+            onSelectVisibleAstroRoutes={selectVisibleAstroRoutes}
+            onClearAstroRouteSelection={clearSelectedAstroRoutes}
+            onSaveAstroRoute={saveAstroRouteEntry}
+            onEditAstroRoute={editAstroRouteEntry}
+            onDeleteAstroRoute={deleteAstroRouteEntry}
+            onDeleteAstroRoutes={deleteAstroRoutes}
+            astroRouteSearch={astroRouteSearch}
+            setAstroRouteSearch={setAstroRouteSearch}
+            astroRouteExpanded={astroRouteExpanded}
+            setAstroRouteExpanded={setAstroRouteExpanded}
+            astroRouteCsvText={astroRouteCsvText}
+            setAstroRouteCsvText={setAstroRouteCsvText}
+            onLoadAstroRouteCsvFile={loadAstroRouteCsvFile}
+            onImportAstroRoutes={importAstroRoutes}
+            ASTRO_ROUTE_SAMPLE_CSV={ASTRO_ROUTE_SAMPLE_CSV}
+            ASTRO_ROUTE_MAX_PODS={ASTRO_ROUTE_MAX_PODS}
+            astroRouteAccountOptions={astroRouteAccountOptions}
+            astroRouteFilteredUnitOptions={astroRouteFilteredUnitOptions}
+            astroWhOptions={astroWhOptions}
+            astroPoolOptions={astroPoolOptions}
+            astroPodOptions={astroPodOptions}
+            astroUnitLabelByKey={astroUnitLabelByKey}
+            onAddAstroRoutePod={addAstroRoutePod}
+            onRemoveAstroRoutePod={removeAstroRoutePod}
+            onUpdateAstroRoutePod={updateAstroRoutePod}
+            onUpdateAstroRoutePodSla={updateAstroRoutePodSla}
+            createBlankAstroPodSlaArray={createBlankAstroPodSlaArray}
+            astroSnapshotConsoleSectionOpen={astroSnapshotConsoleSectionOpen}
+            setAstroSnapshotConsoleSectionOpen={setAstroSnapshotConsoleSectionOpen}
+            astroSnapshotAutoSync={astroSnapshotAutoSync}
+            astroSnapshotLogs={astroSnapshotLogs}
+            astroSnapshotLogsBusy={astroSnapshotLogsBusy}
+            onLoadAstroSnapshotLogs={loadAstroSnapshotLogs}
+            onTriggerAstroSnapshotSync={triggerAstroSnapshotSync}
+            astroLocationCardRef={astroLocationCardRef}
+            astroRouteCardRef={astroRouteCardRef}
+            fmtDate={fmtDate}
+            fmtNum={fmtNum}
+            accountName={accountName}
+          /> : null}
+          {activePanel === 'admin' ? <AdminPanel
+            webSessionUser={webSessionUser}
+            webUsers={webUsers}
+            webUserForm={webUserForm}
+            setWebUserForm={setWebUserForm}
+            onSaveWebUser={saveWebUserEntry}
+            onDeleteWebUser={deleteWebUserEntry}
+            EMPTY_WEB_USER_FORM={EMPTY_WEB_USER_FORM}
+            adminStorageProvider={adminStorageProvider}
+            adminTempRollups={adminTempRollups}
+            adminPodSnapshots={adminPodSnapshots}
+            adminRollupForm={adminRollupForm}
+            setAdminRollupForm={setAdminRollupForm}
+            adminPodForm={adminPodForm}
+            setAdminPodForm={setAdminPodForm}
+            EMPTY_ADMIN_ROLLUP_FORM={EMPTY_ADMIN_ROLLUP_FORM}
+            EMPTY_ADMIN_POD_FORM={EMPTY_ADMIN_POD_FORM}
+            onSaveRollup={saveAdminRollupEntry}
+            onDeleteRollup={deleteAdminRollupEntry}
+            onSavePod={saveAdminPodEntry}
+            onDeletePod={deleteAdminPodEntry}
+            onRefreshDb={() => loadAdminDatabase()}
+            fmtDate={fmtDate}
+            fmtNum={fmtNum}
+          /> : null}
 
           {activePanel === 'stop' ? <>
             <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop / idle explorer</h2><p>Analisis stop dan idle berdasarkan report Solofleet untuk unit yang dipilih.</p></div></CardHeader><CardContent><div className="form-grid form-grid-stop"><label className="field"><span>Unit</span><select value={`${stopForm.accountId}::${stopForm.unitId}`} onChange={(event) => { const [accountId, unitId] = event.target.value.split('::'); setStopForm((current) => ({ ...current, accountId: accountId || 'primary', unitId: unitId || '' })); }}>{fleetRows.map((row) => <option key={row.rowKey || `${row.accountId}-${row.id}`} value={`${row.accountId || 'primary'}::${row.id}`}>{accountName({ id: row.accountId, label: row.accountLabel })} | {row.id} | {row.label}</option>)}</select></label><label className="field"><span>Report type</span><select value={stopForm.reportType} onChange={(event) => setStopForm((current) => ({ ...current, reportType: event.target.value }))}><option value="1">Stop Engine Report</option><option value="2">Idle Engine Report</option><option value="3">Speed-based idle/stop Report</option></select></label><label className="field"><span>Min duration (min)</span><input type="number" min="0" value={stopForm.minDuration} onChange={(event) => setStopForm((current) => ({ ...current, minDuration: event.target.value }))} /></label><div className="field field-actions"><Button color="primary" onPress={loadStopReport}>Analyze stop / idle</Button><Button variant="bordered" onPress={exportStop}>Export stop CSV</Button></div></div></CardContent></Card>
@@ -4439,9 +3947,10 @@ export default function App() {
         </div>
 
         
+        </ErrorBoundary>
       </main>
       
-      {tripMonitorPanels.map((panel) => <TripMonitorFloatingPanel
+      {tripMonitorPanels.map((panel) => <TripMonitorFloatingPanelExtracted
           key={panel.id}
           panel={panel}
           webSessionUser={webSessionUser}
@@ -4455,10 +3964,16 @@ export default function App() {
           }}
           onMove={(position) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, position } : item))}
           onResize={(size) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, size } : item))}
+          renderTemperatureChart={(props) => <TemperatureChart {...props} />}
+          renderUnitRouteMap={(props) => <UnitRouteMap {...props} />}
+          fmtDate={fmtDate}
+          fmtNum={fmtNum}
+          fmtCoord={fmtCoord}
+          formatMinutesText={formatMinutesText}
         />)}
         {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
 
-      {/* Fleet detail modal removed — selected unit detail now renders inline inside FleetWorkspace */}
+      {/* Fleet detail modal removed â€” selected unit detail now renders inline inside FleetWorkspace */}
       
       <StatusFooter
         isPolling={!!status?.runtime?.isPolling}
@@ -4470,11 +3985,22 @@ export default function App() {
 
       {busyOverlay}
 
+      <CommandPalette
+        open={cmdPaletteOpen}
+        onClose={() => setCmdPaletteOpen(false)}
+        commands={cmdPaletteCommands}
+      />
+
       {banner.message && (
-        <div className="toast-container">
+        <div className="toast-container" role="status" aria-live="polite">
           <div className={`toast ${banner.tone === 'error' ? 'toast-error' : banner.tone === 'success' ? 'toast-success' : 'toast-info'}`}>
             {banner.tone === 'error' ? <ShieldAlert size={16} /> : <Box size={16} />}
             <span>{banner.message}</span>
+            {banner.tone === 'error' ? (
+              <button type="button" className="toast-retry-btn" onClick={() => { setBanner({ tone: '', message: '' }); loadDashboard(false, true).catch(() => {}); }} aria-label="Coba lagi">
+                <RefreshCw size={13} />
+              </button>
+            ) : null}
           </div>
         </div>
       )}
@@ -4598,7 +4124,7 @@ function FleetWorkspace({
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari unit, nopol, lokasi..."
+              placeholder="Search units, plates, locations..."
             />
           </label>
           <div className="fleet-workspace-list-filters">
@@ -4650,17 +4176,21 @@ function FleetWorkspace({
           ))}
         </div>
         <div className="fleet-workspace-list-meta">
-          <span>{filteredRows.length} of {rows.length}</span>
-          <button type="button" className="fleet-workspace-export" onClick={onExportFleet}>Export CSV</button>
+          <span>{filteredRows.length} of {rows.length} units</span>
+          <button type="button" className="fleet-workspace-export" onClick={onExportFleet}>Export</button>
         </div>
         <div className="fleet-workspace-rows" role="list">
           {filteredRows.length === 0 ? (
-            <div className="fleet-workspace-empty">Tidak ada unit yang cocok dengan filter ini.</div>
+            <div className="fleet-workspace-empty">
+              <Navigation size={28} strokeWidth={1.25} />
+              <p>No units match this filter.</p>
+            </div>
           ) : filteredRows.map((row, idx) => {
             const rowKey = unitRowKey(row);
             const state = health(row);
             const active = rowKey === selectedRowKey;
             const tempFault = row.liveSensorFaultType || '';
+            const isMoving = row.isMoving || Number(row.speed || 0) > 0;
             return (
               <button
                 type="button"
@@ -4670,9 +4200,12 @@ function FleetWorkspace({
                 aria-pressed={active}
                 aria-label={`${row.label || row.alias || 'Unit'}: ${state.label}`}
               >
-                <span className={`fleet-workspace-row-dot fleet-workspace-row-dot-${state.tone}`} aria-hidden />
+                <span className={`fleet-workspace-row-indicator fleet-workspace-row-indicator-${state.tone}`} aria-hidden />
                 <span className="fleet-workspace-row-main">
-                  <span className="fleet-workspace-row-label">{row.label || row.alias || '-'}</span>
+                  <span className="fleet-workspace-row-top">
+                    <span className="fleet-workspace-row-label">{row.label || row.alias || '-'}</span>
+                    {isMoving ? <span className="fleet-workspace-row-speed">{fmtNum(row.speed, 0)} km/h</span> : null}
+                  </span>
                   <span className="fleet-workspace-row-meta">
                     {row.locationSummary || row.zoneName || 'No location'}
                   </span>
@@ -4686,11 +4219,13 @@ function FleetWorkspace({
                     <span className={`fleet-workspace-row-tag fleet-workspace-row-tag-${state.tone}`}>{state.label}</span>
                   </span>
                 </span>
-                <span className="fleet-workspace-row-stats">
+                <span className="fleet-workspace-row-temps">
                   <span className={`fleet-workspace-row-temp ${tempFault === 'temp1' || tempFault === 'temp1+temp2' ? 'is-fault' : ''}`}>
+                    <span className="fleet-workspace-row-temp-label">T1</span>
                     {fmtNum(row.liveTemp1)}
                   </span>
                   <span className={`fleet-workspace-row-temp ${tempFault === 'temp2' || tempFault === 'temp1+temp2' ? 'is-fault' : ''}`}>
+                    <span className="fleet-workspace-row-temp-label">T2</span>
                     {fmtNum(row.liveTemp2)}
                   </span>
                 </span>
@@ -4713,7 +4248,8 @@ function FleetWorkspace({
           />
         ) : (
           <div className="fleet-workspace-detail-empty">
-            <p>Pilih unit di kiri untuk lihat map dan grafik suhu.</p>
+            <Navigation size={32} strokeWidth={1.25} />
+            <p>Select a unit to view its map and temperature chart.</p>
           </div>
         )}
       </section>
@@ -4799,10 +4335,12 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
       <header className="fleet-workspace-detail-head">
         <div className="fleet-workspace-detail-title">
           {onBack ? <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button> : null}
-          <h2>{row.label || row.alias || '-'}</h2>
-          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
+          <div className="fleet-workspace-detail-name-row">
+            <h2>{row.label || row.alias || '-'}</h2>
+            <span className={`fleet-workspace-detail-state fleet-workspace-detail-state-${state.tone}`}>{state.label}</span>
+          </div>
+          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} Â· {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
-            <Chip color={state.tone} variant="flat">{state.label}</Chip>
             {row.unitCategoryLabel ? <Chip variant="flat">{row.unitCategoryLabel}</Chip> : null}
             {row.customerName ? <Chip variant="flat">{row.customerName}</Chip> : null}
             {row.geofenceStatusLabel ? <Chip color={geofenceChipTone(row)} variant="flat">{row.geofenceStatusLabel}</Chip> : null}
@@ -4817,7 +4355,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
               href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`}
               target="_blank"
               rel="noreferrer"
-            >Open in Maps</a>
+            >Maps</a>
           ) : null}
           <Button variant="bordered" onPress={onOpenTempErrors}>Temp errors</Button>
           <Button variant="bordered" onPress={onSeeHistorical}>Historical</Button>
@@ -4872,7 +4410,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             compact
             thresholdMin={tmsThreshold?.min ?? null}
             thresholdMax={tmsThreshold?.max ?? null}
-            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS · ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
+            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS Â· ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
           />
         </div>
       </div>
@@ -5561,10 +5099,10 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
             return <g key={`guide-${index}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="2 4" />
               <line x1={padding.left - 4} x2={padding.left} y1={y} y2={y} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}°</text>
+              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}Â°</text>
             </g>;
           })}
-        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
+        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (Â°C)</text>
         {thresholdGuides.length === 2 ? (() => {
           const yMin = yFor(thresholdGuides[0].value);
           const yMax = yFor(thresholdGuides[1].value);
@@ -5578,7 +5116,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
             if (y === null) return null;
             return <g key={`threshold-${guide.key}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1" strokeDasharray="6 5" opacity="0.75" />
-              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} · {fmtNum(guide.value, 1)}°</text>
+              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} Â· {fmtNum(guide.value, 1)}Â°</text>
             </g>;
           })}
         {timeGuides.map((value, index) => {
@@ -5618,890 +5156,6 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
     </div>
   </div>;
 }
-
-function tmsIncidentIcon(code, size = 13) {
-  switch (code) {
-    case 'gps-error':
-      return <Route size={size} />;
-    case 'temp-error':
-      return <ShieldAlert size={size} />;
-    case 'temp-out-of-range':
-      return <Thermometer size={size} />;
-    case 'long-stop':
-      return <Clock3 size={size} />;
-    case 'late-origin':
-    case 'late-destination':
-      return <AlertTriangle size={size} />;
-    case 'geofence-origin':
-    case 'geofence-destination':
-      return <MapPinOff size={size} />;
-    default:
-      return <PackageSearch size={size} />;
-  }
-}
-
-function TripMonitorIncidentIcons({ codes, className = '', size = 13 }) {
-  const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
-  if (!uniqueCodes.length) {
-    return <span className={`trip-monitor-incident-empty${className ? ` ${className}` : ''}`}>No incidents</span>;
-  }
-  return <div className={`trip-monitor-incident-icons${className ? ` ${className}` : ''}`}>
-    {uniqueCodes.map((code) => <span key={code} className={`trip-monitor-incident-icon trip-monitor-incident-icon-${TMS_INCIDENT_META[String(code || '').toLowerCase()]?.tone || 'default'}`} title={tmsIncidentLabel(code)} aria-label={tmsIncidentLabel(code)}>
-      {tmsIncidentIcon(code, size)}
-    </span>)}
-  </div>;
-}
-
-function TripMonitorIncidentLegend({ codes, className = '' }) {
-  const uniqueCodes = dedupeTripMonitorIncidentCodes(codes);
-  if (!uniqueCodes.length) return null;
-  return <div className={`trip-monitor-incident-legend${className ? ` ${className}` : ''}`}>
-    {uniqueCodes.map((code) => <div key={`legend-${code}`} className="trip-monitor-incident-legend-item">
-      <span className={`trip-monitor-incident-icon trip-monitor-incident-icon-${TMS_INCIDENT_META[String(code || '').toLowerCase()]?.tone || 'default'}`} aria-hidden="true">
-        {tmsIncidentIcon(code, 13)}
-      </span>
-      <span>{tmsIncidentLabel(code)}</span>
-    </div>)}
-  </div>;
-}
-
-function TripMonitorShippingProgress({ shippingStatus }) {
-  const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
-    ? shippingStatus.steps
-    : [
-      { key: 'otw-load', label: 'OTW LOAD', changedAt: null, locationName: '', active: true, completed: false },
-      { key: 'sampai-load', label: 'SAMPAI LOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'menuju-unload', label: 'MENUJU UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'sampai-unload', label: 'SAMPAI UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'selesai', label: 'SELESAI', changedAt: null, locationName: '', active: false, completed: false },
-    ];
-  return <div className="trip-monitor-progress">
-    {steps.map((step, index) => {
-      const stepClassName = step.active ? 'is-active' : step.completed ? 'is-completed' : 'is-pending';
-      return <div key={step.key || index} className={`trip-monitor-progress-step ${stepClassName}`}>
-        {index < steps.length - 1 ? <div className={`trip-monitor-progress-connector ${step.completed ? 'is-completed' : ''}`} aria-hidden="true" /> : null}
-        <div className="trip-monitor-progress-marker" aria-hidden="true">
-          {step.completed ? '✓' : ''}
-        </div>
-        <div className="trip-monitor-progress-copy">
-          <strong>{tmsShippingStatusLabel(step.label || step.key)}</strong>
-          <span>{formatTripMonitorStatusTime(step.changedAt)}</span>
-          <small>{step.locationName || 'Menunggu update status'}</small>
-        </div>
-      </div>;
-    })}
-  </div>;
-}
-
-const SHIPPING_STEP_ICONS = {
-  'otw-load': Truck,
-  'sampai-load': PackageSearch,
-  'menuju-unload': Navigation,
-  'sampai-unload': Flag,
-  'selesai': Box,
-};
-
-function tripMonitorStopKey(stop, fallbackIndex) {
-  if (!stop) return null;
-  const idx = Number(stop.idx);
-  const taskType = String(stop.taskType || stop.type || stop.task_type || '').trim().toLowerCase();
-  if (Number.isFinite(idx) && idx > 0) return `${taskType || 'stop'}:${idx}`;
-  const lat = Number(stop.latitude);
-  const lng = Number(stop.longitude);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return `${taskType || 'stop'}:${lat.toFixed(5)}:${lng.toFixed(5)}`;
-  return `${taskType || 'stop'}:fallback:${fallbackIndex ?? 0}`;
-}
-
-function TripMonitorShippingProgressClean({ shippingStatus, headlineJob, hoveredStopKey = null, onHoverStop = null }) {
-  const steps = Array.isArray(shippingStatus?.steps) && shippingStatus.steps.length
-    ? shippingStatus.steps
-    : [
-      { key: 'otw-load', label: 'OTW LOAD', changedAt: null, locationName: '', active: true, completed: false },
-      { key: 'sampai-load', label: 'SAMPAI LOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'menuju-unload', label: 'MENUJU UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'sampai-unload', label: 'SAMPAI UNLOAD', changedAt: null, locationName: '', active: false, completed: false },
-      { key: 'selesai', label: 'SELESAI', changedAt: null, locationName: '', active: false, completed: false },
-    ];
-  const activeStepIndex = steps.findIndex((step) => step.active);
-  const completedStepIndex = steps.reduce((lastIndex, step, index) => (step.completed ? index : lastIndex), 0);
-  const resolvedActiveIndex = activeStepIndex >= 0 ? activeStepIndex : completedStepIndex;
-  const progressPercent = steps.length > 1 ? (Math.max(0, resolvedActiveIndex) / (steps.length - 1)) * 100 : 0;
-  const allStops = headlineJob?.stops || [];
-  const loadStops = allStops.filter((s) => String(s.type || s.taskType || '').toLowerCase() === 'load');
-  const unloadStops = allStops.filter((s) => String(s.type || s.taskType || '').toLowerCase() === 'unload');
-  const [expandedStopKey, setExpandedStopKey] = useState(null);
-
-  const getMultiStops = (stepKey) => {
-    if (stepKey === 'sampai-load' || stepKey === 'otw-load') return loadStops.length > 1 ? loadStops : null;
-    if (stepKey === 'menuju-unload' || stepKey === 'sampai-unload') return unloadStops.length > 1 ? unloadStops : null;
-    return null;
-  };
-
-  return <div className="trip-monitor-progress-shell">
-    <div className="trip-monitor-progress-track" aria-hidden="true">
-      <div className="trip-monitor-progress-track-fill" style={{ width: `${progressPercent}%` }} />
-    </div>
-    <div className="trip-monitor-progress">
-      {steps.map((step, index) => {
-        const stepClassName = step.active ? 'is-active' : step.completed ? 'is-completed' : 'is-pending';
-        const StepIcon = SHIPPING_STEP_ICONS[step.key] || Box;
-        const stepNote = step.locationName || (step.active ? 'Sedang aktif' : step.completed ? 'Selesai' : 'Belum tercapai');
-        const multiStops = getMultiStops(step.key);
-        const isExpanded = expandedStopKey === step.key;
-        const stopLabel = step.key === 'sampai-load' || step.key === 'otw-load' ? 'Load locations' : 'Unload locations';
-        return <div key={step.key || index} className={`trip-monitor-progress-step ${stepClassName}`}>
-          <div className="trip-monitor-progress-marker" aria-hidden="true">
-            <StepIcon size={16} />
-          </div>
-          <div className="trip-monitor-progress-copy">
-            <strong>{tmsShippingStatusLabel(step.label || step.key)}</strong>
-            <span>{formatTripMonitorStatusTime(step.changedAt)}</span>
-            {multiStops ? <button type="button" className="trip-monitor-progress-expand-btn" onClick={() => setExpandedStopKey(isExpanded ? null : step.key)}>
-              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {stopLabel}
-            </button> : <small>{stepNote}</small>}
-            {isExpanded && multiStops ? <div className="trip-monitor-progress-stops">
-              {multiStops.map((stop, i) => {
-                const key = tripMonitorStopKey(stop, i);
-                const isHovered = key && hoveredStopKey === key;
-                return <div
-                  key={i}
-                  className={`trip-monitor-progress-stop-item ${isHovered ? 'is-hovered' : ''}`}
-                  onMouseEnter={() => onHoverStop?.(key)}
-                  onMouseLeave={() => onHoverStop?.((current) => (current === key ? null : current))}
-                  onFocus={() => onHoverStop?.(key)}
-                  onBlur={() => onHoverStop?.((current) => (current === key ? null : current))}
-                  tabIndex={0}
-                >
-                  {stop.arrived || stop.completed ? <span className="trip-monitor-progress-stop-check">{'\u2713'}</span> : <span className="trip-monitor-progress-stop-pending" />}
-                  <span>{stop.taskAddress || stop.locationName || stop.name || stop.address || `Stop ${i + 1}`}</span>
-                </div>;
-              })}
-            </div> : null}
-          </div>
-        </div>;
-      })}
-    </div>
-  </div>;
-}
-
-function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
-  const unitLabel = row.unitLabel || row.unitId || row.normalizedPlate || '-';
-  const shippingStatus = row.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
-  const activeStopName = row?.metadata?.shippingStatus?.activeStopName || '';
-  const sublineText = `${row.jobOrderId || '-'} | ${row.customerName || '-'}`;
-  const tempRange = normalizeTemperatureRange(row.tempMin, row.tempMax);
-  const tempLabel = tempRange.min !== null ? `${fmtNum(tempRange.min)}°C s/d ${fmtNum(tempRange.max)}°C` : null;
-  const incidentSummary = row.incidentSummary && row.incidentSummary !== '-' ? row.incidentSummary : '';
-  const driverAppStatus = row.driverAppStatus && row.driverAppStatus !== '-' ? row.driverAppStatus : '';
-  const driverAppCompact = driverAppStatus.split('|').map((part) => part.trim()).filter(Boolean).slice(0, 2).join(' · ');
-  const cardClasses = ['trip-monitor-card', `trip-monitor-card-${row.severity || 'normal'}`];
-  if (isActive) cardClasses.push('is-active');
-  return <button type="button" className={cardClasses.join(' ')} onClick={onOpen} title={`${unitLabel} — ${sublineText}`}>
-    <div className="trip-monitor-card-head">
-      <div className="trip-monitor-card-titleblock">
-        <strong title={unitLabel}>{unitLabel}</strong>
-        <div className="trip-monitor-card-subline" title={sublineText}>{sublineText}</div>
-      </div>
-      <TripMonitorIncidentIcons codes={row.incidentCodes || []} />
-    </div>
-    <div className="trip-monitor-card-status">
-      <strong title={shippingStatus}>{shippingStatus}</strong>
-      {activeStopName ? <div className="trip-monitor-card-location" title={activeStopName}>{activeStopName}</div> : null}
-    </div>
-    {incidentSummary ? <div className="trip-monitor-card-incident-summary" title={incidentSummary}>
-      <AlertCircle size={12} /> {incidentSummary}
-    </div> : null}
-    <div className="trip-monitor-card-meta">
-      {tempLabel ? <span className="trip-monitor-card-temp"><Thermometer size={12} /> {tempLabel}</span> : null}
-      {driverAppCompact ? <span className="trip-monitor-card-driver-pill" title={driverAppStatus}>{driverAppCompact}</span> : null}
-    </div>
-    {row.unmatchedReason ? <div className="trip-monitor-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
-  </button>;
-}
-
-const TRIP_MONITOR_KANBAN_COLUMNS = [
-  { key: 'critical', label: 'Critical', match: (severity) => severity === 'critical' },
-  { key: 'warning', label: 'Warning', match: (severity) => severity === 'warning' },
-  { key: 'normal', label: 'Normal', match: (severity) => severity === 'normal' || severity === 'unmatched' || severity === 'no-job-order' || !severity },
-];
-
-function TripMonitorKanban({ rows, selectedRowId, onOpen }) {
-  const grouped = TRIP_MONITOR_KANBAN_COLUMNS.map((col) => ({
-    ...col,
-    rows: rows.filter((row) => col.match(String(row.severity || '').trim())),
-  }));
-  return <div className="trip-monitor-kanban">
-    {grouped.map((column) => <section key={column.key} className={`trip-monitor-kanban-column trip-monitor-kanban-column-${column.key}`}>
-      <header className="trip-monitor-kanban-column-header">
-        <span className="trip-monitor-kanban-column-title">
-          <span className="trip-monitor-kanban-column-dot" />
-          {column.label}
-        </span>
-        <span className="trip-monitor-kanban-column-count">{column.rows.length}</span>
-      </header>
-      <div className="trip-monitor-kanban-column-body">
-        {column.rows.length ? column.rows.map((row) => <TripMonitorUnitCard
-          key={row.rowId}
-          row={row}
-          isActive={row.rowId === selectedRowId}
-          onOpen={() => onOpen(row)}
-        />) : <div className="trip-monitor-kanban-column-empty">No trips in this severity bucket.</div>}
-      </div>
-    </section>)}
-  </div>;
-}
-
-function TripMonitorIncidentComments({ incidentId, webSessionUser }) {
-  const [comments, setComments] = useState([]);
-  const [showComments, setShowComments] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [commentText, setCommentText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [commentCount, setCommentCount] = useState(null);
-
-  const fetchComments = async () => {
-    try {
-      const res = await fetch(`/api/tms/incidents/${encodeURIComponent(incidentId)}/comments`);
-      const data = await res.json();
-      if (data.ok) {
-        setComments(data.comments || []);
-        setCommentCount((data.comments || []).length);
-      }
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    if (incidentId) fetchComments();
-  }, [incidentId]);
-
-  const handleSubmit = async () => {
-    if (!commentText.trim() || busy) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/tms/incidents/${encodeURIComponent(incidentId)}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment: commentText.trim() }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setCommentText('');
-        setShowForm(false);
-        await fetchComments();
-        setShowComments(true);
-      }
-    } catch (_) {}
-    setBusy(false);
-  };
-
-  return <div className="trip-monitor-incident-comments-section">
-    <div className="trip-monitor-incident-actions">
-      <button type="button" className={`sf-btn sf-btn-xs ${showForm ? 'sf-btn-primary' : 'sf-btn-light'}`} onClick={() => { setShowForm(!showForm); if (!showForm) setShowComments(false); }}>
-        <MessageSquare size={12} /> Add
-      </button>
-      <button type="button" className={`sf-btn sf-btn-xs ${showComments ? 'sf-btn-primary' : 'sf-btn-light'}`} onClick={() => { setShowComments(!showComments); if (!showComments) setShowForm(false); }}>
-        <MessageSquare size={12} /> {commentCount !== null ? commentCount : '..'}
-      </button>
-    </div>
-    
-    {(showForm || showComments) && (
-      <div className="trip-monitor-comment-card">
-        {showForm && (
-          <div className="trip-monitor-comment-form">
-            <textarea rows={3} aria-label="Komentar trip" placeholder="Tulis komentar..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
-            <div className="trip-monitor-comment-form-actions">
-              <button type="button" className="sf-btn sf-btn-light sf-btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
-              <button type="button" className="sf-btn sf-btn-primary sf-btn-sm" disabled={busy || !commentText.trim()} onClick={handleSubmit}>
-                {busy ? 'Saving...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {showComments && (
-          <div className="trip-monitor-comment-list-container">
-            {comments.length ? (
-              <div className="trip-monitor-comment-list">
-                {comments.map((c) => (
-                  <div key={c.id} className="trip-monitor-comment-item">
-                    <div className="trip-monitor-comment-meta">
-                      <strong>{c.display_name || c.username}</strong>
-                      <span>{fmtDate(c.created_at)}</span>
-                    </div>
-                    <div className="trip-monitor-comment-text">{c.comment}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state" style={{ padding: '16px 0' }}>Belum ada komentar.</div>
-            )}
-          </div>
-        )}
-      </div>
-    )}
-  </div>;
-}
-
-/* TripMonitorFloatingPanelStyles moved to styles.css */
-
-function TripMonitorFloatingPanel({ panel, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical, onBringToFront, onMove, onResize }) {
-  const panelRef = useRef(null);
-  useEffect(() => {
-    const handleKey = (event) => {
-      if (event.key === 'Escape') onClose?.();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  const handleDragStart = (event) => {
-    event.preventDefault();
-    onBringToFront?.();
-    const el = panelRef.current;
-    const startX = event.clientX - panel.position.x;
-    const startY = event.clientY - panel.position.y;
-    let lastX = panel.position.x;
-    let lastY = panel.position.y;
-    const handleMove = (moveEvent) => {
-      lastX = Math.max(0, Math.min(window.innerWidth - 100, moveEvent.clientX - startX));
-      lastY = Math.max(0, Math.min(window.innerHeight - 50, moveEvent.clientY - startY));
-      if (el) { el.style.left = lastX + 'px'; el.style.top = lastY + 'px'; }
-    };
-    const handleUp = () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      onMove?.({ x: lastX, y: lastY });
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-  };
-
-  const handleResizeStart = (event, direction) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onBringToFront?.();
-    const el = panelRef.current;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startW = panel.size.width;
-    const startH = panel.size.height;
-    const startPosX = panel.position.x;
-    const startPosY = panel.position.y;
-    let lastW = startW, lastH = startH, lastX = startPosX, lastY = startPosY;
-    const handleMove = (moveEvent) => {
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
-      lastW = startW; lastH = startH; lastX = startPosX; lastY = startPosY;
-      if (direction.includes('e')) lastW = Math.max(360, startW + dx);
-      if (direction.includes('w')) { lastW = Math.max(360, startW - dx); lastX = startPosX + (startW - lastW); }
-      if (direction.includes('s')) lastH = Math.max(300, startH + dy);
-      if (direction.includes('n')) { lastH = Math.max(300, startH - dy); lastY = startPosY + (startH - lastH); }
-      lastX = Math.max(0, lastX); lastY = Math.max(0, lastY);
-      if (el) { el.style.width = lastW + 'px'; el.style.height = lastH + 'px'; el.style.left = lastX + 'px'; el.style.top = lastY + 'px'; }
-    };
-    const handleUp = () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      onResize?.({ width: lastW, height: lastH });
-      onMove?.({ x: lastX, y: lastY });
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-  };
-
-  const detail = panel.detail;
-  if (!detail && !panel.detailBusy) return null;
-  const rawSeverity = String(detail?.severity || '').toLowerCase();
-  const severityKey = rawSeverity === 'critical' ? 'critical' : rawSeverity === 'warning' ? 'warning' : 'normal';
-  const displayLabel = detail ? pickFirstText(detail.metadata?.fleetRow?.alias, detail.unitLabel, detail.metadata?.fleetRow?.label, detail.unitId) : 'Loading...';
-
-  return <div
-    ref={panelRef}
-    className={`tm-float-panel severity-${severityKey}`}
-    style={{ left: panel.position.x, top: panel.position.y, width: panel.size.width, height: panel.size.height, zIndex: panel.zIndex, position: 'fixed' }}
-    onPointerDown={onBringToFront}
-    role="dialog"
-    aria-label="Trip Monitor floating panel"
-  >
-    {['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((direction) => <div key={direction} className={`tm-float-resize tm-float-resize-${direction}`} onPointerDown={(event) => handleResizeStart(event, direction)} />)}
-    <div className="tm-float-header" onPointerDown={handleDragStart}>
-      <div className="tm-float-title-block">
-        <h3 className="tm-float-title">{displayLabel || '-'}</h3>
-        <div className="tm-float-meta">
-          <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail?.severity)}</span>
-          {detail?.customerName ? <span className="tm-brand-chip">{detail.customerName}</span> : null}
-        </div>
-      </div>
-      <button type="button" className="tm-float-close" onClick={(event) => { event.stopPropagation(); onClose?.(); }} aria-label="Close panel" title="Close (Esc)"><X size={16} /></button>
-    </div>
-    <div className="tm-float-body">
-      {panel.detailBusy ? <div className="empty-state">Loading detail...</div> : <TripMonitorDetailModal
-        detail={detail}
-        busy={false}
-        historyDetail={panel.historyDetail}
-        historyBusy={panel.historyBusy}
-        historyRange={panel.historyRange}
-        webSessionUser={webSessionUser}
-        onOpenFleet={onOpenFleet}
-        onOpenMap={onOpenMap}
-        onOpenHistorical={onOpenHistorical}
-        mode="floating"
-      />}
-    </div>
-  </div>;
-}
-
-function TripMonitorDetailModal({ detail, busy, historyDetail, historyBusy, historyRange, webSessionUser, onClose, onOpenFleet, onOpenMap, onOpenHistorical, mode = 'drawer' }) {
-  useEffect(() => {
-    if (!detail) return undefined;
-    const handleKey = (event) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [detail, onClose]);
-  if (!detail) return null;
-  const fleetRow = detail?.metadata?.fleetRow || null;
-  const jobOrders = detail?.metadata?.jobOrders || [];
-  const incidents = detail?.metadata?.incidents || [];
-  const incidentHistory = Array.isArray(detail?.incidentHistory) ? detail.incidentHistory : [];
-  const headlineJob = detail?.metadata?.headlineJobOrder || jobOrders[0] || null;
-  const routeSummary = headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-';
-  const historyRows = [...(historyDetail?.records || [])].reverse();
-  const historyLabel = formatTripMonitorRangeLabel(historyRange);
-  const displayUnitLabel = pickFirstText(fleetRow?.alias, detail.unitLabel, fleetRow?.label, detail.unitId) || '-';
-  const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
-  const mapStops = headlineJob?.stops || [];
-  const [hoveredStopKey, setHoveredStopKey] = useState(null);
-  const rawSeverity = String(detail?.severity || '').toLowerCase();
-  const severityKey = rawSeverity === 'critical' ? 'critical' : rawSeverity === 'warning' ? 'warning' : 'normal';
-  const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
-  const shippingStatus = detail?.metadata?.shippingStatus || {
-    label: detail?.shippingStatusLabel || '-',
-    changedAt: detail?.shippingStatusChangedAt || null,
-    steps: [],
-  };
-  const incidentCodes = dedupeTripMonitorIncidentCodes((incidents || []).map((incident) => incident.code));
-  const jobDrivers = headlineDrivers.length
-    ? headlineDrivers
-    : jobOrders.flatMap((job) => normalizeTmsDriverAssign(job?.driverAssign));
-  const driver1Name = extractTmsDriverName(jobDrivers[0]);
-  const driver2Name = extractTmsDriverName(jobDrivers[1]);
-  const leadDriver = jobDrivers[0] || null;
-  const appStatus = detail?.driverAppStatus || [leadDriver?.assignment_status, leadDriver?.driver_status, leadDriver?.job_offer_status].filter(Boolean).join(' | ') || '-';
-  const incidentHistoryActiveCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() !== 'resolved').length;
-  const incidentHistoryResolvedCount = incidentHistory.filter((item) => String(item?.status || '').toLowerCase() === 'resolved').length;
-  const incidentHistoryTotalMinutes = incidentHistory.reduce((total, item) => total + Number(item?.durationMinutes || 0), 0);
-
-  const incidentsByLevel = {
-    critical: incidentHistory.filter((i) => String(i?.severity || '').toLowerCase() === 'critical'),
-    warning: incidentHistory.filter((i) => String(i?.severity || '').toLowerCase() === 'warning'),
-    normal: incidentHistory.filter((i) => {
-      const s = String(i?.severity || '').toLowerCase();
-      return s !== 'critical' && s !== 'warning';
-    }),
-  };
-  const totalIncidents = incidentHistory.length;
-  const formatAlertTime = (value) => {
-    if (!value) return '--:--';
-    try {
-      const d = new Date(value);
-      return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':');
-    } catch { return '--:--'; }
-  };
-
-  const body = <CardContent>
-        {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-stack">
-
-          <div className="tm-stack-section tm-driver-section">
-            <div className="tm-driver-row">
-              <div className="tm-driver-info">
-                <span className="tm-stack-label">Drivers</span>
-                <strong className="tm-driver-names">
-                  {driver1Name}{driver2Name && driver2Name !== '-' ? <> <span className="tm-divider-dot">·</span> {driver2Name}</> : null}
-                </strong>
-              </div>
-              <span className={`tm-status-pill status-${String(shippingStatus?.label || '').toLowerCase().replace(/\s+/g, '-')}`}>
-                {shippingStatus?.label || 'Unknown'}
-              </span>
-            </div>
-            <p className="tm-route-line">{routeSummary}</p>
-          </div>
-
-          <div className="tm-stack-section tm-map-section">
-            <div className="tm-map-frame">
-              {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
-            </div>
-            <div className="tm-action-row">
-              <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)}>
-                <Route size={14} /> Track Route
-              </button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)}>
-                <Clock3 size={14} /> Trip History
-              </button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)}>
-                <Truck size={14} /> Open Fleet
-              </button>
-            </div>
-          </div>
-
-          <details className="tm-stack-section tm-section-collapsible" open>
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Notification</span>
-              <span className="tm-section-meta">
-                {totalIncidents > 0 ? <span className="tm-section-count">{totalIncidents}</span> : null}
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              {totalIncidents === 0 ? (
-                <div className="tm-empty-soft">No incidents on this trip.</div>
-              ) : (
-                <>
-                  {['critical', 'warning', 'normal'].map((lvl) => {
-                    const list = incidentsByLevel[lvl];
-                    if (!list.length) return null;
-                    const labelMap = { critical: 'Critical', warning: 'Warning', normal: 'Resolved / Normal' };
-                    return (
-                      <details key={lvl} className={`tm-incident-group severity-${lvl}`} open={lvl === 'critical' || lvl === 'warning'}>
-                        <summary className="tm-incident-group-summary">
-                          <span className={`tm-severity-dot severity-${lvl}`} />
-                          <span className="tm-incident-group-label">{labelMap[lvl]}</span>
-                          <span className="tm-incident-group-count">({list.length})</span>
-                          <ChevronDown size={12} className="tm-section-chevron" />
-                        </summary>
-                        <div className="tm-incident-group-body">
-                          {list.slice(0, 6).map((item, idx) => (
-                            <div key={item.id || idx} className={`tm-alert-row severity-${lvl}`}>
-                              <span className="tm-alert-time">{formatAlertTime(item.openedAt)}</span>
-                              <span className="tm-alert-content">
-                                <strong className="tm-alert-label">{item.label || tmsIncidentLabel(item.incidentCode)}</strong>
-                                <span className="tm-alert-meta">
-                                  {String(item.status || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active'}
-                                  {item.durationMinutes ? ` · ${formatMinutesText(item.durationMinutes)}` : ''}
-                                </span>
-                              </span>
-                            </div>
-                          ))}
-                          {list.length > 6 ? <div className="tm-section-more">+ {list.length - 6} more incidents</div> : null}
-                        </div>
-                      </details>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible" open>
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Stops Timeline</span>
-              <span className="tm-section-meta">
-                {mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
-            </div>
-          </details>
-
-          <div className="tm-stack-section">
-            <div className="tm-section-summary tm-section-summary-static">
-              <span className="tm-section-title">Schedule</span>
-            </div>
-            <div className="tm-section-content tm-info-grid">
-              <div className="tm-info-cell">
-                <span className="tm-info-key">ETA Load</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">ETD Unload</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">Last update</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">TMS Range</span>
-                <strong className="tm-info-value">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}° / ${fmtNum(normalizedJobTempRange.max)}°` : '-'}</strong>
-              </div>
-            </div>
-          </div>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Temperature Trend</span>
-              <span className="tm-section-meta">
-                <span className="tm-section-count tm-range-chip">{historyLabel}</span>
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={240} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}
-            </div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Historical Records</span>
-              <span className="tm-section-meta">
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
-            </div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Incident History (full)</span>
-              <span className="tm-section-meta">
-                <span className="tm-section-count">{incidentHistory.length}</span>
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              <DataTable
-                pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
-                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
-                emptyMessage="Belum ada incident history untuk JO ini."
-                rows={incidentHistory.map((item) => {
-                  const description = buildTripMonitorIncidentHistoryDescription(item);
-                  const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
-                  return [
-                    <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
-                    <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
-                    <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
-                    <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
-                    formatMinutesText(item.durationMinutes || 0),
-                    fmtDate(item.openedAt),
-                    String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
-                    <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
-                    <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
-                  ];
-                })}
-              />
-            </div>
-          </details>
-        </div>}
-      </CardContent>;
-
-  if (mode === 'floating') return body;
-
-  return <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-    <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
-      <CardHeader className="panel-card-header tm-drawer-header">
-        <div className="tm-drawer-header-inner">
-          <div className="tm-drawer-title-block">
-            <div className="tm-drawer-title-row">
-              <h2>{displayUnitLabel}</h2>
-              <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail.severity)}</span>
-            </div>
-            <div className="tm-drawer-meta-row">
-              <span className="tm-brand-chip">{detail.customerName || 'No customer'}</span>
-              {headlineJob?.name ? <span className="tm-jo-chip">{headlineJob.name}</span> : null}
-            </div>
-          </div>
-          <div className="tm-drawer-header-actions">
-            <button type="button" className="tm-drawer-close" onClick={onClose} aria-label="Close drawer" title="Close (Esc)">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-      </CardHeader>
-      {body}
-      {false && <CardContent>
-        {busy ? <div className="empty-state">Loading detail...</div> : <div className="tm-stack">
-
-          <div className="tm-stack-section tm-driver-section">
-            <div className="tm-driver-row">
-              <div className="tm-driver-info">
-                <span className="tm-stack-label">Drivers</span>
-                <strong className="tm-driver-names">
-                  {driver1Name}{driver2Name && driver2Name !== '-' ? <> <span className="tm-divider-dot">·</span> {driver2Name}</> : null}
-                </strong>
-              </div>
-              <span className={`tm-status-pill status-${String(shippingStatus?.label || '').toLowerCase().replace(/\s+/g, '-')}`}>
-                {shippingStatus?.label || 'Unknown'}
-              </span>
-            </div>
-            <p className="tm-route-line">{routeSummary}</p>
-          </div>
-
-          <div className="tm-stack-section tm-map-section">
-            <div className="tm-map-frame">
-              {fleetRow?.id ? <UnitRouteMap row={fleetRow} records={historyDetail?.records || []} busy={historyBusy} rangeLabel={historyLabel} stops={mapStops} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /> : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
-            </div>
-            <div className="tm-action-row">
-              <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)}>
-                <Route size={14} /> Track Route
-              </button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)}>
-                <Clock3 size={14} /> Trip History
-              </button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)}>
-                <Truck size={14} /> Open Fleet
-              </button>
-            </div>
-          </div>
-
-          <details className="tm-stack-section tm-section-collapsible" open>
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Notification</span>
-              <span className="tm-section-meta">
-                {totalIncidents > 0 ? <span className="tm-section-count">{totalIncidents}</span> : null}
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              {totalIncidents === 0 ? (
-                <div className="tm-empty-soft">No incidents on this trip.</div>
-              ) : (
-                <>
-                  {['critical', 'warning', 'normal'].map((lvl) => {
-                    const list = incidentsByLevel[lvl];
-                    if (!list.length) return null;
-                    const labelMap = { critical: 'Critical', warning: 'Warning', normal: 'Resolved / Normal' };
-                    return (
-                      <details key={lvl} className={`tm-incident-group severity-${lvl}`} open={lvl === 'critical' || lvl === 'warning'}>
-                        <summary className="tm-incident-group-summary">
-                          <span className={`tm-severity-dot severity-${lvl}`} />
-                          <span className="tm-incident-group-label">{labelMap[lvl]}</span>
-                          <span className="tm-incident-group-count">({list.length})</span>
-                          <ChevronDown size={12} className="tm-section-chevron" />
-                        </summary>
-                        <div className="tm-incident-group-body">
-                          {list.slice(0, 6).map((item, idx) => (
-                            <div key={item.id || idx} className={`tm-alert-row severity-${lvl}`}>
-                              <span className="tm-alert-time">{formatAlertTime(item.openedAt)}</span>
-                              <span className="tm-alert-content">
-                                <strong className="tm-alert-label">{item.label || tmsIncidentLabel(item.incidentCode)}</strong>
-                                <span className="tm-alert-meta">
-                                  {String(item.status || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active'}
-                                  {item.durationMinutes ? ` · ${formatMinutesText(item.durationMinutes)}` : ''}
-                                </span>
-                              </span>
-                            </div>
-                          ))}
-                          {list.length > 6 ? <div className="tm-section-more">+ {list.length - 6} more in fullscreen</div> : null}
-                        </div>
-                      </details>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible" open>
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Stops Timeline</span>
-              <span className="tm-section-meta">
-                {mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              <TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} />
-            </div>
-          </details>
-
-          <div className="tm-stack-section">
-            <div className="tm-section-summary tm-section-summary-static">
-              <span className="tm-section-title">Schedule</span>
-            </div>
-            <div className="tm-section-content tm-info-grid">
-              <div className="tm-info-cell">
-                <span className="tm-info-key">ETA Load</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">ETD Unload</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">Last update</span>
-                <strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</strong>
-              </div>
-              <div className="tm-info-cell">
-                <span className="tm-info-key">TMS Range</span>
-                <strong className="tm-info-value">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}° / ${fmtNum(normalizedJobTempRange.max)}°` : '-'}</strong>
-              </div>
-            </div>
-          </div>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary">
-              <span className="tm-section-title">Temperature Trend</span>
-              <span className="tm-section-meta">
-                <span className="tm-section-count tm-range-chip">{historyLabel}</span>
-                <ChevronDown size={14} className="tm-section-chevron" />
-              </span>
-            </summary>
-            <div className="tm-section-content">
-              {fleetRow?.id ? <TemperatureChart records={historyDetail?.records || []} busy={historyBusy} title="Temperature trend" description={`Historical Solofleet mengikuti topbar range ${historyLabel}.`} compact chartHeight={240} thresholdMin={normalizedJobTempRange.min} thresholdMax={normalizedJobTempRange.max} thresholdLabel="TMS range" /> : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}
-            </div>
-          </details>
-
-          {false ? (
-            <details className="tm-stack-section tm-section-collapsible" open>
-              <summary className="tm-section-summary">
-                <span className="tm-section-title">Historical Records</span>
-                <span className="tm-section-meta">
-                  <ChevronDown size={14} className="tm-section-chevron" />
-                </span>
-              </summary>
-              <div className="tm-section-content">
-                {fleetRow?.id ? <DataTable pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }} columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]} emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih." rows={historyRows.map((row) => [fmtDate(row.timestamp), <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>, fmtNum(row.speed, 0), fmtNum(row.temp1), fmtNum(row.temp2), <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || 'No zone'}</div></div>, row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank">Open map</Link> : '-'])} /> : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
-              </div>
-            </details>
-          ) : null}
-
-          {false ? (
-            <details className="tm-stack-section tm-section-collapsible" open>
-              <summary className="tm-section-summary">
-                <span className="tm-section-title">Incident History (full)</span>
-                <span className="tm-section-meta">
-                  <span className="tm-section-count">{incidentHistory.length}</span>
-                  <ChevronDown size={14} className="tm-section-chevron" />
-                </span>
-              </summary>
-              <div className="tm-section-content">
-                <DataTable
-                  pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20] }}
-                  columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
-                  emptyMessage="Belum ada incident history untuk JO ini."
-                  rows={incidentHistory.map((item) => {
-                    const description = buildTripMonitorIncidentHistoryDescription(item);
-                    const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
-                    return [
-                      <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
-                      <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
-                      <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
-                      <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
-                      formatMinutesText(item.durationMinutes || 0),
-                      fmtDate(item.openedAt),
-                      String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
-                      <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
-                      <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} />,
-                    ];
-                  })}
-                />
-              </div>
-            </details>
-          ) : null}
-        </div>}
-      </CardContent>}
-    </Card>
-  </div>;
-}
-
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);

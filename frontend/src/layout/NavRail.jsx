@@ -25,7 +25,7 @@ const SECTIONS = [
   },
   {
     id: 'settings',
-    label: 'Settings',
+    label: 'System',
     items: [
       { id: 'api-monitor', label: 'API monitor', icon: Activity },
       { id: 'config', label: 'Config', icon: Settings, adminOnly: true },
@@ -46,24 +46,30 @@ export function NavRail({
   onProfileClick,
   onLogout,
 }) {
+  const initial = (user?.displayName || user?.username || 'U').charAt(0).toUpperCase();
+
   return (
     <nav className={`navrail ${collapsed ? 'navrail-collapsed' : ''}`.trim()} aria-label="Workspace navigation">
+      {/* ---- Head: brand + collapse ---- */}
       <div className="navrail-head">
         <button type="button" className="navrail-brand" onClick={() => onSelect?.('overview')} title="Sowhat">
           <span className="navrail-mark">S</span>
           {!collapsed ? <span className="navrail-wordmark">Sowhat</span> : null}
         </button>
-        <button
-          type="button"
-          className="navrail-collapse-btn"
-          onClick={onToggleCollapsed}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <ChevronRight size={14} strokeWidth={1.75} /> : <ChevronLeft size={14} strokeWidth={1.75} />}
-        </button>
+        {!collapsed ? (
+          <button
+            type="button"
+            className="navrail-collapse-btn"
+            onClick={onToggleCollapsed}
+            aria-label="Collapse navigation"
+            title="Collapse sidebar"
+          >
+            <ChevronLeft size={14} strokeWidth={1.75} />
+          </button>
+        ) : null}
       </div>
 
+      {/* ---- Nav sections ---- */}
       <div className="navrail-scroll">
         {SECTIONS.map((section) => {
           const visibleItems = section.items.filter((item) => !item.adminOnly || isAdmin);
@@ -74,11 +80,11 @@ export function NavRail({
                 <p className="navrail-section-label">{section.label}</p>
               ) : null}
               <ul className="navrail-list">
-                {visibleItems.map((item) => {
+                {visibleItems.map((item, index) => {
                   const Icon = item.icon;
                   const active = activePanel === item.id;
                   return (
-                    <li key={item.id}>
+                    <li key={item.id} style={{ '--item-index': index }}>
                       <button
                         type="button"
                         className={`navrail-item ${active ? 'navrail-item-active' : ''}`.trim()}
@@ -86,6 +92,7 @@ export function NavRail({
                         title={collapsed ? item.label : undefined}
                         aria-current={active ? 'page' : undefined}
                       >
+                        {active ? <span className="navrail-item-rail" /> : null}
                         <span className="navrail-item-glyph"><Icon size={16} strokeWidth={1.75} /></span>
                         {!collapsed ? <span className="navrail-item-label">{item.label}</span> : null}
                       </button>
@@ -98,40 +105,52 @@ export function NavRail({
         })}
       </div>
 
+      {/* ---- Foot: profile + theme + collapse (when collapsed) ---- */}
       <div className="navrail-foot">
+        {/* Profile row */}
+        <div className="navrail-profile">
+          <button type="button" className="navrail-profile-button" onClick={onProfileClick} title={user?.displayName || user?.username || 'Account'}>
+            <span className="navrail-profile-avatar">{initial}</span>
+            {!collapsed ? (
+              <span className="navrail-profile-meta">
+                <span className="navrail-profile-name">{user?.displayName || user?.username || 'Account'}</span>
+                <span className="navrail-profile-role">{user?.role || 'user'}</span>
+              </span>
+            ) : null}
+          </button>
+          {!collapsed ? (
+            <button type="button" className="navrail-profile-logout" onClick={onLogout} aria-label="Sign out" title="Sign out">
+              <LogOut size={14} strokeWidth={1.75} />
+            </button>
+          ) : null}
+        </div>
+
+        {/* Theme toggle */}
         <button
           type="button"
-          className="navrail-foot-btn"
+          className="navrail-theme-toggle"
           onClick={onToggleTheme}
           aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
         >
-          <span className="navrail-foot-btn-glyph">
-            {theme === 'dark' ? <MoonStar size={15} strokeWidth={1.75} /> : <Sun size={15} strokeWidth={1.75} />}
+          <span className="navrail-theme-thumb">
+            {theme === 'dark' ? <MoonStar size={13} strokeWidth={1.75} /> : <Sun size={13} strokeWidth={1.75} />}
           </span>
-          {!collapsed ? <span className="navrail-foot-btn-label">{theme === 'dark' ? 'Dark' : 'Light'}</span> : null}
+          {!collapsed ? <span className="navrail-theme-label">{theme === 'dark' ? 'Dark' : 'Light'}</span> : null}
         </button>
 
-        <button
-          type="button"
-          className="navrail-foot-btn"
-          onClick={onProfileClick}
-          title={user?.displayName || user?.username || 'Account'}
-        >
-          <span className="navrail-foot-btn-glyph"><User size={15} strokeWidth={1.75} /></span>
-          {!collapsed ? <span className="navrail-foot-btn-label">{user?.displayName || user?.username || 'Account'}</span> : null}
-        </button>
-
-        <button
-          type="button"
-          className="navrail-foot-btn"
-          onClick={onLogout}
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          <span className="navrail-foot-btn-glyph"><LogOut size={15} strokeWidth={1.75} /></span>
-          {!collapsed ? <span className="navrail-foot-btn-label">Sign out</span> : null}
-        </button>
+        {/* Expand button (only when collapsed) */}
+        {collapsed ? (
+          <button
+            type="button"
+            className="navrail-collapse-btn navrail-expand-trigger"
+            onClick={onToggleCollapsed}
+            aria-label="Expand navigation"
+            title="Expand sidebar"
+          >
+            <ChevronRight size={14} strokeWidth={1.75} />
+          </button>
+        ) : null}
       </div>
     </nav>
   );

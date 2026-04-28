@@ -28,28 +28,32 @@ export function CommandBar({
   onPollNow,
   onTogglePolling,
   isPolling,
+  isOnline,
   busy,
 }) {
   const title = PANEL_TITLES[activePanel] || 'Workspace';
   return (
     <header className="command-bar" role="banner">
-      <div className="command-bar-title">
+      <div className="command-bar-left">
         <h1 className="command-bar-title-text">{title}</h1>
         {accountName ? <span className="command-bar-account">{accountName}</span> : null}
       </div>
 
-      <div className="command-bar-tools">
+      <div className="command-bar-center">
         <div className="command-bar-search" role="search">
-          <Search size={14} strokeWidth={1.75} className="command-bar-search-icon" />
+          <Search size={14} strokeWidth={1.75} className="command-bar-search-icon" aria-hidden />
           <input
             type="text"
-            placeholder="Search"
+            placeholder="Search units, alerts..."
             value={search || ''}
             onChange={(event) => onSearchChange?.(event.target.value)}
             aria-label="Global search"
           />
+          <kbd className="command-bar-search-kbd">Ctrl K</kbd>
         </div>
+      </div>
 
+      <div className="command-bar-right">
         <div className="command-bar-range">
           <Calendar size={13} strokeWidth={1.75} className="command-bar-range-icon" aria-hidden />
           <input
@@ -69,10 +73,12 @@ export function CommandBar({
           />
         </div>
 
+        <div className="command-bar-divider" aria-hidden />
+
         <div className="command-bar-actions">
           {onRefresh ? (
             <button type="button" className="command-bar-icon-btn" onClick={onRefresh} disabled={busy} title="Refresh" aria-label="Refresh">
-              <RefreshCw size={14} strokeWidth={1.75} />
+              <RefreshCw size={14} strokeWidth={1.75} className={busy ? 'command-bar-spin' : ''} />
             </button>
           ) : null}
           {onExportFleet ? (
@@ -98,7 +104,7 @@ export function CommandBar({
           ) : null}
           {onPollNow ? (
             <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow} disabled={busy} loading={busy}>
-              Poll now
+              Poll
             </Action>
           ) : null}
         </div>
