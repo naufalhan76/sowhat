@@ -27,6 +27,9 @@ import { AdminPanel } from './components/AdminPanel.jsx';
 import { HistoricalPanel } from './components/HistoricalPanel.jsx';
 import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
 import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
+import { AstroReportPanel } from './components/AstroReportPanel.jsx';
+import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
+import { StopIdlePanel } from './components/StopIdlePanel.jsx';
 
 const ROUTE_PANEL_IDS = new Set([
   'overview', 'fleet', 'trip-monitor', 'map', 'astro-report', 'temp-errors',
@@ -3688,68 +3691,44 @@ export default function App() {
               </CardContent>
             </Card>
           </> : null}
-          {activePanel === 'astro-report' ? <>
-            <Card className="panel-card astro-report-panel">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Astro delivery report</h2>
-                  <p>Ringkasan rit Astro berdasarkan geofence lokasi dan data historical Solofleet.</p>
-                </div>
-                <div className="inline-buttons">
-                  {astroDiagnostics.length ? <Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(true)}>Lihat tanggal error ({astroDiagnostics.length})</Button> : null}
-                  <Button variant="bordered" onPress={exportAstroReport}>Export Astro CSV</Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="historical-toolbar astro-toolbar">
-                  <label className="historical-field">
-                    <span>Start date</span>
-                    <input type="date" value={astroReportFilters.startDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, startDate: event.target.value }))} />
-                  </label>
-                  <label className="historical-field">
-                    <span>End date</span>
-                    <input type="date" value={astroReportFilters.endDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, endDate: event.target.value }))} />
-                  </label>
-                  <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', routeId: '' }))} placeholder="Search account..." />
-                  <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportVisibleRouteOptions]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
-                  <label className="historical-field">
-                    <span>View mode</span>
-                    <select value={astroReportMode} onChange={(event) => setAstroReportMode(event.target.value)}>
-                      <option value="plain">Without KPI</option>
-                      <option value="kpi">With KPI</option>
-                    </select>
-                  </label>
-                  <div className="historical-action-field">
-                    <span>Action</span>
-                    <Button color="primary" onPress={generateAstroReport}>Generate report</Button>
-                  </div>
-                </div>
-                <div className="historical-summary astro-summary">Configured routes: {astroRoutes.length} | Locations: {astroLocations.length} | Report rows: {astroReport?.summary?.rows ?? 0} | Partial diagnostics: {astroReport?.summary?.partialRows ?? 0} | Warnings: {astroReport?.summary?.warnings ?? 0}</div>
-                {astroReportMode === 'kpi' ? <div className="overview-mini-summary astro-kpi-summary"><div className="mini-metric"><span>Eligible rit</span><strong>{astroReport?.summary?.kpi?.eligibleRows ?? 0}</strong></div><div className="mini-metric"><span>Overall pass</span><strong>{fmtPct(astroReport?.summary?.kpi?.overallRate ?? 0)}</strong></div><div className="mini-metric"><span>WH on-time</span><strong>{fmtPct(astroReport?.summary?.kpi?.whArrivalTimeRate ?? 0)}</strong></div><div className="mini-metric"><span>WH temp pass</span><strong>{fmtPct(astroReport?.summary?.kpi?.whArrivalTempRate ?? 0)}</strong></div><div className="mini-metric"><span>POD on-time</span><strong>{fmtPct(astroReport?.summary?.kpi?.podArrivalRate ?? 0)}</strong></div></div> : null}
-                {astroDiagnostics.length ? <div className="subtle-line astro-diagnostic-hint">Tanggal yang belum lengkap tetap bisa ditinjau melalui tombol Lihat tanggal error.</div> : null}
-              </CardContent>
-            </Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Astro rit summary</h2>
-                  <p>Row tetap tampil per rit. Titik yang tidak ketemu snapshot akan diisi tanda - . Urutan POD mengikuti route config.</p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {astroReport?.warnings?.length ? <div className="astro-warning-list">{astroReport.warnings.map((warning, index) => <div key={`astro-warning-${index}`} className="subtle-line">{warning}</div>)}</div> : null}
-                <DataTable className="astro-report-table" shellClassName="astro-report-table-shell" pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={astroReportColumns} rows={astroReportTableRows} emptyMessage={astroReport?.warnings?.length ? 'Belum ada rit Astro lengkap di range ini. Lihat informasi di atas untuk penyebabnya.' : 'Belum ada Astro report. Pilih rentang tanggal lalu klik Generate report.'} />
-              </CardContent>
-            </Card>
-          </> : null}
-                    {activePanel === 'temp-errors' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error overview</h2><p>Satu baris mewakili satu unit per hari agar durasi error lebih mudah dipantau.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportAlerts}>Export temp error CSV</Button></div></CardHeader><CardContent><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{errorOverview.alerts}</strong></div><div className="mini-metric"><span>Affected units</span><strong>{errorOverview.affectedUnits}</strong></div><div className="mini-metric"><span>Critical</span><strong>{errorOverview.criticalAlerts}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(errorOverview.totalMinutes, 1)}</strong></div></div></CardContent></Card>
-            <div className="split-panels split-panels-tall">
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Temp error incidents</h2><p>Klik baris untuk membuka detail grafik unit terkait.</p></div></CardHeader><CardContent><DataTable className="temp-error-table" shellClassName="temp-error-table-shell" pagination={{ initialRowsPerPage: 5, rowsPerPageOptions: [5, 10, 20, 50] }} columns={['Tanggal', 'Mulai', 'Selesai', 'Durasi', 'Account', 'Nopol', 'Severity', 'Temp 1', 'Temp 2', 'Speed']} emptyMessage="Belum ada temp error incident di range ini." rows={errorRows.map((row) => [row.day ? fmtDateOnly(row.day) : '-', row.startTime || '-', row.endTime || '-', row.durationMinutes != null ? fmtNum(row.durationMinutes, 1) : '-', row.accountLabel || row.accountId || '-', <div><strong>{row.unitLabel || row.unitId}</strong><div className="subtle-line">{row.unitId}</div></div>, <Chip className="wrap-chip" color={row.type === 'temp1+temp2' ? 'danger' : 'warning'} variant="flat">{row.label}</Chip>, `${fmtNum(row.temp1Min)} to ${fmtNum(row.temp1Max)}`, `${fmtNum(row.temp2Min)} to ${fmtNum(row.temp2Max)}`, `${fmtNum(row.minSpeed, 0)} - ${fmtNum(row.maxSpeed, 0)}`])} getRowProps={(row, rowIndex) => ({ key: `${errorRows[rowIndex]?.accountId || 'account'}-${errorRows[rowIndex]?.unitId || 'alert'}-${errorRows[rowIndex]?.day || rowIndex}`, className: errorRows[rowIndex]?.type === 'temp1+temp2' ? 'data-row data-row-danger' : 'data-row data-row-warning', onClick: () => openUnit(errorRows[rowIndex].accountId || 'primary', errorRows[rowIndex].unitId, 'temp-errors') })} /></CardContent></Card>
-              <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Selected unit chart</h2><p>Grafik suhu untuk unit yang dipilih dari daftar error.</p></div></CardHeader><CardContent>{selectedFleetRow ? <><div className="focus-side-meta"><strong>{selectedFleetRow.id} | {selectedFleetRow.label}</strong><div className="subtle-line">{selectedFleetRow.accountLabel || selectedFleetRow.accountId}</div><div className="subtle-line">{selectedFleetRow.locationSummary || '-'}</div></div><TemperatureChart records={unitDetail?.records || []} busy={detailBusy} title="Sensor trend" description="Grafik menampilkan data historical Solofleet sesuai tanggal aktif yang dipilih." compact /></> : <div className="empty-state">Klik salah satu incident buat lihat chart unit.</div>}</CardContent></Card>
-            </div>
-          </> : null}
-          {activePanel === 'temp-errors' ? <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Unit compile by day</h2><p>Section ini selalu 1 hari 1 row. Detail unit tetap dipakai waktu export CSV.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={exportCompile}>Export compile CSV</Button></div></CardHeader><CardContent><DataTable columns={['Day', 'Error units', 'Temp1 units', 'Temp2 units', 'Both units', 'Incidents', 'Total min', 'Longest']} emptyMessage="Belum ada compile error by day di range ini." rows={compileDailyRows.map((row) => [row.day, row.units, row.temp1Units, row.temp2Units, row.bothUnits, row.incidents, fmtNum(row.totalMinutes, 1), fmtNum(row.longestMinutes, 1)])} /></CardContent></Card> : null}
+          {activePanel === 'astro-report' ? <AstroReportPanel
+            astroReportFilters={astroReportFilters}
+            setAstroReportFilters={setAstroReportFilters}
+            astroReportMode={astroReportMode}
+            setAstroReportMode={setAstroReportMode}
+            astroReport={astroReport}
+            astroRoutes={astroRoutes}
+            astroLocations={astroLocations}
+            astroReportAccountOptions={astroReportAccountOptions}
+            astroReportVisibleRouteOptions={astroReportVisibleRouteOptions}
+            astroReportColumns={astroReportColumns}
+            astroReportTableRows={astroReportTableRows}
+            astroDiagnostics={astroDiagnostics}
+            astroDiagnosticRows={astroDiagnosticRows}
+            astroDiagnosticsOpen={astroDiagnosticsOpen}
+            setAstroDiagnosticsOpen={setAstroDiagnosticsOpen}
+            onGenerateReport={generateAstroReport}
+            onExportReport={exportAstroReport}
+            fmtPct={fmtPct}
+            SearchableSelect={SearchableSelect}
+            DataTable={DataTable}
+          /> : null}
+          {activePanel === 'temp-errors' ? <TempErrorsPanel
+            errorRows={errorRows}
+            errorOverview={errorOverview}
+            compileDailyRows={compileDailyRows}
+            selectedFleetRow={selectedFleetRow}
+            unitDetail={unitDetail}
+            detailBusy={detailBusy}
+            onExportAlerts={exportAlerts}
+            onExportCompile={exportCompile}
+            onOpenUnit={(accountId, unitId) => openUnit(accountId, unitId, 'temp-errors')}
+            fmtDate={fmtDate}
+            fmtDateOnly={fmtDateOnly}
+            fmtNum={fmtNum}
+            DataTable={DataTable}
+            TemperatureChart={TemperatureChart}
+          /> : null}
           {activePanel === 'historical' ? <HistoricalPanel
             fleetRows={fleetRows}
             historicalFleet={historicalFleet}
@@ -3940,10 +3919,19 @@ export default function App() {
             fmtNum={fmtNum}
           /> : null}
 
-          {activePanel === 'stop' ? <>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop / idle explorer</h2><p>Analisis stop dan idle berdasarkan report Solofleet untuk unit yang dipilih.</p></div></CardHeader><CardContent><div className="form-grid form-grid-stop"><label className="field"><span>Unit</span><select value={`${stopForm.accountId}::${stopForm.unitId}`} onChange={(event) => { const [accountId, unitId] = event.target.value.split('::'); setStopForm((current) => ({ ...current, accountId: accountId || 'primary', unitId: unitId || '' })); }}>{fleetRows.map((row) => <option key={row.rowKey || `${row.accountId}-${row.id}`} value={`${row.accountId || 'primary'}::${row.id}`}>{accountName({ id: row.accountId, label: row.accountLabel })} | {row.id} | {row.label}</option>)}</select></label><label className="field"><span>Report type</span><select value={stopForm.reportType} onChange={(event) => setStopForm((current) => ({ ...current, reportType: event.target.value }))}><option value="1">Stop Engine Report</option><option value="2">Idle Engine Report</option><option value="3">Speed-based idle/stop Report</option></select></label><label className="field"><span>Min duration (min)</span><input type="number" min="0" value={stopForm.minDuration} onChange={(event) => setStopForm((current) => ({ ...current, minDuration: event.target.value }))} /></label><div className="field field-actions"><Button color="primary" onPress={loadStopReport}>Analyze stop / idle</Button><Button variant="bordered" onPress={exportStop}>Export stop CSV</Button></div></div></CardContent></Card>
-            <Card className="panel-card"><CardHeader className="panel-card-header"><div><h2>Stop/idle result</h2><p>Lihat durasi, lokasi, suhu rata-rata, dan tautan peta untuk setiap hasil stop atau idle.</p></div></CardHeader><CardContent>{stopReport ? <><div className="metric-strip"><div className="mini-metric"><span>Rows</span><strong>{stopReport.summary?.incidents ?? '-'}</strong></div><div className="mini-metric"><span>Total min</span><strong>{fmtNum(stopReport.summary?.totalMinutes, 1)}</strong></div><div className="mini-metric"><span>Longest</span><strong>{fmtNum(stopReport.summary?.longestMinutes, 1)}</strong></div><div className="mini-metric"><span>With lat/lng</span><strong>{stopReport.summary?.withLocation ?? '-'}</strong></div></div><div className="spacer-16" /><DataTable columns={['Start', 'End', 'Minutes', 'Distance', 'Avg temp', 'Location', 'Lat', 'Lng', 'Zone', 'Engine', 'Maps']} emptyMessage="Belum ada row stop/idle di range ini." rows={stopReport.rows.map((row) => [fmtDate(row.startTimestamp), fmtDate(row.endTimestamp), fmtNum(row.durationMinutes, 1), fmtNum(row.movementDistance, 1), fmtNum(row.avgTemp, 1), row.locationSummary || '-', fmtCoord(row.latitude), fmtCoord(row.longitude), row.zoneName || row.zoneBoundary || '-', row.engineDetected === 1 ? 'idle' : row.engineDetected === 0 ? 'stop' : '-', row.googleMapsUrl ? <Link href={row.googleMapsUrl} target="_blank">Open map</Link> : '-'])} /></> : <div className="empty-state">Klik Analyze stop / idle buat ambil report dari Solofleet.</div>}</CardContent></Card>
-          </> : null}
+          {activePanel === 'stop' ? <StopIdlePanel
+            stopForm={stopForm}
+            setStopForm={setStopForm}
+            stopReport={stopReport}
+            fleetRows={fleetRows}
+            onLoadReport={loadStopReport}
+            onExportStop={exportStop}
+            accountName={accountName}
+            fmtDate={fmtDate}
+            fmtNum={fmtNum}
+            fmtCoord={fmtCoord}
+            DataTable={DataTable}
+          /> : null}
         </div>
 
         
@@ -3971,7 +3959,7 @@ export default function App() {
           fmtCoord={fmtCoord}
           formatMinutesText={formatMinutesText}
         />)}
-        {astroDiagnosticsOpen ? <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}><Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}><CardHeader className="panel-card-header"><div><p className="eyebrow local-eyebrow">Astro Diagnostics</p><h2>Tanggal yang tidak complete</h2><p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p></div><div className="inline-buttons"><Button variant="bordered" onPress={() => setAstroDiagnosticsOpen(false)}>Close</Button></div></CardHeader><CardContent><DataTable pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }} columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']} rows={astroDiagnosticRows} emptyMessage="Belum ada tanggal error untuk report ini." /></CardContent></Card></div> : null}
+        {/* Astro diagnostics modal now rendered inside AstroReportPanel */}
 
       {/* Fleet detail modal removed - selected unit detail now renders inline inside FleetWorkspace */}
       
