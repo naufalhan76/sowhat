@@ -28,6 +28,7 @@ import { HistoricalPanel } from './components/HistoricalPanel.jsx';
 import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
 import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
 import { AstroReportPanel } from './components/AstroReportPanel.jsx';
+import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
 import { StopIdlePanel } from './components/StopIdlePanel.jsx';
 
@@ -1584,7 +1585,7 @@ export default function App() {
     if (dashboardAbortRef.current) dashboardAbortRef.current.abort();
   }, []);
 
-  // Global Ctrl+K / Cmd+K â†’ command palette
+  // Global Ctrl+K / Cmd+K -> command palette
   useEffect(() => {
     const handleGlobalKey = (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
@@ -3616,83 +3617,20 @@ export default function App() {
               </CardContent>
             </Card>
           </> : null}
-                    {activePanel === 'map' ? <>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Fleet map overview</h2><p>Peta posisi unit live dengan warna marker berdasarkan status utama setiap unit.</p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="fleet-filter-bar">
-                  <label className="field fleet-filter-field">
-                    <span>Account filter</span>
-                    <select value={mapAccountFilter} onChange={(event) => setMapAccountFilter(event.target.value)}>
-                      <option value="all">All accounts</option>
-                      {fleetFilterAccounts.map((account) => <option key={account.id} value={account.id}>{account.label || account.authEmail || account.id}</option>)}
-                    </select>
-                  </label>
-                  <label className="field fleet-filter-field fleet-map-search-field">
-                    <span>Search nopol / unit</span>
-                    <div className="search-box historical-search-box">
-                      <Search size={16} className="search-icon" />
-                      <input type="search" value={mapSearch} onChange={(event) => setMapSearch(event.target.value)} placeholder="Cari nopol, unit, account, lokasi..." />
-                    </div>
-                  </label>
-                </div>
-                <div className="fleet-table-summary">
-                  <span>{mapFleetRows.length} unit tampil di map</span>
-                  <span>{mapAccountFilter === 'all' ? 'Semua account' : accountName(fleetFilterAccounts.find((account) => account.id === mapAccountFilter))} | {deferredMapSearch ? `Filter: ${deferredMapSearch}` : 'Tanpa search filter'}</span>
-                </div>
-                <FleetStatusMap rows={mapFleetRows} />
-              </CardContent>
-            </Card>
-            <Card className="panel-card">
-              <CardHeader className="panel-card-header">
-                <div>
-                  <h2>Unit per wilayah</h2><p>Ringkasan unit live per wilayah berdasarkan alamat yang terbaca dari Solofleet.</p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {mapRegionSummary.length ? <div className="region-summary-grid">
-                  {mapRegionSummary.map((group) => {
-                    const pageSize = 5;
-                    const totalPages = Math.max(1, Math.ceil(group.rows.length / pageSize));
-                    const currentPage = Math.min(totalPages, Math.max(1, mapRegionPages[group.region] || 1));
-                    const startIndex = (currentPage - 1) * pageSize;
-                    const visibleRows = group.rows.slice(startIndex, startIndex + pageSize);
-                    return <div key={group.region} className="region-summary-card">
-                      <div className="region-summary-head">
-                        <strong>{group.region}</strong>
-                        <Chip variant="flat">{group.rows.length} unit</Chip>
-                      </div>
-                      <div className="region-unit-list">
-                        {visibleRows.map((row) => {
-                          const statusMeta = getMapStatusMeta(row);
-                          return <div key={row.rowKey || `${row.accountId || 'primary'}::${row.id}`} className="region-unit-item">
-                            <span className="region-unit-dot" style={{ backgroundColor: statusMeta.color }} />
-                            <div>
-                              <strong>{row.label || row.id}</strong>
-                              <div className="subtle-line">{row.id} | {statusMeta.label}</div>
-                            </div>
-                          </div>;
-                        })}
-                      </div>
-                      {group.rows.length > pageSize ? <div className="region-summary-pagination">
-                        <div className="table-pagination-meta">Page {currentPage} of {totalPages}</div>
-                        <div className="table-pagination-controls">
-                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: 1 }))} disabled={currentPage <= 1}>{'<<'}</button>
-                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: Math.max(1, currentPage - 1) }))} disabled={currentPage <= 1}>{'<'}</button>
-                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: Math.min(totalPages, currentPage + 1) }))} disabled={currentPage >= totalPages}>{'>'}</button>
-                          <button type="button" className="table-page-button" onClick={() => setMapRegionPages((current) => ({ ...current, [group.region]: totalPages }))} disabled={currentPage >= totalPages}>{'>>'}</button>
-                        </div>
-                      </div> : null}
-                    </div>;
-                  })}
-                </div> : <div className="empty-state">Belum ada unit live yang bisa digroup per wilayah.</div>}
-              </CardContent>
-            </Card>
-          </> : null}
+                    {activePanel === 'map' ? <MapPanel
+            mapFleetRows={mapFleetRows}
+            mapRegionSummary={mapRegionSummary}
+            mapSearch={mapSearch}
+            setMapSearch={setMapSearch}
+            mapAccountFilter={mapAccountFilter}
+            setMapAccountFilter={setMapAccountFilter}
+            fleetFilterAccounts={fleetFilterAccounts}
+            accountName={accountName}
+            getMapStatusMeta={getMapStatusMeta}
+            resolveFleetRegion={resolveFleetRegion}
+            buildTruckDivIcon={buildTruckDivIcon}
+            fmtNum={fmtNum}
+          /> : null}
           {activePanel === 'astro-report' ? <AstroReportPanel
             astroReportFilters={astroReportFilters}
             setAstroReportFilters={setAstroReportFilters}
@@ -4329,7 +4267,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             <h2>{row.label || row.alias || '-'}</h2>
             <span className={`fleet-workspace-detail-state fleet-workspace-detail-state-${state.tone}`}>{state.label}</span>
           </div>
-          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} Â· {row.locationSummary || row.zoneName || 'No location'}</p>
+          <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
             {row.unitCategoryLabel ? <Chip variant="flat">{row.unitCategoryLabel}</Chip> : null}
             {row.customerName ? <Chip variant="flat">{row.customerName}</Chip> : null}
@@ -4400,7 +4338,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             compact
             thresholdMin={tmsThreshold?.min ?? null}
             thresholdMax={tmsThreshold?.max ?? null}
-            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS Â· ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
+            thresholdLabel={tmsThreshold ? (tmsThreshold.jobOrderId ? `TMS · ${tmsThreshold.jobOrderId}` : 'TMS range') : 'Setpoint'}
           />
         </div>
       </div>
@@ -5089,10 +5027,10 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
             return <g key={`guide-${index}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--chart-guide-stroke)" strokeDasharray="2 4" />
               <line x1={padding.left - 4} x2={padding.left} y1={y} y2={y} stroke="var(--chart-axis-stroke)" strokeWidth="1" />
-              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}Â°</text>
+              <text x={padding.left - 8} y={y + 3.5} fontSize="11" textAnchor="end" fill="var(--chart-guide-text)" className="chart-axis-tick">{Number(value).toFixed(0)}°</text>
             </g>;
           })}
-        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (Â°C)</text>
+        <text x={14} y={padding.top + (height - padding.top - padding.bottom) / 2} fontSize="10" textAnchor="middle" fill="var(--chart-axis-label)" className="chart-axis-label" transform={`rotate(-90 14 ${padding.top + (height - padding.top - padding.bottom) / 2})`}>Temperature (°C)</text>
         {thresholdGuides.length === 2 ? (() => {
           const yMin = yFor(thresholdGuides[0].value);
           const yMax = yFor(thresholdGuides[1].value);
@@ -5106,7 +5044,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
             if (y === null) return null;
             return <g key={`threshold-${guide.key}`}>
               <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke={guide.color} strokeWidth="1" strokeDasharray="6 5" opacity="0.75" />
-              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} Â· {fmtNum(guide.value, 1)}Â°</text>
+              <text x={width - padding.right - 6} y={y - 4} textAnchor="end" fontSize="10" fill={guide.color} className="chart-axis-tick">{guide.label} · {fmtNum(guide.value, 1)}°</text>
             </g>;
           })}
         {timeGuides.map((value, index) => {
