@@ -28,6 +28,7 @@ export function CommandBar({
   onPollNow,
   onTogglePolling,
   isPolling,
+  busy,
 }) {
   const title = PANEL_TITLES[activePanel] || 'Workspace';
   return (
@@ -70,7 +71,7 @@ export function CommandBar({
 
         <div className="command-bar-actions">
           {onRefresh ? (
-            <button type="button" className="command-bar-icon-btn" onClick={onRefresh} title="Refresh" aria-label="Refresh">
+            <button type="button" className="command-bar-icon-btn" onClick={onRefresh} disabled={busy} title="Refresh" aria-label="Refresh">
               <RefreshCw size={14} strokeWidth={1.75} />
             </button>
           ) : null}
@@ -96,7 +97,7 @@ export function CommandBar({
             </button>
           ) : null}
           {onPollNow ? (
-            <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow}>
+            <Action variant="primary" size="sm" startIcon={<Zap size={13} strokeWidth={1.75} />} onClick={onPollNow} disabled={busy} loading={busy}>
               Poll now
             </Action>
           ) : null}
