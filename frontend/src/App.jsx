@@ -3404,6 +3404,7 @@ export default function App() {
             rows={prioritizedFleet}
             selectedRow={selectedFleetRow}
             onSelectUnit={(row) => openUnit(row.accountId || 'primary', row.id, 'fleet')}
+            onBack={() => { setSelectedUnitId(''); setSelectedUnitAccountId('primary'); }}
             detail={unitDetail}
             detailBusy={detailBusy}
             quickFilter={quickFilter}
@@ -4533,7 +4534,7 @@ function FleetExpandedDetails({ row, detail, busy, onOpenTempErrors, onSeeHistor
 const FLEET_WORKSPACE_SPLIT_KEY = 'sowhat:fleet-workspace-split';
 const FLEET_WORKSPACE_SPLIT_MIN = 0.45;
 const FLEET_WORKSPACE_SPLIT_MAX = 0.92;
-const FLEET_WORKSPACE_SPLIT_DEFAULT = 0.82;
+const FLEET_WORKSPACE_SPLIT_DEFAULT = 0.88;
 
 function readFleetWorkspaceSplit() {
   if (typeof window === 'undefined') return FLEET_WORKSPACE_SPLIT_DEFAULT;
@@ -4553,6 +4554,7 @@ function FleetWorkspace({
   rows,
   selectedRow,
   onSelectUnit,
+  onBack,
   detail,
   detailBusy,
   quickFilter,
@@ -4706,6 +4708,7 @@ function FleetWorkspace({
             rangeLabel={rangeLabel}
             onOpenTempErrors={() => onOpenTempErrors(selectedRow)}
             onSeeHistorical={() => onSeeHistorical(selectedRow)}
+            onBack={onBack}
             tripMonitorRows={tripMonitorRows}
           />
         ) : (
@@ -4718,7 +4721,7 @@ function FleetWorkspace({
   );
 }
 
-function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, tripMonitorRows = [] }) {
+function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors, onSeeHistorical, onBack, tripMonitorRows = [] }) {
   const [splitRatio, setSplitRatio] = useState(() => readFleetWorkspaceSplit());
   const splitContainerRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -4795,6 +4798,7 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
     <div className="fleet-workspace-detail-shell">
       <header className="fleet-workspace-detail-head">
         <div className="fleet-workspace-detail-title">
+          {onBack ? <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button> : null}
           <h2>{row.label || row.alias || '-'}</h2>
           <p className="fleet-workspace-detail-meta">{row.accountLabel || row.accountId || '-'} · {row.locationSummary || row.zoneName || 'No location'}</p>
           <div className="fleet-workspace-detail-chips">
@@ -5371,7 +5375,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
   const width = 860;
   const height = Number.isFinite(Number(chartHeight)) && Number(chartHeight) > 0
     ? Number(chartHeight)
-    : compact ? 240 : 320;
+    : compact ? 180 : 240;
   const padding = { top: 18, right: 24, bottom: 44, left: 56 };
   const thresholdValues = [normalizedThresholdRange.min, normalizedThresholdRange.max].filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     const temps = series.flatMap((record) => [record.temp1, record.temp2]).filter((value) => value !== null && value !== undefined).concat(thresholdValues);
