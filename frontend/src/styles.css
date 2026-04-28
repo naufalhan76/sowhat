@@ -11099,13 +11099,13 @@ html, body {
     border-right: none;
   }
 
-  /* Show back button + pager on mobile */
+  /* Show back button + unit picker on mobile */
   .fleet-workspace-detail-back {
     display: inline-flex !important;
   }
 
-  .fleet-workspace-detail-pager {
-    display: inline-flex;
+  .fleet-workspace-detail-picker {
+    display: flex;
   }
 }
 
@@ -11570,7 +11570,7 @@ html, body {
   color: var(--primary);
 }
 
-/* Nav row: back + pager */
+/* Nav row: back + unit picker */
 .fleet-workspace-detail-nav {
   display: flex;
   align-items: center;
@@ -11579,43 +11579,31 @@ html, body {
   margin-bottom: 4px;
 }
 
-.fleet-workspace-detail-pager {
+.fleet-workspace-detail-picker {
   display: none;
-  align-items: center;
-  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  max-width: 200px;
 }
 
-.fleet-workspace-detail-pager-btn {
-  appearance: none;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-main);
-  width: 28px;
+.fleet-workspace-detail-picker .searchable-field {
+  margin-bottom: 0;
+}
+
+.fleet-workspace-detail-picker .searchable-field > span {
+  display: none;
+}
+
+.fleet-workspace-detail-picker .searchable-trigger {
   height: 28px;
-  border-radius: 5px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 120ms ease;
+  font-size: 11.5px;
+  padding: 0 8px;
 }
 
-.fleet-workspace-detail-pager-btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-
-.fleet-workspace-detail-pager-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.fleet-workspace-detail-pager-label {
-  font-family: var(--font-mono);
-  font-feature-settings: 'tnum' 1;
-  font-size: 11px;
-  color: var(--text-muted);
-  min-width: 40px;
-  text-align: center;
+.fleet-workspace-detail-picker .searchable-dropdown {
+  min-width: 240px;
+  right: 0;
+  left: auto;
 }
 
 .fleet-workspace-detail-chips .pill {
@@ -14513,10 +14501,8 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     flex: 0 0 auto;
   }
   .bridge-shell .command-bar-search-kbd {
-    display: none;
-  }
-  .bridge-shell .command-bar-divider {
-    display: none;
+    font-size: 10px;
+    padding: 1px 4px;
   }
   .bridge-shell .command-bar-range input[type='date'] {
     width: 90px;
@@ -14606,12 +14592,12 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     display: flex;
   }
 
-  /* Fleet detail: show back button + pager on mobile */
+  /* Fleet detail: show back button + unit picker on mobile */
   .fleet-workspace-detail-back {
     display: inline-flex !important;
   }
-  .fleet-workspace-detail-pager {
-    display: inline-flex;
+  .fleet-workspace-detail-picker {
+    display: flex;
   }
 }
 
@@ -14622,9 +14608,9 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     grid-template-columns: 1fr !important;
   }
 
-  /* Command bar: compact but keep search */
+  /* Command bar: compact, keep ALL components visible */
   .bridge-shell .command-bar {
-    padding: 0 8px 0 44px;
+    padding: 0 6px 0 44px;
     gap: 4px;
   }
   .bridge-shell .command-bar-center {
@@ -14637,13 +14623,32 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
     min-width: 0 !important;
   }
   .bridge-shell .command-bar-search-kbd {
-    display: none;
+    font-size: 9px;
+    padding: 1px 3px;
   }
   .bridge-shell .command-bar-range {
-    display: none; /* hide date range on phone */
+    flex: 0 0 auto;
+    gap: 2px;
+  }
+  .bridge-shell .command-bar-range input[type='date'] {
+    width: 80px;
+    font-size: 10px !important;
+    padding: 2px 4px;
+  }
+  .bridge-shell .command-bar-range-sep {
+    display: none;
   }
   .bridge-shell .command-bar-title-text {
     font-size: 13px;
+  }
+  .bridge-shell .command-bar-right {
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .bridge-shell .command-bar-right::-webkit-scrollbar {
+    display: none;
   }
 
   /* Workspace: minimal padding */

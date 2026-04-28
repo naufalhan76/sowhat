@@ -4260,9 +4260,11 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
     return { min: range.min, max: range.max, jobOrderId: match.jobOrderId || null };
   }, [tripMonitorRows, row?.label, row?.alias, row?.id]);
 
-  const currentIndex = allRows.findIndex((r) => unitRowKey(r) === detailKey);
-  const prevRow = currentIndex > 0 ? allRows[currentIndex - 1] : null;
-  const nextRow = currentIndex >= 0 && currentIndex < allRows.length - 1 ? allRows[currentIndex + 1] : null;
+  const unitPickerOptions = useMemo(() => allRows.map((r) => ({
+    value: unitRowKey(r),
+    label: r.label || r.alias || r.id || '-',
+    preview: `${r.label || r.id} · ${health(r).label}`,
+  })), [allRows]);
 
   return (
     <div className="fleet-workspace-detail-shell">
@@ -4272,11 +4274,18 @@ function FleetWorkspaceDetail({ row, detail, busy, rangeLabel, onOpenTempErrors,
             <div className="fleet-workspace-detail-nav">
               <button type="button" className="fleet-workspace-detail-back" onClick={onBack} aria-label="Back to fleet list"><ChevronLeft size={16} strokeWidth={2} /><span>Fleet</span></button>
               {onSelectUnit && allRows.length > 1 ? (
-                <span className="fleet-workspace-detail-pager">
-                  <button type="button" className="fleet-workspace-detail-pager-btn" onClick={() => prevRow && onSelectUnit(prevRow)} disabled={!prevRow} aria-label="Unit sebelumnya"><ChevronLeft size={14} /></button>
-                  <span className="fleet-workspace-detail-pager-label">{currentIndex + 1}/{allRows.length}</span>
-                  <button type="button" className="fleet-workspace-detail-pager-btn" onClick={() => nextRow && onSelectUnit(nextRow)} disabled={!nextRow} aria-label="Unit berikutnya"><ChevronRight size={14} /></button>
-                </span>
+                <div className="fleet-workspace-detail-picker">
+                  <SearchableSelect
+                    label=""
+                    value={detailKey}
+                    options={unitPickerOptions}
+                    onChange={(nextKey) => {
+                      const target = allRows.find((r) => unitRowKey(r) === nextKey);
+                      if (target) onSelectUnit(target);
+                    }}
+                    placeholder="Cari unit..."
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
