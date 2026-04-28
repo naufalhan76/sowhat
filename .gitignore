@@ -7,5 +7,22 @@ data/
 .tmp-local-server-*.txt
 .env
 .env.*
+env.local
+!.env.local.example
+!.env.example
 *.log
 *.bak-*
+
+# Agent / tool artifacts
+.agents/
+.opencode/
+.claude/
+.playwright-mcp/
+skills-lock.json
+progress/
+
+# Lock file (regenerated from package.json)
+package-lock.json
+
+# Misc
+security-retest-*.txt
