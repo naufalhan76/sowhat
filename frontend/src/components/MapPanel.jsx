@@ -422,16 +422,17 @@ export function MapPanel({
           <Maximize2 size={15} />
         </button>
 
-        {/* Mobile sidebar toggle */}
-        <button
-          type="button"
-          className="mp-sidebar-toggle"
-          onClick={() => setSidebarOpen((v) => !v)}
-          aria-label={sidebarOpen ? 'Tutup sidebar' : 'Buka sidebar'}
-        >
-          {sidebarOpen ? <X size={16} /> : <Layers size={16} />}
-        </button>
       </div>
+
+      {/* Mobile sidebar toggle — outside map area for z-index */}
+      <button
+        type="button"
+        className="mp-sidebar-toggle"
+        onClick={() => setSidebarOpen((v) => !v)}
+        aria-label={sidebarOpen ? 'Tutup sidebar' : 'Buka sidebar'}
+      >
+        {sidebarOpen ? <X size={16} /> : <Layers size={16} />}
+      </button>
     </section>
   );
 }
