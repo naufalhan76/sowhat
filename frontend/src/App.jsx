@@ -1664,6 +1664,9 @@ export default function App() {
       return next;
     });
   }, [astroRoutes]);
+  const stableRenderTemperatureChart = useCallback((props) => <TemperatureChart {...props} />, []);
+  const stableRenderUnitRouteMap = useCallback((props) => <UnitRouteMap {...props} />, []);
+
   const loadDashboard = async (syncConfig = false, quiet = false) => {
     if (dashboardAbortRef.current) dashboardAbortRef.current.abort();
     const controller = new AbortController();
@@ -3746,7 +3749,7 @@ export default function App() {
             onPullData={pullHistoricalData}
             onExportHistory={exportHistory}
             onBackToFleet={() => setActivePanel('fleet')}
-            renderTemperatureChart={(props) => <TemperatureChart {...props} />}
+            renderTemperatureChart={stableRenderTemperatureChart}
             fmtDate={fmtDate}
             fmtNum={fmtNum}
             fmtCoord={fmtCoord}
@@ -3951,8 +3954,8 @@ export default function App() {
           }}
           onMove={(position) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, position } : item))}
           onResize={(size) => setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, size } : item))}
-          renderTemperatureChart={(props) => <TemperatureChart {...props} />}
-          renderUnitRouteMap={(props) => <UnitRouteMap {...props} />}
+          renderTemperatureChart={stableRenderTemperatureChart}
+          renderUnitRouteMap={stableRenderUnitRouteMap}
           fmtDate={fmtDate}
           fmtNum={fmtNum}
           fmtCoord={fmtCoord}
@@ -4491,7 +4494,7 @@ function FleetStatusMap({ rows }) {
   </div>;
 }
 
-function UnitRouteMap({ row, records, busy, rangeLabel, stops = [], hoveredStopKey = null, onHoverStop = null }) {
+const UnitRouteMap = React.memo(function UnitRouteMap({ row, records, busy, rangeLabel, stops = [], hoveredStopKey = null, onHoverStop = null }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const containerRef = useRef(null);
@@ -4724,7 +4727,7 @@ function UnitRouteMap({ row, records, busy, rangeLabel, stops = [], hoveredStopK
       {leaflet && !busy && !hasMapData ? <div className="unit-map-overlay">Belum ada koordinat historis untuk digambar di map.</div> : null}
     </div>
   </div>;
-}
+});
 
 function OverviewDonutChart({ segments, total }) {
   const safeSegments = (segments || []).filter((segment) => Number(segment?.value || 0) > 0);
@@ -4873,7 +4876,7 @@ function niceTicks(min, max, count = 5) {
   return ticks;
 }
 
-function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
+const TemperatureChart = React.memo(function TemperatureChart({ records, busy, title, description, compact = false, chartHeight = null, thresholdMin = null, thresholdMax = null, thresholdLabel = 'Setpoint' }) {
   const chartId = useId().replace(/:/g, '');
   const normalizedThresholdRange = normalizeTemperatureRange(thresholdMin, thresholdMax);
   const fullSeries = useMemo(() => (records || [])
@@ -5142,7 +5145,7 @@ function TemperatureChart({ records, busy, title, description, compact = false, 
       </div> : null}
     </div>
   </div>;
-}
+});
 
 function SearchableSelect({ label, value, options, onChange, placeholder = 'Search option...' }) {
   const wrapperRef = useRef(null);
