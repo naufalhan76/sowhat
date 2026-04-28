@@ -27,6 +27,7 @@ import { AdminPanel } from './components/AdminPanel.jsx';
 import { HistoricalPanel } from './components/HistoricalPanel.jsx';
 import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
 import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
+import { tripMonitorStopKey } from './components/trip-monitor/helpers.jsx';
 import { AstroReportPanel } from './components/AstroReportPanel.jsx';
 import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
@@ -4398,7 +4399,7 @@ function FleetStatusMap({ rows }) {
     const layer = leaflet.layerGroup().addTo(map);
     mapRef.current = map;
     layerRef.current = layer;
-    window.setTimeout(() => map.invalidateSize(), 80);
+    window.setTimeout(() => { if (mapRef.current) map.invalidateSize(); }, 80);
     return () => {
       map.remove();
       mapRef.current = null;
@@ -4437,7 +4438,7 @@ function FleetStatusMap({ rows }) {
       else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 11 });
       lastFitKeyRef.current = plottedRowsFitKey;
     }
-    window.setTimeout(() => map.invalidateSize(), 50);
+    window.setTimeout(() => { if (mapRef.current) map.invalidateSize(); }, 50);
   }, [leaflet, plottedRows, plottedRowsFitKey]);
 
   return <div className="unit-map-shell unit-map-shell-dark fleet-status-map-shell">
