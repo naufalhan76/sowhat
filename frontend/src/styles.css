@@ -1067,6 +1067,9 @@ textarea:focus {
   letter-spacing: 0;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .data-table td {
@@ -1074,6 +1077,10 @@ textarea:focus {
   border-bottom: 1px solid var(--border);
   color: var(--text-main);
   vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .data-table tr:hover {
@@ -7247,12 +7254,19 @@ h1, h2, h3, h4, h5, h6 {
   position: sticky;
   top: 0;
   z-index: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .data-table td {
   padding: 9px 12px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .data-row:hover {
@@ -15814,6 +15828,31 @@ body {
 }
 .bridge-shell .astro-report-table {
   table-layout: fixed;
+}
+
+.bridge-shell .data-table td > * ,
+.bridge-shell .data-table th > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bridge-shell .data-table a,
+.bridge-shell .data-table .link,
+.bridge-shell .data-table .chip-row,
+.bridge-shell .data-table .pill,
+.bridge-shell .data-table .cell-primary,
+.bridge-shell .data-table .cell-secondary {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 1280px) {
+  .bridge-shell .data-table,
+  .bridge-shell .astro-report-table {
+    table-layout: auto;
+  }
 }
 
 /* Optimize scrolling containers */
