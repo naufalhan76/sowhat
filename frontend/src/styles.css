@@ -3572,7 +3572,7 @@ textarea:focus {
 /* ── Fit-all button ── */
 .mp-fit-all-btn {
   position: absolute;
-  top: 10px;
+  top: 88px;
   right: 10px;
   z-index: 5;
   appearance: none;
@@ -3695,7 +3695,7 @@ textarea:focus {
   }
 
   .mp-fit-all-btn {
-    top: 10px;
+    top: 88px;
     right: 10px;
   }
 }
@@ -11693,30 +11693,101 @@ html, body {
 }
 
 .fleet-workspace-detail-picker .searchable-trigger {
-  height: 30px;
+  min-height: 38px;
   font-size: 12px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface-raised);
+  font-weight: 600;
+  padding: 0 12px;
+  border: 1px solid var(--border-alpha2);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--surface), var(--surface-raised));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.fleet-workspace-detail-picker .searchable-trigger.is-open {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.fleet-workspace-detail-picker .searchable-trigger-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fleet-workspace-detail-picker .searchable-trigger-icon {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .fleet-workspace-detail-picker .searchable-dropdown {
   position: fixed;
   top: auto;
-  left: 12px;
-  right: 12px;
-  bottom: 60px;
+  left: 8px;
+  right: 8px;
+  bottom: 16px;
   width: auto;
   min-width: 0;
-  max-height: 50vh;
-  border-radius: 8px;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25);
-  z-index: 200;
+  max-height: min(56vh, 420px);
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-alpha2);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  z-index: 500;
+}
+
+.fleet-workspace-detail-picker .searchable-dropdown-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.fleet-workspace-detail-picker .searchable-dropdown-search svg {
+  color: var(--text-muted);
+}
+
+.fleet-workspace-detail-picker .searchable-dropdown-search input {
+  padding: 0;
+  font-size: 14px;
+  background: transparent;
 }
 
 .fleet-workspace-detail-picker .searchable-dropdown-list {
-  max-height: calc(50vh - 52px);
+  margin-top: 10px;
+  max-height: calc(min(56vh, 420px) - 74px);
+  gap: 6px;
+  padding: 2px;
+}
+
+.fleet-workspace-detail-picker .searchable-option {
+  min-height: 42px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.fleet-workspace-detail-picker .searchable-option:hover {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.fleet-workspace-detail-picker .searchable-option.is-selected {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--primary-text);
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.16);
+}
+
+.fleet-workspace-detail-picker .searchable-empty {
+  padding: 18px 12px;
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .fleet-workspace-detail-chips .pill {
@@ -16595,7 +16666,7 @@ body {
   /* Fit-all button: above bottom sheet */
   .mp-fit-all-btn {
     bottom: auto;
-    top: 10px;
+    top: 88px;
     right: 10px;
     z-index: 3;
   }
