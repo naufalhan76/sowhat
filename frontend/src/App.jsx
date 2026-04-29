@@ -4857,6 +4857,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
   const [dragRange, setDragRange] = useState(null);
   const gradientTemp1Id = `${chartId}-colorTemp1`;
   const gradientTemp2Id = `${chartId}-colorTemp2`;
+  const requestedChartHeight = compact ? 180 : (chartHeight || 240);
   const fullSeries = useMemo(() => (records || [])
     .map((record) => {
       const timestamp = toTimestampMs(record?.timestamp) || null;
@@ -4869,19 +4870,27 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
     })
     .filter(Boolean)
     .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0)), [records]);
+  const seriesKey = useMemo(() => {
+    if (!fullSeries.length) return 'empty';
+    return `${fullSeries.length}:${fullSeries[0]?.timestamp || 0}:${fullSeries[fullSeries.length - 1]?.timestamp || 0}`;
+  }, [fullSeries]);
 
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return undefined;
     const updateSize = () => {
-      const nextWidth = Math.floor(node.clientWidth || 0);
-      const nextHeight = Math.floor(node.clientHeight || 0);
+      const rect = node.getBoundingClientRect();
+      const parentRect = node.parentElement?.getBoundingClientRect?.() || null;
+      const nextWidth = Math.floor(Math.max(node.clientWidth || 0, rect.width || 0, parentRect?.width || 0));
+      const nextHeight = Math.floor(Math.max(node.clientHeight || 0, rect.height || 0, requestedChartHeight));
       setChartSize((current) => current.width === nextWidth && current.height === nextHeight
         ? current
         : { width: nextWidth, height: nextHeight });
     };
     updateSize();
     const frameId = window.requestAnimationFrame(updateSize);
+    const delayedId = window.setTimeout(updateSize, 120);
+    const delayedIdLate = window.setTimeout(updateSize, 360);
     const observer = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(() => updateSize())
       : null;
@@ -4889,21 +4898,26 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
     window.addEventListener('resize', updateSize);
     return () => {
       window.cancelAnimationFrame(frameId);
+      window.clearTimeout(delayedId);
+      window.clearTimeout(delayedIdLate);
       observer?.disconnect();
       window.removeEventListener('resize', updateSize);
     };
-  }, [compact, chartHeight, fullSeries.length]);
+  }, [requestedChartHeight, seriesKey]);
 
   useEffect(() => {
     setZoomStack([]);
     setDragRange(null);
-  }, [records]);
+  }, [seriesKey]);
 
   const activeZoom = zoomStack.length ? zoomStack[zoomStack.length - 1] : null;
   const displayedSeries = useMemo(() => {
     if (!activeZoom) return fullSeries;
-    return fullSeries.filter((point) => point.timestamp >= activeZoom.start && point.timestamp <= activeZoom.end);
+    const next = fullSeries.filter((point) => point.timestamp >= activeZoom.start && point.timestamp <= activeZoom.end);
+    return next.length ? next : fullSeries;
   }, [fullSeries, activeZoom]);
+  const resolvedChartWidth = chartSize.width || Math.floor(stageRef.current?.getBoundingClientRect?.().width || stageRef.current?.parentElement?.getBoundingClientRect?.().width || 0);
+  const resolvedChartHeight = chartSize.height || requestedChartHeight;
 
   const handleChartMouseDown = useCallback((state) => {
     const activeLabel = Number(state?.activeLabel);
@@ -4969,12 +4983,12 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
       <div
         ref={stageRef}
         className="chart-stage"
-        style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: compact ? 180 : 200 }}
+        style={{ width: '100%', height: requestedChartHeight, minWidth: 0, minHeight: compact ? 180 : 200 }}
       >
-        {chartSize.width > 0 && chartSize.height > 0 ? (
+        {resolvedChartWidth > 0 && resolvedChartHeight > 0 ? (
           <AreaChart
-            width={chartSize.width}
-            height={chartSize.height}
+            width={resolvedChartWidth}
+            height={resolvedChartHeight}
             data={displayedSeries}
             margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
             onMouseDown={handleChartMouseDown}
