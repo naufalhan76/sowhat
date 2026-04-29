@@ -4853,6 +4853,8 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
   const chartId = useId().replace(/:/g, '');
   const stageRef = useRef(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const [zoomStack, setZoomStack] = useState([]);
+  const [dragRange, setDragRange] = useState(null);
   const gradientTemp1Id = `${chartId}-colorTemp1`;
   const gradientTemp2Id = `${chartId}-colorTemp2`;
   const fullSeries = useMemo(() => (records || [])
@@ -4892,6 +4894,51 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
     };
   }, [compact, chartHeight, fullSeries.length]);
 
+  useEffect(() => {
+    setZoomStack([]);
+    setDragRange(null);
+  }, [records]);
+
+  const activeZoom = zoomStack.length ? zoomStack[zoomStack.length - 1] : null;
+  const displayedSeries = useMemo(() => {
+    if (!activeZoom) return fullSeries;
+    return fullSeries.filter((point) => point.timestamp >= activeZoom.start && point.timestamp <= activeZoom.end);
+  }, [fullSeries, activeZoom]);
+
+  const handleChartMouseDown = useCallback((state) => {
+    const activeLabel = Number(state?.activeLabel);
+    if (!Number.isFinite(activeLabel)) return;
+    setDragRange({ start: activeLabel, end: activeLabel });
+  }, []);
+
+  const handleChartMouseMove = useCallback((state) => {
+    if (!dragRange) return;
+    const activeLabel = Number(state?.activeLabel);
+    if (!Number.isFinite(activeLabel)) return;
+    setDragRange((current) => current ? { ...current, end: activeLabel } : current);
+  }, [dragRange]);
+
+  const handleChartMouseUp = useCallback(() => {
+    if (!dragRange) return;
+    const start = Number(dragRange.start);
+    const end = Number(dragRange.end);
+    setDragRange(null);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return;
+    const nextZoom = { start: Math.min(start, end), end: Math.max(start, end) };
+    if ((nextZoom.end - nextZoom.start) < 60000) return;
+    setZoomStack((current) => [...current, nextZoom]);
+  }, [dragRange]);
+
+  const handleZoomOut = useCallback(() => {
+    setDragRange(null);
+    setZoomStack((current) => current.slice(0, -1));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setDragRange(null);
+    setZoomStack([]);
+  }, []);
+
   if (busy) return <div className="chart-empty">Loading chart...</div>;
   if (!fullSeries.length) return <div className="chart-empty">Belum ada historical temperature yang cukup buat digambar.</div>;
 
@@ -4903,6 +4950,10 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
           <p>{description}</p>
         </div>
         <div className="chart-tools">
+          <div className="chart-zoom-controls">
+            <button type="button" className="sf-btn sf-btn-light" onClick={handleZoomOut} disabled={!zoomStack.length}>Zoom out</button>
+            <button type="button" className="sf-btn sf-btn-light" onClick={handleZoomReset} disabled={!zoomStack.length && !dragRange}>Reset</button>
+          </div>
           <div className="chart-legend">
             <span><i className="legend-dot legend-dot-temp1" /> Temp 1</span>
             <span><i className="legend-dot legend-dot-temp2" /> Temp 2</span>
@@ -4921,7 +4972,15 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
         style={{ width: '100%', height: compact ? 180 : (chartHeight || 240), minWidth: 0, minHeight: compact ? 180 : 200 }}
       >
         {chartSize.width > 0 && chartSize.height > 0 ? (
-          <AreaChart width={chartSize.width} height={chartSize.height} data={fullSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <AreaChart
+            width={chartSize.width}
+            height={chartSize.height}
+            data={displayedSeries}
+            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+            onMouseDown={handleChartMouseDown}
+            onMouseMove={handleChartMouseMove}
+            onMouseUp={handleChartMouseUp}
+          >
             <defs>
         <linearGradient id={gradientTemp1Id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%" stopColor="var(--chart-temp1)" stopOpacity={0.6}/>
@@ -4939,6 +4998,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
       
       {thresholdMin != null && <ReferenceLine y={thresholdMin} stroke="var(--chart-threshold-low)" strokeDasharray="3 3" />}
       {thresholdMax != null && <ReferenceLine y={thresholdMax} stroke="var(--chart-threshold-high)" strokeDasharray="3 3" />}
+      {dragRange && Number.isFinite(dragRange.start) && Number.isFinite(dragRange.end) ? <ReferenceArea x1={Math.min(dragRange.start, dragRange.end)} x2={Math.max(dragRange.start, dragRange.end)} strokeOpacity={0} fill="var(--primary)" fillOpacity={0.12} /> : null}
       <Area type="monotone" dataKey="temp1" stroke="var(--chart-temp1)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp1Id})`} isAnimationActive={false} />
       <Area type="monotone" dataKey="temp2" stroke="var(--chart-temp2)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp2Id})`} isAnimationActive={false} />
           </AreaChart>
