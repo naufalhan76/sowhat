@@ -3233,29 +3233,36 @@ textarea:focus {
 }
 
 .mp-search-input {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .mp-search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 auto;
   color: var(--text-muted);
   pointer-events: none;
 }
 
 .mp-search-input input {
-  width: 100%;
-  padding: 8px 10px 8px 38px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface-raised);
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-main);
   outline: none;
   appearance: none;
   -webkit-appearance: none;
-  transition: border-color 120ms ease;
+  box-shadow: none;
+  transition: none;
 }
 
 .mp-search-input input::-webkit-search-decoration,
@@ -3265,7 +3272,7 @@ textarea:focus {
   -webkit-appearance: none;
 }
 
-.mp-search-input input:focus {
+.mp-search-input:focus-within {
   border-color: var(--border-strong);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
