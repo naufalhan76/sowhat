@@ -1143,6 +1143,14 @@ textarea:focus {
   gap: 16px;
   font-size: 12px;
   color: var(--text-muted);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .legend-item {
@@ -1152,9 +1160,12 @@ textarea:focus {
 }
 
 .legend-dot {
+  display: inline-block;
+  flex: 0 0 auto;
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 65%, transparent);
 }
 
 .dot-t1 {
