@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
-import { tmsSeverityLabel, pickFirstText } from './helpers.jsx';
+import { tmsSeverityLabel, pickFirstText, normalizeTmsDriverAssign, extractTmsDriverName, normalizeTemperatureRange } from './helpers.jsx';
 import { TripMonitorDetailModal } from './TripMonitorDetailModal.jsx';
+import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
 
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 const MIN_WIDTH = 360;
@@ -176,6 +177,22 @@ export function TripMonitorFloatingPanel({
     ? pickFirstText(detail.metadata?.fleetRow?.alias, detail.unitLabel, detail.metadata?.fleetRow?.label, detail.unitId)
     : 'Loading...';
 
+  const headerDerived = useMemo(() => {
+    if (!detail) return null;
+    const jobOrders = Array.isArray(detail?.metadata?.jobOrders) ? detail.metadata.jobOrders : [];
+    const headlineJob = detail?.metadata?.headlineJobOrder || jobOrders[0] || null;
+    const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
+    const jobDrivers = headlineDrivers.length ? headlineDrivers : jobOrders.flatMap((job) => normalizeTmsDriverAssign(job?.driverAssign));
+    const shippingStatus = detail?.metadata?.shippingStatus || { label: detail?.shippingStatusLabel || '-', changedAt: null, steps: [] };
+    return {
+      headlineJob,
+      shippingStatus,
+      routeSummary: headlineJob ? `${headlineJob.originName || '-'} -> ${headlineJob.destinationName || '-'}` : '-',
+      driver1Name: extractTmsDriverName(jobDrivers[0]),
+      driver2Name: extractTmsDriverName(jobDrivers[1]),
+    };
+  }, [detail]);
+
   return (
     <div
       ref={panelRef}
@@ -202,25 +219,39 @@ export function TripMonitorFloatingPanel({
       ))}
 
       <div className="tm-float-header" onPointerDown={handleDragStart}>
-        <div className="tm-float-title-block">
-          <h3 className="tm-float-title">{displayLabel || '-'}</h3>
-          <div className="tm-float-meta">
-            <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail?.severity)}</span>
-            <span className="tm-brand-chip">{detail?.customerName || 'No customer'}</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="tm-float-close"
-          onClick={(event) => {
-            event.stopPropagation();
-            onClose?.();
-          }}
-          aria-label="Close panel"
-          title="Close (Esc)"
-        >
-          <X size={16} />
-        </button>
+        {detail && headerDerived ? (
+          <TripMonitorDetailHeader
+            detail={detail}
+            headlineJob={headerDerived.headlineJob}
+            shippingStatus={headerDerived.shippingStatus}
+            eta={detail.eta}
+            overrideActive={detail.overrideActive}
+            isStale={detail.isStale}
+            refreshing={detail.refreshing}
+            onClose={onClose}
+            onRefresh={detail.onRefresh}
+            onForceClose={detail.onForceClose}
+            onOverrideBadge={detail.onOverrideBadge}
+            onWaDriver={detail.onWaDriver}
+            onShippingStatusOverride={detail.onShippingStatusOverride}
+            displayUnitLabel={displayLabel || '-'}
+            driver1Name={headerDerived.driver1Name}
+            driver2Name={headerDerived.driver2Name}
+            routeSummary={headerDerived.routeSummary}
+            severityKey={severityKey}
+            customerName={detail.customerName}
+            tmsSeverityLabel={tmsSeverityLabel}
+          />
+        ) : (
+          <>
+            <div className="tm-float-title-block">
+              <h3 className="tm-float-title">{displayLabel || '-'}</h3>
+            </div>
+            <button type="button" className="tm-float-close" onClick={(event) => { event.stopPropagation(); onClose?.(); }} aria-label="Close panel" title="Close (Esc)">
+              <X size={16} />
+            </button>
+          </>
+        )}
       </div>
 
       <div className="tm-float-body">
