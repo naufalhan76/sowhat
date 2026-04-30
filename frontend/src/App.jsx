@@ -1802,6 +1802,28 @@ export default function App() {
       }
       startTransition(() => {
         setTripMonitorBoard({ rows: payload.rows || [], summary: payload.summary || null });
+        
+        // After loading board, check if any open detail panel is now stale
+        setTripMonitorPanels(current => current.map(panel => {
+          if (!panel.detail) return panel;
+          
+          const updatedRow = (payload.rows || []).find(r => r.rowId === panel.detail.rowId);
+          if (!updatedRow) return panel;
+          
+          const isStale = 
+            String(panel.detail.severity || '').toLowerCase() !== String(updatedRow.severity || '').toLowerCase() ||
+            String(panel.detail.shippingStatusLabel || '').toLowerCase() !== String(updatedRow.shippingStatusLabel || '').toLowerCase();
+            
+          if (panel.detail.isStale === isStale) return panel;
+          
+          return {
+            ...panel,
+            detail: {
+              ...panel.detail,
+              isStale
+            }
+          };
+        }));
       });
       return payload;
     } catch (error) {
