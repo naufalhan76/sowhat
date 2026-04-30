@@ -1,0 +1,6 @@
+[dotenv@17.3.1] injecting env (1) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+Solofleet auto monitor running at http://127.0.0.1:3000
+[Boot] Starting sequential poll cycle FIRST, Astro snapshot will wait...
+[Poll] === ACTIVE TRIP MONITOR UNITS: 0 ===
+[Boot] Poll cycle complete. Now scheduling Astro snapshot...

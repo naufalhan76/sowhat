@@ -11,4 +11,8 @@ export { TripMonitorIncidentLegend } from './TripMonitorIncidentLegend.jsx';
 export { TripMonitorShippingProgress, TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
 export { TripMonitorStopsEditor } from './TripMonitorStopsEditor.jsx';
 export { TripMonitorMapPicker } from './TripMonitorMapPicker.jsx';
+export { TripMonitorDeepDiveShell } from './TripMonitorDeepDiveShell.jsx';
+export { TripMonitorHistoricalView } from './TripMonitorHistoricalView.jsx';
+export { TripMonitorIncidentView } from './TripMonitorIncidentView.jsx';
+export { TripMonitorAuditLogView } from './TripMonitorAuditLogView.jsx';
 
