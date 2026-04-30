@@ -10468,38 +10468,53 @@ async function handleApi(req, res, url) {
         throw new Error('rowId wajib diisi.');
       }
       const result = await postgresQuery('select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
-      if (!result.rows[0]) {
+      const storedRow = result.rows[0];
+      if (!storedRow) {
         console.warn(`[TMS] Detail miss for row ${rowId}`);
         throw new Error('Trip monitor detail tidak ditemukan.');
       }
       const now = Date.now();
-      let refreshed = refreshTripMonitorStoredRow({
-        rowId: result.rows[0].row_id,
-        day: String(result.rows[0].day || ''),
-        tenantLabel: String(result.rows[0].tenant_label || ''),
-        customerName: String(result.rows[0].customer_name || ''),
-        unitKey: String(result.rows[0].unit_key || ''),
-        unitId: String(result.rows[0].unit_id || ''),
-        unitLabel: String(result.rows[0].unit_label || ''),
-        normalizedPlate: String(result.rows[0].normalized_plate || ''),
-        severity: String(result.rows[0].severity || 'normal'),
-        boardStatus: String(result.rows[0].board_status || 'normal'),
-        jobOrderId: String(result.rows[0].job_order_id || ''),
-        jobOrderCount: Number(result.rows[0].job_order_count || 0),
-        originName: String(result.rows[0].origin_name || ''),
-        destinationName: String(result.rows[0].destination_name || ''),
-        tempMin: toNumber(result.rows[0].temp_min),
-        tempMax: toNumber(result.rows[0].temp_max),
-        etaOrigin: result.rows[0].eta_origin ? Date.parse(result.rows[0].eta_origin) : null,
-        etaDestination: result.rows[0].eta_destination ? Date.parse(result.rows[0].eta_destination) : null,
-        driverAppStatus: String(result.rows[0].driver_app_status || ''),
-        incidentCodes: Array.isArray(result.rows[0].incident_codes) ? result.rows[0].incident_codes : [],
-        incidentSummary: String(result.rows[0].incident_summary || ''),
-        unmatchedReason: String(result.rows[0].unmatched_reason || ''),
-        metadata: result.rows[0].metadata && typeof result.rows[0].metadata === 'object' ? result.rows[0].metadata : {},
-      }, buildFleetPlateIndex(now), getTmsConfig(), now);
+      const row = {
+        rowId: storedRow.row_id,
+        day: String(storedRow.day || ''),
+        tenantLabel: String(storedRow.tenant_label || ''),
+        customerName: String(storedRow.customer_name || ''),
+        unitKey: String(storedRow.unit_key || ''),
+        unitId: String(storedRow.unit_id || ''),
+        unitLabel: String(storedRow.unit_label || ''),
+        normalizedPlate: String(storedRow.normalized_plate || ''),
+        severity: String(storedRow.severity || 'normal'),
+        boardStatus: String(storedRow.board_status || 'normal'),
+        jobOrderId: String(storedRow.job_order_id || ''),
+        jobOrderCount: Number(storedRow.job_order_count || 0),
+        originName: String(storedRow.origin_name || ''),
+        destinationName: String(storedRow.destination_name || ''),
+        tempMin: toNumber(storedRow.temp_min),
+        tempMax: toNumber(storedRow.temp_max),
+        etaOrigin: storedRow.eta_origin ? Date.parse(storedRow.eta_origin) : null,
+        etaDestination: storedRow.eta_destination ? Date.parse(storedRow.eta_destination) : null,
+        driverAppStatus: String(storedRow.driver_app_status || ''),
+        incidentCodes: Array.isArray(storedRow.incident_codes) ? storedRow.incident_codes : [],
+        incidentSummary: String(storedRow.incident_summary || ''),
+        unmatchedReason: String(storedRow.unmatched_reason || ''),
+        metadata: storedRow.metadata && typeof storedRow.metadata === 'object' ? storedRow.metadata : {},
+      };
+      const jobOrderIds = (Array.isArray(row.metadata?.jobOrders) ? row.metadata.jobOrders : [])
+        .map(function (jobOrder) { return jobOrder?.jobOrderId; })
+        .filter(Boolean);
+      const overridesResult = await postgresQuery(
+        'SELECT * FROM tms_jo_overrides WHERE job_order_id = ANY($1)',
+        [jobOrderIds],
+      );
+      const overrideMap = new Map();
+      for (const overrideRow of overridesResult.rows) {
+        overrideMap.set(overrideRow.job_order_id, overrideRow);
+      }
+      const fleetIndex = buildFleetPlateIndex(now);
+      const tmsConfig = getTmsConfig();
+      let refreshed = refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMap);
       refreshed = (await applyTripMonitorIncidentDebounceToRows([refreshed]))[0] || refreshed;
-      await syncTripMonitorIncidentHistoryForRows([refreshed], buildFleetPlateIndex(now), getTmsConfig(), now);
+      await syncTripMonitorIncidentHistoryForRows([refreshed], fleetIndex, tmsConfig, now);
       await upsertTmsMonitorRows([refreshed]);
       const activeHeadlineJobOrderId = String(
         refreshed?.metadata?.headlineJobOrder?.jobOrderId
