@@ -5245,6 +5245,34 @@ function mapTmsMonitorRowForStorage(row) {
   };
 }
 
+function parseTmsMonitorStoredRow(row) {
+  return {
+    rowId: row.row_id,
+    day: String(row.day || ''),
+    tenantLabel: String(row.tenant_label || ''),
+    customerName: String(row.customer_name || ''),
+    unitKey: String(row.unit_key || ''),
+    unitId: String(row.unit_id || ''),
+    unitLabel: String(row.unit_label || ''),
+    normalizedPlate: String(row.normalized_plate || ''),
+    severity: String(row.severity || 'normal'),
+    boardStatus: String(row.board_status || 'normal'),
+    jobOrderId: String(row.job_order_id || ''),
+    jobOrderCount: Number(row.job_order_count || 0),
+    originName: String(row.origin_name || ''),
+    destinationName: String(row.destination_name || ''),
+    tempMin: toNumber(row.temp_min),
+    tempMax: toNumber(row.temp_max),
+    etaOrigin: row.eta_origin ? Date.parse(row.eta_origin) : null,
+    etaDestination: row.eta_destination ? Date.parse(row.eta_destination) : null,
+    driverAppStatus: String(row.driver_app_status || ''),
+    incidentCodes: Array.isArray(row.incident_codes) ? row.incident_codes : [],
+    incidentSummary: String(row.incident_summary || ''),
+    unmatchedReason: String(row.unmatched_reason || ''),
+    metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
+  };
+}
+
 async function upsertTmsMonitorRows(rows) {
   if (!getPostgresConfig().enabled || !rows.length) {
     return 0;
@@ -10681,7 +10709,7 @@ async function handleApi(req, res, url) {
       
       // Build update fields dynamically
       const updateFields = [];
-      const insertFields = ['job_order_id', 'updated_by', 'updated_at'];
+      const insertFields = ['job_order_id', 'updated_by'];
       const values = [jobOrderId, username];
       let paramIndex = 3;
       
@@ -10758,6 +10786,39 @@ async function handleApi(req, res, url) {
           'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
           [jobOrderId, 'notes', oldRow?.notes || null, notes, username, reason || null]
         );
+      }
+
+      let affectedRowsResult = await postgresQuery(
+        `SELECT * FROM tms_monitor_rows
+         WHERE metadata @> $1::jsonb`,
+        [JSON.stringify({ jobOrders: [{ jobOrderId }] })]
+      );
+      if (affectedRowsResult.rows.length === 0) {
+        const fallbackResult = await postgresQuery(
+          `SELECT * FROM tms_monitor_rows
+           WHERE metadata::text LIKE $1`,
+          [`%${jobOrderId}%`]
+        );
+        affectedRowsResult = fallbackResult;
+      }
+
+      if (affectedRowsResult.rows.length > 0) {
+        const now = Date.now();
+        const fleetIndex = buildFleetPlateIndex(now);
+        const tmsConfig = getTmsConfig();
+        const overrideMap = new Map();
+        overrideMap.set(jobOrderId, result.rows[0]);
+
+        for (const storedRow of affectedRowsResult.rows) {
+          const refreshed = refreshTripMonitorStoredRow(
+            parseTmsMonitorStoredRow(storedRow),
+            fleetIndex,
+            tmsConfig,
+            now,
+            overrideMap,
+          );
+          await upsertTmsMonitorRows([refreshed]);
+        }
       }
       
       sendJson(res, 200, { ok: true, override: result.rows[0] });
