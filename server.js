@@ -3977,6 +3977,33 @@ async function fetchTmsDocByName(doctype, name) {
   return parseFrappeDocPayload(payload);
 }
 
+async function fetchTmsResourceList(doctype, filters, fields, limit = 1) {
+  const params = new URLSearchParams({
+    filters: JSON.stringify(filters || []),
+    fields: JSON.stringify(fields || ['name']),
+    limit_page_length: String(limit || 1),
+  });
+  const { payload } = await tmsRequest(`/api/resource/${encodeURIComponent(String(doctype || '').trim())}?${params.toString()}`, {
+    method: 'GET',
+  });
+  return parseFrappeListRows(payload);
+}
+
+function isLikelyFrappeChildRowHash(value) {
+  const text = String(value || '').trim();
+  return /^[a-z0-9]{8,12}$/i.test(text) && !text.includes('-');
+}
+
+function pickTmsCrewPhone(doc) {
+  if (!doc || typeof doc !== 'object') return '';
+  return String(doc.contact_no || doc.cell_phone_number || doc.no_hp || doc.phone || doc.mobile_no || '').trim();
+}
+
+function pickTmsCrewDisplayName(doc, fallback) {
+  if (!doc || typeof doc !== 'object') return String(fallback || '').trim();
+  return String(doc.nama_lengkap || doc.employee_name || doc.full_name || doc.name || fallback || '').trim();
+}
+
 async function fetchTmsJobOrderDoc(jobOrderId) {
   const doc = await fetchTmsDocByName('Job Order', jobOrderId);
   if (!doc) {
@@ -10784,7 +10811,7 @@ async function handleApi(req, res, url) {
       ) : { rows: [] };
       const shippingStatusHistory = buildTmsShippingStatusHistory(shippingStatusHistoryResult.rows);
       const overrideActive = Boolean(refreshed.overrideActive || refreshed.metadata?.overrideActive || overrideMap.size > 0);
-      // Compute ETA for detail view
+      // Compute ETA for detail view from the refreshed row so the header can render it
       let detailEta = null;
       try {
         const detailFleetRow = refreshed.metadata?.fleetRow || null;
@@ -10798,6 +10825,7 @@ async function handleApi(req, res, url) {
         refreshed.metadata = refreshed.metadata || {};
         refreshed.metadata.eta = detailEta;
       }
+      const responseEta = detailEta || refreshed.metadata?.eta || null;
       console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
         sendJson(res, 200, {
           ok: true,
@@ -10813,7 +10841,7 @@ async function handleApi(req, res, url) {
             driverAppStatus: refreshed.driverAppStatus || '',
             shippingStatusLabel: refreshed.shippingStatusLabel || '',
             shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
-            eta: detailEta,
+            eta: responseEta,
             incidentHistory,
             overrideActive,
             metadata: {
@@ -10835,12 +10863,61 @@ async function handleApi(req, res, url) {
     if (!session) return true;
     try {
       const crewId = String(url.searchParams.get('crewId') || '').trim();
+      const crewName = String(url.searchParams.get('crewName') || '').trim();
       if (!crewId) throw new Error('crewId wajib diisi.');
-      const doc = await fetchTmsDocByName('Master Crew', crewId);
+      const crewFields = ['name', 'contact_no', 'cell_phone_number', 'no_hp', 'phone', 'mobile_no', 'nama_lengkap', 'employee_name', 'full_name'];
+      let doc = null;
+      let resolvedCrewId = crewId;
+
+      try {
+        doc = await fetchTmsDocByName('Master Crew', crewId);
+      } catch (_) {
+        doc = null;
+      }
+
+      if (!doc) {
+        const exactRows = await fetchTmsResourceList('Master Crew', [['Master Crew', 'name', '=', crewId]], crewFields, 1).catch(function () { return []; });
+        doc = exactRows[0] || null;
+      }
+
+      if (!doc && isLikelyFrappeChildRowHash(crewId)) {
+        const childDoctypes = ['Driver Assign', 'Driver Assignment', 'Job Order Driver Assign'];
+        for (const childDoctype of childDoctypes) {
+          const childDoc = await fetchTmsDocByName(childDoctype, crewId).catch(function () { return null; });
+          const linkedCrewId = String(childDoc?.employee || childDoc?.crew || childDoc?.driver || childDoc?.employee_id || '').trim();
+          if (linkedCrewId && linkedCrewId !== crewId) {
+            resolvedCrewId = linkedCrewId;
+            doc = await fetchTmsDocByName('Master Crew', linkedCrewId).catch(function () { return null; });
+            if (!doc) {
+              const linkedRows = await fetchTmsResourceList('Master Crew', [['Master Crew', 'name', '=', linkedCrewId]], crewFields, 1).catch(function () { return []; });
+              doc = linkedRows[0] || null;
+            }
+            if (doc) break;
+          }
+        }
+      }
+
+      if (!doc && crewName) {
+        const nameFilters = [
+          [['Master Crew', 'nama_lengkap', '=', crewName]],
+          [['Master Crew', 'employee_name', '=', crewName]],
+          [['Master Crew', 'nama_lengkap', 'like', `%${crewName}%`]],
+          [['Master Crew', 'employee_name', 'like', `%${crewName}%`]],
+        ];
+        for (const filters of nameFilters) {
+          const rows = await fetchTmsResourceList('Master Crew', filters, crewFields, 1).catch(function () { return []; });
+          if (rows[0]) {
+            doc = rows[0];
+            resolvedCrewId = String(doc.name || resolvedCrewId).trim() || resolvedCrewId;
+            break;
+          }
+        }
+      }
+
       if (!doc) throw new Error(`Crew ${crewId} tidak ditemukan di TMS.`);
-      const phone = String(doc.contact_no || doc.cell_phone_number || doc.no_hp || doc.phone || doc.mobile_no || '').trim();
-      const name = String(doc.nama_lengkap || doc.employee_name || doc.name || '').trim();
-      sendJson(res, 200, { ok: true, crewId, phone: phone || null, name: name || crewId });
+      const phone = pickTmsCrewPhone(doc);
+      const name = pickTmsCrewDisplayName(doc, crewName || resolvedCrewId || crewId);
+      sendJson(res, 200, { ok: true, crewId: resolvedCrewId || crewId, phone: phone || null, name: name || resolvedCrewId || crewId });
     } catch (error) {
       sendApiError(res, error, 'Gagal mengambil data crew.');
     }

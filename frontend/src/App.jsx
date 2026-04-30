@@ -2070,8 +2070,10 @@ export default function App() {
               setBanner({ tone: 'error', message: `Driver ${driverIndex} data not found.` });
               return;
             }
-            // Extract crew ID — try common field names
-            const crewId = String(driver.employee || driver.name || driver.crew_id || driver.driver_id || driver.employee_id || '').trim();
+            // Extract crew ID — avoid treating Frappe child-row hashes as Master Crew IDs when better fields exist.
+            const rawCrewCandidates = [driver.employee, driver.crew_id, driver.driver_id, driver.employee_id, driver.crew, driver.driver, driver.name];
+            const crewId = String(rawCrewCandidates.find((candidate) => String(candidate || '').trim()) || '').trim();
+            const crewName = String(driver.employee_name || driver.nama_lengkap || driver.full_name || driver.driver_name || '').trim();
             const localPhone = extractTmsDriverPhone(driver);
             if (localPhone) {
               const normalizedPhone = normalizeWaPhone(localPhone);
@@ -2085,8 +2087,8 @@ export default function App() {
               setBanner({ tone: 'error', message: 'Crew ID not found in driver data.' });
               return;
             }
-            setBanner({ tone: 'info', message: `Looking up phone for ${crewId}...` });
-            const result = await api(`/api/tms/crew-phone?${new URLSearchParams({ crewId }).toString()}`);
+            setBanner({ tone: 'info', message: `Looking up phone for ${crewName || crewId}...` });
+            const result = await api(`/api/tms/crew-phone?${new URLSearchParams({ crewId, ...(crewName ? { crewName } : {}) }).toString()}`);
             if (!result.phone) {
               setBanner({ tone: 'error', message: `No phone number found for crew ${result.name || crewId}.` });
               return;
