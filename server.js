@@ -6904,6 +6904,33 @@ async function ensurePostgresSchema() {
       primary key (tenant_label, normalized_address_key)
     );
 
+    create table if not exists tms_jo_overrides (
+      id uuid primary key default gen_random_uuid(),
+      job_order_id text not null unique,
+      stops_override jsonb,
+      temp_range_override jsonb,
+      force_closed boolean not null default false,
+      force_closed_at timestamptz,
+      force_closed_reason text,
+      shipping_status_override jsonb,
+      created_by text not null,
+      created_at timestamptz not null default now(),
+      updated_by text,
+      updated_at timestamptz not null default now(),
+      notes text
+    );
+
+    create table if not exists tms_jo_override_audit (
+      id uuid primary key default gen_random_uuid(),
+      job_order_id text not null,
+      field_changed text not null,
+      old_value jsonb,
+      new_value jsonb,
+      performed_by text not null,
+      performed_at timestamptz not null default now(),
+      reason text
+    );
+
     create index if not exists idx_tms_job_order_snapshots_day on tms_job_order_snapshots(day desc);
     create index if not exists idx_tms_job_order_snapshots_plate on tms_job_order_snapshots(normalized_plate);
     create index if not exists idx_tms_monitor_rows_day on tms_monitor_rows(day desc);
@@ -6915,6 +6942,9 @@ async function ensurePostgresSchema() {
     create index if not exists idx_tms_sync_logs_synced_at on tms_sync_logs(synced_at desc);
     create index if not exists idx_tms_address_cache_status on tms_address_cache(status);
     create index if not exists idx_tms_address_cache_seen on tms_address_cache(last_seen_at desc);
+    create index if not exists idx_tms_jo_overrides_jo on tms_jo_overrides(job_order_id);
+    create index if not exists idx_tms_jo_override_audit_jo on tms_jo_override_audit(job_order_id);
+    create index if not exists idx_tms_jo_override_audit_time on tms_jo_override_audit(performed_at desc);
   `);
 }
 
