@@ -5617,7 +5617,7 @@ function severityRank(value) {
   }
 }
 
-function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
+function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now, overrideMap) {
   const groups = new Map();
   for (const snapshot of jobSnapshots) {
     const fleetContext = (snapshot.plateCandidates || []).map(function (candidate) {
@@ -5633,6 +5633,10 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now) {
 
   const rows = [];
   for (const [groupKey, group] of groups.entries()) {
+    for (const snapshot of group.items) {
+      const override = overrideMap?.get(snapshot.jobOrderId);
+      applyJoOverrides(snapshot, override);
+    }
     const activeItems = group.items.filter(function (item) { return item.active; });
     const inactiveItems = group.items.filter(function (item) { return !item.active; });
     const headline = chooseHeadlineSnapshot(
@@ -5841,8 +5845,13 @@ async function syncTmsMonitor(options) {
   }).filter(function (snapshot) {
     return snapshot.day >= window.startDay && snapshot.day <= window.endDay;
   });
+  const overridesResult = await postgresQuery('SELECT * FROM tms_jo_overrides');
+  const overrideMap = new Map();
+  for (const row of overridesResult.rows) {
+    overrideMap.set(row.job_order_id, row);
+  }
   const fleetIndex = buildFleetPlateIndex(now);
-  let monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now);
+  let monitorRows = buildTmsMonitorRows(jobSnapshots, fleetIndex, runtime, now, overrideMap);
   monitorRows = await applyTripMonitorIncidentDebounceToRows(monitorRows);
   const saveResult = await replaceTmsSnapshotWindow(window, jobSnapshots, monitorRows);
   await syncTripMonitorIncidentHistoryForRows(monitorRows, fleetIndex, runtime, now);
