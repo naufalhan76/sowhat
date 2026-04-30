@@ -10554,6 +10554,200 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  // TMS Override CRUD endpoints
+  if (pathname.startsWith('/api/tms/overrides/') && pathname.endsWith('/audit') && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const jobOrderId = decodeURIComponent(pathname.split('/')[4] || '');
+      if (!jobOrderId) {
+        throw new Error('jobOrderId wajib diisi.');
+      }
+      const result = await postgresQuery(
+        'SELECT * FROM tms_jo_override_audit WHERE job_order_id = $1 ORDER BY performed_at DESC',
+        [jobOrderId]
+      );
+      sendJson(res, 200, { ok: true, audit: result.rows });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal mengambil audit trail override.');
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tms/overrides/') && method === 'GET') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const jobOrderId = decodeURIComponent(pathname.split('/')[4] || '');
+      if (!jobOrderId) {
+        throw new Error('jobOrderId wajib diisi.');
+      }
+      const result = await postgresQuery(
+        'SELECT * FROM tms_jo_overrides WHERE job_order_id = $1',
+        [jobOrderId]
+      );
+      if (result.rows.length === 0) {
+        const err = new Error('Override tidak ditemukan.');
+        err.statusCode = 404;
+        throw err;
+      }
+      sendJson(res, 200, { ok: true, override: result.rows[0] });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal mengambil override.', error.statusCode || 500);
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tms/overrides/') && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      const jobOrderId = decodeURIComponent(pathname.split('/')[4] || '');
+      if (!jobOrderId) {
+        throw new Error('jobOrderId wajib diisi.');
+      }
+      
+      const body = await readRequestBody(req);
+      const { stops, tempRange, forceClose, reason, notes } = body;
+      const username = session.user.username || session.user.id || 'unknown';
+      
+      // Fetch existing override for audit
+      const existing = await postgresQuery('SELECT * FROM tms_jo_overrides WHERE job_order_id = $1', [jobOrderId]);
+      const oldRow = existing.rows[0] || null;
+      
+      // Build update fields dynamically
+      const updateFields = [];
+      const insertFields = ['job_order_id', 'updated_by', 'updated_at'];
+      const values = [jobOrderId, username];
+      let paramIndex = 3;
+      
+      if (stops !== undefined) {
+        updateFields.push(`stops_override = $${paramIndex}`);
+        insertFields.push('stops_override');
+        values.push(JSON.stringify(stops));
+        paramIndex++;
+      }
+      if (tempRange !== undefined) {
+        updateFields.push(`temp_range_override = $${paramIndex}`);
+        insertFields.push('temp_range_override');
+        values.push(JSON.stringify(tempRange));
+        paramIndex++;
+      }
+      if (forceClose !== undefined) {
+        updateFields.push(`force_closed = $${paramIndex}`);
+        insertFields.push('force_closed');
+        values.push(forceClose);
+        paramIndex++;
+        
+        if (forceClose) {
+          updateFields.push(`force_closed_at = NOW()`);
+          updateFields.push(`force_closed_reason = $${paramIndex}`);
+          insertFields.push('force_closed_at', 'force_closed_reason');
+          values.push(reason || null);
+          paramIndex++;
+        } else {
+          updateFields.push(`force_closed_at = NULL`);
+          updateFields.push(`force_closed_reason = NULL`);
+        }
+      }
+      if (notes !== undefined) {
+        updateFields.push(`notes = $${paramIndex}`);
+        insertFields.push('notes');
+        values.push(notes);
+        paramIndex++;
+      }
+      
+      updateFields.push(`updated_by = $2, updated_at = NOW()`);
+      
+      // Upsert query
+      const insertPlaceholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const upsertQuery = `
+        INSERT INTO tms_jo_overrides (${insertFields.join(', ')}, created_by)
+        VALUES (${insertPlaceholders}, $2)
+        ON CONFLICT (job_order_id) DO UPDATE SET ${updateFields.join(', ')}
+        RETURNING *
+      `;
+      
+      const result = await postgresQuery(upsertQuery, values);
+      
+      // Log audit entries for changed fields
+      if (stops !== undefined && JSON.stringify(oldRow?.stops_override) !== JSON.stringify(stops)) {
+        await postgresQuery(
+          'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+          [jobOrderId, 'stops', JSON.stringify(oldRow?.stops_override || null), JSON.stringify(stops), username, reason || null]
+        );
+      }
+      if (tempRange !== undefined && JSON.stringify(oldRow?.temp_range_override) !== JSON.stringify(tempRange)) {
+        await postgresQuery(
+          'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+          [jobOrderId, 'temp_range', JSON.stringify(oldRow?.temp_range_override || null), JSON.stringify(tempRange), username, reason || null]
+        );
+      }
+      if (forceClose !== undefined && oldRow?.force_closed !== forceClose) {
+        await postgresQuery(
+          'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+          [jobOrderId, 'force_closed', String(oldRow?.force_closed || false), String(forceClose), username, reason || null]
+        );
+      }
+      if (notes !== undefined && oldRow?.notes !== notes) {
+        await postgresQuery(
+          'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+          [jobOrderId, 'notes', oldRow?.notes || null, notes, username, reason || null]
+        );
+      }
+      
+      sendJson(res, 200, { ok: true, override: result.rows[0] });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal menyimpan override.');
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tms/overrides/') && method === 'DELETE') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      const jobOrderId = decodeURIComponent(pathname.split('/')[4] || '');
+      if (!jobOrderId) {
+        throw new Error('jobOrderId wajib diisi.');
+      }
+      
+      const username = session.user.username || session.user.id || 'unknown';
+      
+      const existing = await postgresQuery('SELECT * FROM tms_jo_overrides WHERE job_order_id = $1', [jobOrderId]);
+      if (existing.rows.length === 0) {
+        const err = new Error('Override tidak ditemukan.');
+        err.statusCode = 404;
+        throw err;
+      }
+      
+      await postgresQuery('DELETE FROM tms_jo_overrides WHERE job_order_id = $1', [jobOrderId]);
+      await postgresQuery(
+        'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+        [jobOrderId, 'all_overrides', JSON.stringify(existing.rows[0]), null, username, 'Override deleted']
+      );
+      
+      sendJson(res, 200, { ok: true, success: true });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal menghapus override.', error.statusCode || 500);
+    }
+    return true;
+  }
+
   if (pathname === '/api/astro/config' && method === 'GET') {
     const session = await requireAdminSession(req, res);
     if (!session) {
