@@ -2106,7 +2106,7 @@ export default function App() {
       setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, detail, detailBusy: false } : panel));
     } catch (error) {
       setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
-      setTripMonitorPanels((current) => current.filter((panel) => panel.id !== panelId));
+      setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, detailBusy: false, detailError: error.message || 'Gagal memuat detail.' } : panel));
     }
   };
 

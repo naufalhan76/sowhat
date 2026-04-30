@@ -169,7 +169,7 @@ export function TripMonitorFloatingPanel({
   };
 
   const detail = panel.detail;
-  if (!detail && !panel.detailBusy) return null;
+  if (!detail && !panel.detailBusy && !panel.detailError) return null;
 
   const severityKey = normalizeSeverity(detail?.severity);
   const displayLabel = detail
@@ -226,6 +226,11 @@ export function TripMonitorFloatingPanel({
       <div className="tm-float-body">
         {panel.detailBusy ? (
           <div className="empty-state">Loading detail...</div>
+        ) : panel.detailError ? (
+          <div className="empty-state" style={{ color: 'var(--danger)', padding: '24px', textAlign: 'center' }}>
+            <p style={{ fontWeight: 600, marginBottom: '8px' }}>Gagal memuat detail</p>
+            <p style={{ fontSize: '13px', opacity: 0.8 }}>{panel.detailError}</p>
+          </div>
         ) : (
           <TripMonitorDetailModal
             detail={detail}
