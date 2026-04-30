@@ -163,7 +163,7 @@ export function TripMonitorDetailHeader({
             </div>
           )}
 
-          {eta && (
+          {eta ? (
             <div 
               style={{ 
                 fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', 
@@ -189,6 +189,11 @@ export function TripMonitorDetailHeader({
                   ({Math.round(eta.distanceMeters / 1000)}km)
                 </span>
               )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '12px' }}>
+              <Clock3 size={12} style={{ opacity: 0.5 }} />
+              <span>Calculating ETA...</span>
             </div>
           )}
 

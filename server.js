@@ -4791,7 +4791,7 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
 
 // ── ETA Calculation via OSRM ──
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
-const ETA_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const ETA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const etaCache = new Map();
 
 function etaCacheKey(fromLat, fromLng, toLat, toLng) {
