@@ -85,6 +85,7 @@ export function TripMonitorDetailModal({
   const [showForceCloseConfirm, setShowForceCloseConfirm] = useState(false);
   const [forceCloseReason, setForceCloseReason] = useState('');
   const [isSubmittingClose, setIsSubmittingClose] = useState(false);
+  const [pendingSelesaiConfirm, setPendingSelesaiConfirm] = useState(false);
 
   const SHIPPING_STEPS = [
     { key: 'otw-load', label: 'OTW LOAD' },
@@ -195,11 +196,27 @@ export function TripMonitorDetailModal({
 
   const handleStatusOverride = async (stepKey) => {
     if (!effectiveShippingOverride) return;
+    if (stepKey === 'selesai-pengiriman') {
+      setPendingSelesaiConfirm(true);
+      setShowStatusDropdown(false);
+      return;
+    }
     setStatusSaving(true);
     try {
       const step = SHIPPING_STEPS.find((s) => s.key === stepKey);
       await effectiveShippingOverride({ key: stepKey, label: step?.label || stepKey });
       setShowStatusDropdown(false);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleConfirmSelesaiPengiriman = async () => {
+    if (!effectiveShippingOverride) return;
+    setStatusSaving(true);
+    try {
+      await effectiveShippingOverride({ key: 'selesai-pengiriman', label: 'SELESAI PENGIRIMAN' });
+      setPendingSelesaiConfirm(false);
     } finally {
       setStatusSaving(false);
     }
@@ -280,6 +297,19 @@ export function TripMonitorDetailModal({
                 )}
               </div>
             </div>
+          {pendingSelesaiConfirm && (
+            <div className="tm-selesai-confirm">
+              <div className="tm-selesai-confirm-icon">!</div>
+              <div className="tm-selesai-confirm-text">
+                <strong>Ubah ke Selesai Pengiriman?</strong>
+                <p>Job Order akan langsung hilang dari board setelah status diubah.</p>
+              </div>
+              <div className="tm-selesai-confirm-actions">
+                <button type="button" className="tm-selesai-confirm-cancel" onClick={() => setPendingSelesaiConfirm(false)} disabled={statusSaving}>Batal</button>
+                <button type="button" className="tm-selesai-confirm-ok" onClick={handleConfirmSelesaiPengiriman} disabled={statusSaving}>{statusSaving ? 'Menyimpan...' : 'Ya, Selesaikan'}</button>
+              </div>
+            </div>
+          )}
           {false && effectiveForceClose && detail?.status !== 'closed' && (
               <button type="button" className="tm-force-close-link" onClick={() => setShowForceCloseConfirm(true)}>
                 Force Close Trip
