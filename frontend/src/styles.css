@@ -13767,9 +13767,14 @@ body.fleet-workspace-resizing * {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: visible;
+  container-type: inline-size;
+}
+
+/* Only enable scroll on modal body when used in drawer mode (not floating) */
+.tm-drawer-panel .tm-detail-modal-body {
   overflow-y: auto;
   overflow-x: hidden;
-  container-type: inline-size;
 }
 
 .tm-drawer-cardstack .tm-drawer-header {
@@ -13895,9 +13900,14 @@ body.fleet-workspace-resizing * {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
   padding: 0;
   background: var(--background-color, #fafafa);
+}
+
+/* Only enable scroll on tm-stack when used in drawer mode */
+.tm-drawer-panel .tm-stack {
+  overflow-y: auto;
 }
 
 [data-theme='dark'] .tm-stack {
