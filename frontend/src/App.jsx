@@ -957,6 +957,7 @@ export default function App() {
   const [tripMonitorBusy, setTripMonitorBusy] = useState(false);
   const [tripMonitorFilters, setTripMonitorFilters] = useState({ customer: 'all', severity: 'all', incidentCode: 'all', appStatus: '', search: '' });
   const [tripMonitorPanels, setTripMonitorPanels] = useState([]);
+  const [tripMonitorPendingSubView, setTripMonitorPendingSubView] = useState(null);
   const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
@@ -2750,6 +2751,13 @@ export default function App() {
   };
   const openTripMonitorInvestigation = (row, target = 'historical') => {
     const fleetRow = resolveTripMonitorFleetRow(row);
+    // incidents and audit-log don't require fleet matching
+    if (target === 'incidents' || target === 'audit-log') {
+      setActivePanel('trip-monitor');
+      setTripMonitorPanels([]);
+      setTripMonitorPendingSubView({ type: target, context: { rowId: row?.rowId || row?.id, ...fleetRow, ...(row?.metadata || {}) } });
+      return;
+    }
     if (!fleetRow?.id) {
       setBanner({ tone: 'error', message: 'Unit ini belum match ke Solofleet, jadi detail investigasi belum bisa dibuka.' });
       return;
@@ -3534,6 +3542,12 @@ export default function App() {
             onOpenDetail={(rowId) => openTripMonitorDetail(rowId)}
             isAdmin={isAdmin}
             fmtDate={fmtDate}
+            fmtNum={fmtNum}
+            formatMinutesText={formatMinutesText}
+            DataTable={DataTable}
+            setTripMonitorPanels={setTripMonitorPanels}
+            pendingSubView={tripMonitorPendingSubView}
+            clearPendingSubView={() => setTripMonitorPendingSubView(null)}
           /> : null}
           {activePanel === 'fleet' ? <FleetWorkspace
             rows={prioritizedFleet}
@@ -3943,6 +3957,8 @@ export default function App() {
           onOpenFleet={() => openTripMonitorInvestigation(panel.detail, 'fleet')}
           onOpenMap={() => openTripMonitorInvestigation(panel.detail, 'map')}
           onOpenHistorical={() => openTripMonitorInvestigation(panel.detail, 'historical')}
+          onOpenIncidents={() => openTripMonitorInvestigation(panel.detail, 'incidents')}
+          onOpenOverrideLog={() => openTripMonitorInvestigation(panel.detail, 'audit-log')}
           onBringToFront={() => {
             const nextZ = tripMonitorNextZRef.current++;
             setTripMonitorPanels((current) => current.map((item) => item.id === panel.id ? { ...item, zIndex: nextZ } : item));

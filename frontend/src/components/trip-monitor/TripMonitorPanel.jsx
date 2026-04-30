@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, RefreshCw, ArrowUpDown, ChevronDown } from 'lucide-react';
 
 import { Action, Spinner } from '../index.js';
 import { TMS_BOARD_COLUMNS, TMS_INCIDENT_LEGEND_CODES, tmsIncidentLabel } from './helpers.jsx';
 import { TripMonitorIncidentLegend } from './TripMonitorIncidentLegend.jsx';
 import { TripMonitorKanban } from './TripMonitorKanban.jsx';
+import { TripMonitorHistoricalView } from './TripMonitorHistoricalView.jsx';
+import { TripMonitorIncidentView } from './TripMonitorIncidentView.jsx';
+import { TripMonitorAuditLogView } from './TripMonitorAuditLogView.jsx';
 
 function selectedTripMonitorRowId(panels = []) {
   if (!panels.length) return null;
@@ -30,15 +33,49 @@ export function TripMonitorPanel({
   onOpenDetail,
   isAdmin,
   fmtDate,
+  fmtNum,
+  formatMinutesText,
+  DataTable,
+  setTripMonitorPanels,
+  pendingSubView,
+  clearPendingSubView,
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [subView, setSubView] = useState({ type: 'board', context: null });
   const filters = tripMonitorFilters || {};
   const summary = tripMonitorSummary || {};
   const visibleRows = tripMonitorVisibleRows || [];
   const severityCounts = tripMonitorSeverityCounts || {};
 
+  // Consume pending sub-view from floating panel navigation
+  useEffect(() => {
+    if (pendingSubView) {
+      setSubView(pendingSubView);
+      clearPendingSubView?.();
+    }
+  }, [pendingSubView]);
+
   const updateFilters = (patch) => {
     setTripMonitorFilters((current) => ({ ...current, ...patch }));
+  };
+
+  const handleOpenHistorical = (context) => {
+    setSubView({ type: 'historical', context });
+    if (setTripMonitorPanels) setTripMonitorPanels([]);
+  };
+
+  const handleOpenIncidents = (context) => {
+    setSubView({ type: 'incidents', context });
+    if (setTripMonitorPanels) setTripMonitorPanels([]);
+  };
+
+  const handleOpenAuditLog = (context) => {
+    setSubView({ type: 'audit-log', context });
+    if (setTripMonitorPanels) setTripMonitorPanels([]);
+  };
+
+  const handleBackToBoard = () => {
+    setSubView({ type: 'board', context: null });
   };
 
   const totalCount = severityCounts.total || 0;
@@ -193,12 +230,37 @@ export function TripMonitorPanel({
       ) : null}
 
       {/* ── Kanban board ── */}
-      <TripMonitorKanban
-        rows={visibleRows}
-        selectedRowId={selectedTripMonitorRowId(tripMonitorPanels)}
-        onOpen={(row) => onOpenDetail?.(row.rowId)}
-        severityCounts={severityCounts}
-      />
+      {subView.type === 'board' ? (
+        <TripMonitorKanban
+          rows={visibleRows}
+          selectedRowId={selectedTripMonitorRowId(tripMonitorPanels)}
+          onOpen={(row) => onOpenDetail?.(row.rowId)}
+          severityCounts={severityCounts}
+        />
+      ) : subView.type === 'historical' ? (
+        <TripMonitorHistoricalView
+          context={subView.context}
+          range={range}
+          onBack={handleBackToBoard}
+          DataTable={DataTable}
+          fmtDate={fmtDate}
+          fmtNum={fmtNum}
+        />
+      ) : subView.type === 'incidents' ? (
+        <TripMonitorIncidentView
+          context={subView.context}
+          onBack={handleBackToBoard}
+          DataTable={DataTable}
+          fmtDate={fmtDate}
+          formatMinutesText={formatMinutesText}
+        />
+      ) : subView.type === 'audit-log' ? (
+        <TripMonitorAuditLogView
+          context={subView.context}
+          onBack={handleBackToBoard}
+          fmtDate={fmtDate}
+        />
+      ) : null}
     </section>
   );
 }
