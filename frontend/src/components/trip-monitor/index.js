@@ -4,6 +4,7 @@ export { TripMonitorUnitCard } from './TripMonitorUnitCard.jsx';
 export { TripMonitorFloatingPanel } from './TripMonitorFloatingPanel.jsx';
 export { TripMonitorDetailModal } from './TripMonitorDetailModal.jsx';
 export { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
+export { default as TripMonitorDetailMapSection } from './TripMonitorDetailMapSection.jsx';
 export { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
 export { TripMonitorIncidentIcons } from './TripMonitorIncidentIcons.jsx';
 export { TripMonitorIncidentLegend } from './TripMonitorIncidentLegend.jsx';

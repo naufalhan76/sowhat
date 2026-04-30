@@ -10,113 +10,12 @@ import {
   buildTripMonitorIncidentHistoryDescription, buildTripMonitorIncidentHistoryLocationLabel,
 } from './helpers.jsx';
 import { TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
-import { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
 import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
+import TripMonitorDetailMapSection from './TripMonitorDetailMapSection.jsx';
+import { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
 
-const defaultFmtDate = (value) => value || '-';
-const defaultFmtNum = (value, digits = 1) => {
-  if (value === null || value === undefined || value === '') return '-';
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toLocaleString('id-ID', { maximumFractionDigits: digits }) : String(value);
-};
-const defaultFmtCoord = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toFixed(6) : '-';
-};
-const defaultFormatMinutesText = (minutes) => {
-  const numeric = Number(minutes || 0);
-  if (!Number.isFinite(numeric) || numeric <= 0) return '0m';
-  const hours = Math.floor(numeric / 60);
-  const mins = Math.round(numeric % 60);
-  return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-};
-
-const Button = ({ children, variant, color, className = '', onPress, onClick, ...props }) => {
-  const resolvedVariant = variant === 'bordered' || variant === 'flat' ? 'secondary'
-    : variant === 'light' ? 'ghost'
-    : color === 'danger' || color === 'error' ? 'danger'
-    : 'primary';
-  return <Action variant={resolvedVariant} className={className} onClick={onClick || onPress} {...props}>{children}</Action>;
-};
-
-const Card = React.forwardRef(function Card({ children, className = '', ...props }, ref) {
-  return <Surface ref={ref} className={`sf-card-compat ${className}`.trim()} {...props}>{children}</Surface>;
-});
-const CardHeader = ({ children, className = '' }) => <SurfaceHeader className={className}>{children}</SurfaceHeader>;
-const CardContent = ({ children, className = '' }) => <SurfaceBody className={className}>{children}</SurfaceBody>;
-const Chip = ({ children, color = 'default', className = '', ...props }) => <Pill color={color} className={className} {...props}>{children}</Pill>;
-const Link = ({ children, className = '', ...props }) => <a className={`sf-link ${className}`.trim()} {...props}>{children}</a>;
-
-function DataTable({ columns, rows, emptyMessage, getRowProps, className = '', shellClassName = '', pagination = null }) {
-  const rowsPerPageOptions = pagination?.rowsPerPageOptions || [10, 20, 50];
-  const initialRowsPerPage = pagination?.initialRowsPerPage || rowsPerPageOptions[0] || 10;
-  const [rowsPerPage, setRowsPerPage] = useState(initialRowsPerPage);
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    setRowsPerPage(initialRowsPerPage);
-    setPage(1);
-  }, [rows.length, initialRowsPerPage]);
-
-  const totalPages = pagination ? Math.max(1, Math.ceil(rows.length / rowsPerPage)) : 1;
-  const pageStart = pagination ? (page - 1) * rowsPerPage : 0;
-  const visibleRows = pagination ? rows.slice(pageStart, pageStart + rowsPerPage) : rows;
-
-  useEffect(() => {
-    if (!pagination) return;
-    setPage((current) => Math.min(current, totalPages));
-  }, [pagination, totalPages]);
-
-  if (!rows.length) return <div className="empty-state">{emptyMessage}</div>;
-
-  return (
-    <div className={`table-shell${shellClassName ? ` ${shellClassName}` : ''}`}>
-      <table className={`data-table${className ? ` ${className}` : ''}`}>
-        <thead>
-          <tr>{columns.map((column, index) => <th key={typeof column === 'string' ? column : column.key || `column-${index}`}>{typeof column === 'string' ? column : column.label}</th>)}</tr>
-        </thead>
-        <tbody>
-          {visibleRows.map((row, rowIndex) => {
-            const absoluteRowIndex = pageStart + rowIndex;
-            const rowProps = getRowProps ? getRowProps(row, absoluteRowIndex) : {};
-            const { key, className: rowClassName, ...restRowProps } = rowProps || {};
-            return (
-              <tr key={key || `row-${absoluteRowIndex}`} className={rowClassName || ''} {...restRowProps}>
-                {row.map((cell, cellIndex) => <td key={`cell-${absoluteRowIndex}-${cellIndex}`}>{cell}</td>)}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {pagination ? (
-        <div className="table-pagination">
-          <div className="table-pagination-meta">
-            <span>Rows per page</span>
-            <select
-              aria-label="Rows per page"
-              value={rowsPerPage}
-              onChange={(event) => {
-                setRowsPerPage(Number(event.target.value || initialRowsPerPage));
-                setPage(1);
-              }}
-            >
-              {rowsPerPageOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
-          <div className="table-pagination-meta">Page {page} of {totalPages}</div>
-          <div className="table-pagination-controls">
-            <button type="button" className="table-page-button" aria-label="First page" onClick={() => setPage(1)} disabled={page <= 1}>{'<<'}</button>
-            <button type="button" className="table-page-button" aria-label="Previous page" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>{'<'}</button>
-            <button type="button" className="table-page-button" aria-label="Next page" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>{'>'}</button>
-            <button type="button" className="table-page-button" aria-label="Last page" onClick={() => setPage(totalPages)} disabled={page >= totalPages}>{'>>'}</button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function useIsVisible(options = {}) {
+export function useIsVisible(options = {}) {
+  const [isVisible, setIsVisible] = useState(false);
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -260,12 +159,8 @@ export function TripMonitorDetailModal({
   } = derived;
 
   const totalIncidents = incidentHistory.length;
-  const [mapSentinelRef, mapVisible] = useIsVisible();
   const [chartSentinelRef, chartVisible] = useIsVisible();
 
-  const mapContent = fleetRow?.id && renderUnitRouteMap && mapVisible
-    ? renderUnitRouteMap({ row: fleetRow, records: historyDetail?.records || [], busy: historyBusy, rangeLabel: historyLabel, stops: mapStops, hoveredStopKey, onHoverStop: setHoveredStopKey })
-    : null;
   const temperatureContent = fleetRow?.id && renderTemperatureChart && chartVisible
     ? renderTemperatureChart({ records: historyDetail?.records || [], busy: historyBusy, title: 'Temperature trend', description: `Historical Solofleet mengikuti topbar range ${historyLabel}.`, compact: true, chartHeight: 240, thresholdMin: normalizedJobTempRange.min, thresholdMax: normalizedJobTempRange.max, thresholdLabel: 'TMS range' })
     : null;
@@ -290,16 +185,24 @@ export function TripMonitorDetailModal({
             {appStatus && appStatus !== '-' ? <p className="tm-route-line">Driver app: {appStatus}</p> : null}
           </div>
 
-          <div className="tm-stack-section tm-map-section" ref={mapSentinelRef}>
-            <div className="tm-map-frame">
-              {fleetRow?.id ? (mapVisible ? (mapContent || <div className="empty-state">Map renderer belum tersedia.</div>) : <div className="empty-state">Loading map...</div>) : <div className="empty-state">Unit ini belum match ke Solofleet, jadi map belum bisa ditampilkan.</div>}
-            </div>
-            <div className="tm-action-row">
-              <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)} disabled={!fleetRow?.id}><Route size={14} /> Track Route</button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)} disabled={!fleetRow?.id}><Clock3 size={14} /> Trip History</button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)} disabled={!fleetRow?.id}><Truck size={14} /> Open Fleet</button>
-            </div>
-          </div>
+          <TripMonitorDetailMapSection
+            fleetRow={fleetRow}
+            headlineJob={headlineJob}
+            shippingStatus={shippingStatus}
+            normalizedJobTempRange={normalizedJobTempRange}
+            historyDetail={historyDetail}
+            historyBusy={historyBusy}
+            historyLabel={historyLabel}
+            mapStops={mapStops}
+            hoveredStopKey={hoveredStopKey}
+            onHoverStop={setHoveredStopKey}
+            onOpenMap={onOpenMap}
+            onOpenHistorical={onOpenHistorical}
+            onOpenFleet={onOpenFleet}
+            renderUnitRouteMap={renderUnitRouteMap}
+            fmtNum={fmtNum}
+            formatTripMonitorStatusTime={formatTripMonitorStatusTime}
+          />
 
           <details className="tm-stack-section tm-section-collapsible" open>
             <summary className="tm-section-summary">
@@ -341,16 +244,6 @@ export function TripMonitorDetailModal({
             <summary className="tm-section-summary"><span className="tm-section-title">Stops Timeline</span><span className="tm-section-meta">{mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}<ChevronDown size={14} className="tm-section-chevron" /></span></summary>
             <div className="tm-section-content"><TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /></div>
           </details>
-
-          <div className="tm-stack-section">
-            <div className="tm-section-summary tm-section-summary-static"><span className="tm-section-title">Schedule</span></div>
-            <div className="tm-section-content tm-info-grid">
-              <div className="tm-info-cell"><span className="tm-info-key">ETA Load</span><strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong></div>
-              <div className="tm-info-cell"><span className="tm-info-key">ETD Unload</span><strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong></div>
-              <div className="tm-info-cell"><span className="tm-info-key">Last update</span><strong className="tm-info-value">{formatTripMonitorStatusTime(shippingStatus?.changedAt)}</strong></div>
-              <div className="tm-info-cell"><span className="tm-info-key">TMS Range</span><strong className="tm-info-value">{headlineJob ? `${fmtNum(normalizedJobTempRange.min)}° / ${fmtNum(normalizedJobTempRange.max)}°` : '-'}</strong></div>
-            </div>
-          </div>
 
           <details className="tm-stack-section tm-section-collapsible" ref={chartSentinelRef}>
             <summary className="tm-section-summary"><span className="tm-section-title">Temperature Trend</span><span className="tm-section-meta"><span className="tm-section-count tm-range-chip">{historyLabel}</span><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
