@@ -4338,6 +4338,27 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel, addressLookup) {
   };
 }
 
+function applyJoOverrides(snapshot, overrideRow) {
+  if (!overrideRow) return snapshot;
+
+  if (overrideRow.stops_override) {
+    snapshot.stops = overrideRow.stops_override;
+  }
+
+  if (overrideRow.temp_range_override) {
+    snapshot.tempMin = overrideRow.temp_range_override.tempMin;
+    snapshot.tempMax = overrideRow.temp_range_override.tempMax;
+  }
+
+  if (overrideRow.force_closed) {
+    snapshot.jobOrderStatus = 'closed';
+    // snapshot.active intentionally remains derived from TMS via isTmsJobActive().
+    // buildTripMonitorShippingStatus() handles force-closed status display.
+  }
+
+  return snapshot;
+}
+
 function buildFleetPlateIndex(now) {
   const allRows = [];
   const allContexts = [];
