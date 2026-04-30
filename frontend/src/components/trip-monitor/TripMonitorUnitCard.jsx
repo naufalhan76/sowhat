@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Thermometer, MapPin } from 'lucide-react';
+import { AlertCircle, Thermometer, MapPin, Clock3 } from 'lucide-react';
 
 import { normalizeTemperatureRange } from './helpers.jsx';
 import { TripMonitorIncidentIcons } from './TripMonitorIncidentIcons.jsx';
@@ -15,6 +15,15 @@ function compactDriverStatus(value) {
     .join(' · ');
 }
 
+function formatEta(durationSeconds) {
+  if (!durationSeconds) return null;
+  const s = Number(durationSeconds);
+  if (s < 3600) {
+    return `~${Math.floor(s / 60)}m`;
+  }
+  return `~${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
 export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row, onOpen, isActive = false }) {
   const unitLabel = row?.unitLabel || row?.unitId || row?.normalizedPlate || '-';
   const shippingStatus = row?.shippingStatusLabel || row?.metadata?.shippingStatus?.label || '-';
@@ -27,6 +36,10 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
   const driverAppStatus = row?.driverAppStatus && row.driverAppStatus !== '-' ? row.driverAppStatus : '';
   const driverAppCompact = compactDriverStatus(driverAppStatus);
   const severity = row?.severity || 'normal';
+
+  const etaData = row?.eta || row?.metadata?.eta;
+  const etaLabel = etaData ? formatEta(etaData.durationSeconds) : null;
+  const etaStatus = etaData?.status || 'neutral';
 
   const cardClasses = [
     'tm-card',
@@ -65,6 +78,14 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
           </span>
         ) : null}
       </div>
+
+      {/* ETA row */}
+      {etaLabel && (
+        <div className={`tm-card-eta tm-card-eta--${etaStatus}`} title={`ETA to ${etaData?.stopName || 'destination'}`}>
+          <Clock3 size={11} />
+          <span>{etaLabel}</span>
+        </div>
+      )}
 
       {/* Metadata footer */}
       <div className="tm-card-footer">
