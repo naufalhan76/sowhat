@@ -11,6 +11,7 @@ import {
 } from './helpers.jsx';
 import { TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
 import { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
+import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
 
 const defaultFmtDate = (value) => value || '-';
 const defaultFmtNum = (value, digits = 1) => {
@@ -414,23 +415,27 @@ export function TripMonitorDetailModal({
   return (
     <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
       <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
-        <CardHeader className="panel-card-header tm-drawer-header">
-          <div className="tm-drawer-header-inner">
-            <div className="tm-drawer-title-block">
-              <div className="tm-drawer-title-row">
-                <h2>{displayUnitLabel}</h2>
-                <span className={`tm-severity-badge severity-${severityKey}`}>{tmsSeverityLabel(detail.severity)}</span>
-              </div>
-              <div className="tm-drawer-meta-row">
-                <span className="tm-brand-chip">{detail.customerName || 'No customer'}</span>
-                {headlineJob?.name ? <span className="tm-jo-chip">{headlineJob.name}</span> : null}
-              </div>
-            </div>
-            <div className="tm-drawer-header-actions">
-              <Button variant="light" className="tm-drawer-close" onPress={onClose} aria-label="Close drawer" title="Close (Esc)"><X size={18} /></Button>
-            </div>
-          </div>
-        </CardHeader>
+        <TripMonitorDetailHeader
+          detail={detail}
+          headlineJob={headlineJob}
+          shippingStatus={shippingStatus}
+          eta={detail.eta}
+          overrideActive={detail.overrideActive}
+          isStale={detail.isStale}
+          refreshing={detail.refreshing}
+          onClose={onClose}
+          onRefresh={detail.onRefresh}
+          onForceClose={detail.onForceClose}
+          onOverrideBadge={detail.onOverrideBadge}
+          onWaDriver={detail.onWaDriver}
+          displayUnitLabel={displayUnitLabel}
+          driver1Name={driver1Name}
+          driver2Name={driver2Name}
+          routeSummary={routeSummary}
+          severityKey={severityKey}
+          customerName={detail.customerName}
+          tmsSeverityLabel={tmsSeverityLabel}
+        />
         {body}
       </Card>
     </div>
