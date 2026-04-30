@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Clock3, Route, Truck, Phone, RefreshCw, AlertTriangle } from 'lucide-react';
-import { Action, Pill, Surface } from '../index';
+import { Action, Pill, Surface, TripMonitorOverrideBadge } from '../index';
 
 export function TripMonitorDetailHeader({
   detail,
@@ -161,23 +161,11 @@ export function TripMonitorDetailHeader({
             <span className="tm-jo-chip">{headlineJob.name}</span>
           )}
 
-          {overrideActive && (
-            <Pill 
-              size="sm" 
-              onClick={onOverrideBadge}
-              style={{
-                cursor: onOverrideBadge ? 'pointer' : 'default',
-                background: 'var(--override-surface, rgba(6, 182, 212, 0.06))',
-                border: '1px solid var(--override-border, rgba(6, 182, 212, 0.24))',
-                color: 'var(--override-text, #22D3EE)',
-                fontSize: '11px',
-                fontWeight: 600,
-                fontFamily: 'Inter'
-              }}
-            >
-              Override Active
-            </Pill>
-          )}
+          <TripMonitorOverrideBadge 
+            overrides={detail?.overrides || {}} 
+            joId={detail?.joId} 
+            onReset={onOverrideBadge} 
+          />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>

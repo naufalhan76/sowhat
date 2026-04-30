@@ -16,3 +16,4 @@ export { AstroReportPanel } from './AstroReportPanel.jsx';
 export { MapPanel } from './MapPanel.jsx';
 export { TempErrorsPanel } from './TempErrorsPanel.jsx';
 export { StopIdlePanel } from './StopIdlePanel.jsx';
+export { TripMonitorOverrideBadge } from './trip-monitor/TripMonitorOverrideBadge.jsx';
