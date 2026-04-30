@@ -30,3 +30,8 @@ TMS HAR.txt
 
 # PR documentation (temporary)
 .sisyphus/PR-*.md
+
+# Internal tracking (Atlas orchestrator)
+.sisyphus/
+.github/workflows/
+docs/
