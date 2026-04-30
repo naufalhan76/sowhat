@@ -8,6 +8,7 @@ import { TripMonitorKanban } from './TripMonitorKanban.jsx';
 import { TripMonitorHistoricalView } from './TripMonitorHistoricalView.jsx';
 import { TripMonitorIncidentView } from './TripMonitorIncidentView.jsx';
 import { TripMonitorAuditLogView } from './TripMonitorAuditLogView.jsx';
+import { TripMonitorDeepDiveShell } from './TripMonitorDeepDiveShell.jsx';
 
 function selectedTripMonitorRowId(panels = []) {
   if (!panels.length) return null;
@@ -229,7 +230,7 @@ export function TripMonitorPanel({
         </div>
       ) : null}
 
-      {/* ── Kanban board ── */}
+      {/* ── Main Content Area ── */}
       {subView.type === 'board' ? (
         <TripMonitorKanban
           rows={visibleRows}
@@ -237,30 +238,39 @@ export function TripMonitorPanel({
           onOpen={(row) => onOpenDetail?.(row.rowId)}
           severityCounts={severityCounts}
         />
-      ) : subView.type === 'historical' ? (
-        <TripMonitorHistoricalView
-          context={subView.context}
-          range={range}
-          onBack={handleBackToBoard}
-          DataTable={DataTable}
-          fmtDate={fmtDate}
-          fmtNum={fmtNum}
-        />
-      ) : subView.type === 'incidents' ? (
-        <TripMonitorIncidentView
+      ) : (
+        <TripMonitorDeepDiveShell
+          title={
+            subView.type === 'historical' ? 'Historical Records' :
+            subView.type === 'incidents' ? 'Incident History' :
+            subView.type === 'audit-log' ? 'Override Audit Log' : 'Detail View'
+          }
           context={subView.context}
           onBack={handleBackToBoard}
-          DataTable={DataTable}
-          fmtDate={fmtDate}
-          formatMinutesText={formatMinutesText}
-        />
-      ) : subView.type === 'audit-log' ? (
-        <TripMonitorAuditLogView
-          context={subView.context}
-          onBack={handleBackToBoard}
-          fmtDate={fmtDate}
-        />
-      ) : null}
+        >
+          {subView.type === 'historical' ? (
+            <TripMonitorHistoricalView
+              context={subView.context}
+              range={range}
+              DataTable={DataTable}
+              fmtDate={fmtDate}
+              fmtNum={fmtNum}
+            />
+          ) : subView.type === 'incidents' ? (
+            <TripMonitorIncidentView
+              context={subView.context}
+              DataTable={DataTable}
+              fmtDate={fmtDate}
+              formatMinutesText={formatMinutesText}
+            />
+          ) : subView.type === 'audit-log' ? (
+            <TripMonitorAuditLogView
+              context={subView.context}
+              fmtDate={fmtDate}
+            />
+          ) : null}
+        </TripMonitorDeepDiveShell>
+      )}
     </section>
   );
 }

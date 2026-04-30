@@ -4356,6 +4356,11 @@ function applyJoOverrides(snapshot, overrideRow) {
     // buildTripMonitorShippingStatus() handles force-closed status display.
   }
 
+  // Shipping status override — stored on snapshot so buildTripMonitorShippingStatus can read it.
+  if (overrideRow.shipping_status_override) {
+    snapshot._shippingStatusOverride = overrideRow.shipping_status_override;
+  }
+
   return snapshot;
 }
 
@@ -4645,7 +4650,15 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
   let detail = `Menuju ${loadStop?.stop?.taskAddress || loadStop?.stop?.name || 'lokasi load'}.`;
   let activeStopName = loadStop?.stop?.taskAddress || loadStop?.stop?.name || '';
 
-  if (isClosed) {
+  // Shipping status override — if admin manually set a status, use it directly.
+  const shippingOverride = snapshot._shippingStatusOverride;
+  if (shippingOverride && shippingOverride.key && stepOrder.includes(shippingOverride.key)) {
+    currentKey = shippingOverride.key;
+    changedAt = shippingOverride.changedAt ? new Date(shippingOverride.changedAt).getTime() : now;
+    source = 'override';
+    detail = shippingOverride.detail || `Status di-override ke ${stepMeta[shippingOverride.key]?.label || shippingOverride.key}.`;
+    activeStopName = shippingOverride.activeStopName || '';
+  } else if (isClosed) {
     currentKey = 'selesai';
     changedAt = now;
     source = 'tms-status';
@@ -10701,7 +10714,7 @@ async function handleApi(req, res, url) {
       }
       
       const body = await readRequestBody(req);
-      const { stops, tempRange, forceClose, reason, notes } = body;
+      const { stops, tempRange, forceClose, shippingStatus, reason, notes } = body;
       const username = session.user.username || session.user.id || 'unknown';
       
       // Fetch existing override for audit
@@ -10743,6 +10756,12 @@ async function handleApi(req, res, url) {
           updateFields.push(`force_closed_reason = NULL`);
         }
       }
+      if (shippingStatus !== undefined) {
+        updateFields.push(`shipping_status_override = $${paramIndex}`);
+        insertFields.push('shipping_status_override');
+        values.push(JSON.stringify(shippingStatus));
+        paramIndex++;
+      }
       if (notes !== undefined) {
         updateFields.push(`notes = $${paramIndex}`);
         insertFields.push('notes');
@@ -10780,6 +10799,12 @@ async function handleApi(req, res, url) {
         await postgresQuery(
           'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
           [jobOrderId, 'force_closed', String(oldRow?.force_closed || false), String(forceClose), username, reason || null]
+        );
+      }
+      if (shippingStatus !== undefined && JSON.stringify(oldRow?.shipping_status_override) !== JSON.stringify(shippingStatus)) {
+        await postgresQuery(
+          'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
+          [jobOrderId, 'shipping_status_override', JSON.stringify(oldRow?.shipping_status_override || null), JSON.stringify(shippingStatus), username, reason || null]
         );
       }
       if (notes !== undefined && oldRow?.notes !== notes) {

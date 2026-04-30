@@ -34,6 +34,8 @@ export function TripMonitorFloatingPanel({
   onOpenFleet,
   onOpenMap,
   onOpenHistorical,
+  onOpenIncidents,
+  onOpenOverrideLog,
   onBringToFront,
   onMove,
   onResize,
@@ -235,6 +237,8 @@ export function TripMonitorFloatingPanel({
             onOpenFleet={onOpenFleet}
             onOpenMap={onOpenMap}
             onOpenHistorical={onOpenHistorical}
+            onOpenIncidents={onOpenIncidents}
+            onOpenOverrideLog={onOpenOverrideLog}
             renderTemperatureChart={renderTemperatureChart}
             renderUnitRouteMap={renderUnitRouteMap}
             fmtDate={fmtDate}

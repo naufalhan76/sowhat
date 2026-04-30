@@ -1,0 +1,18 @@
+{
+  "active_plan": "A:\\Solofleet\\.sisyphus\\plan-trip-monitor-revamp.md",
+  "started_at": "2026-04-30T07:08:09.165Z",
+  "session_ids": [
+    "ses_222c8d22effeendvdMiOmc2v5V",
+    "ses_222c45f8bffeu6H6nmMxQeZ68r",
+    "ses_222c42e87ffePPSGpPhxlHzYsy",
+    "ses_2224efbb3ffeBtQnqbU0JQ4AgF"
+  ],
+  "plan_name": "trip-monitor-revamp",
+  "session_origins": {
+    "ses_222c8d22effeendvdMiOmc2v5V": "direct",
+    "ses_222c45f8bffeu6H6nmMxQeZ68r": "appended",
+    "ses_222c42e87ffePPSGpPhxlHzYsy": "appended",
+    "ses_2224efbb3ffeBtQnqbU0JQ4AgF": "appended"
+  },
+  "task_sessions": {}
+}
