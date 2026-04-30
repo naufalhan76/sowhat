@@ -28,7 +28,7 @@ import { AdminPanel } from './components/AdminPanel.jsx';
 import { HistoricalPanel } from './components/HistoricalPanel.jsx';
 import { TripMonitorPanel } from './components/trip-monitor/TripMonitorPanel.jsx';
 import { TripMonitorFloatingPanel as TripMonitorFloatingPanelExtracted } from './components/trip-monitor/TripMonitorFloatingPanel.jsx';
-import { tripMonitorStopKey } from './components/trip-monitor/helpers.jsx';
+import { tripMonitorStopKey, extractTmsDriverPhone } from './components/trip-monitor/helpers.jsx';
 import { AstroReportPanel } from './components/AstroReportPanel.jsx';
 import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
@@ -433,6 +433,16 @@ const api = async (url, options = {}) => {
   if (!response.ok || payload.ok === false) throw new Error(payload.error || `HTTP ${response.status}`);
   return payload;
 };
+
+function normalizeWaPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('62')) return digits;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
+}
+
 const parseDateValue = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
@@ -2018,6 +2028,77 @@ export default function App() {
             throw e;
           } finally {
             stopBusy();
+          }
+        };
+        detail.onShippingStatusOverride = async (statusOverride) => {
+          try {
+            const jobOrderId = detail.metadata?.headlineJobOrder?.jobOrderId || detail.metadata?.id || detail.rowId;
+            await api(`/api/tms/overrides/${jobOrderId}`, {
+              method: 'POST',
+              body: JSON.stringify({ shippingStatus: statusOverride, reason: statusOverride ? `Manual override to ${statusOverride.label}` : 'Reset shipping status override' })
+            });
+            const refreshedDetail = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId: detail.rowId }).toString()}`);
+            const fresh = refreshedDetail.detail || null;
+            if (fresh) {
+              setTripMonitorPanels((current) => current.map((panel) => {
+                if (panel.id !== panelId || !panel.detail) return panel;
+                return {
+                  ...panel,
+                  detail: {
+                    ...fresh,
+                    onForceClose: panel.detail.onForceClose,
+                    onShippingStatusOverride: panel.detail.onShippingStatusOverride,
+                    onWaDriver: panel.detail.onWaDriver,
+                  },
+                };
+              }));
+            }
+            setBanner({ tone: 'success', message: statusOverride ? `Shipping status overridden to ${statusOverride.label}` : 'Shipping status override reset' });
+            loadTripMonitorBoard(true).catch(() => {});
+          } catch (e) {
+            setBanner({ tone: 'error', message: `Failed to override shipping status: ${e.message}` });
+            throw e;
+          }
+        };
+        detail.onWaDriver = async (driverIndex) => {
+          try {
+            const headlineJob = detail.metadata?.headlineJobOrder || {};
+            const drivers = Array.isArray(headlineJob.driverAssign) ? [...headlineJob.driverAssign].sort((a, b) => Number(a?.idx ?? a?.index ?? 0) - Number(b?.idx ?? b?.index ?? 0)) : [];
+            const driver = drivers[driverIndex - 1];
+            if (!driver) {
+              setBanner({ tone: 'error', message: `Driver ${driverIndex} data not found.` });
+              return;
+            }
+            // Extract crew ID — try common field names
+            const crewId = String(driver.employee || driver.name || driver.crew_id || driver.driver_id || driver.employee_id || '').trim();
+            const localPhone = extractTmsDriverPhone(driver);
+            if (localPhone) {
+              const normalizedPhone = normalizeWaPhone(localPhone);
+              if (normalizedPhone) {
+                window.open(`https://wa.me/${normalizedPhone}`, '_blank');
+                setBanner({ tone: 'success', message: `Opening WhatsApp for driver ${driverIndex} (${localPhone})` });
+                return;
+              }
+            }
+            if (!crewId) {
+              setBanner({ tone: 'error', message: 'Crew ID not found in driver data.' });
+              return;
+            }
+            setBanner({ tone: 'info', message: `Looking up phone for ${crewId}...` });
+            const result = await api(`/api/tms/crew-phone?${new URLSearchParams({ crewId }).toString()}`);
+            if (!result.phone) {
+              setBanner({ tone: 'error', message: `No phone number found for crew ${result.name || crewId}.` });
+              return;
+            }
+            const phone = normalizeWaPhone(result.phone);
+            if (!phone) {
+              setBanner({ tone: 'error', message: `Invalid phone number for crew ${result.name || crewId}.` });
+              return;
+            }
+            window.open(`https://wa.me/${phone}`, '_blank');
+            setBanner({ tone: 'success', message: `Opening WhatsApp for ${result.name || crewId} (${result.phone})` });
+          } catch (e) {
+            setBanner({ tone: 'error', message: `Failed to lookup driver phone: ${e.message}` });
           }
         };
       }

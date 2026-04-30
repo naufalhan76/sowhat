@@ -283,6 +283,7 @@ export function TripMonitorDetailModal({
           onForceClose={detail.onForceClose}
           onOverrideBadge={detail.onOverrideBadge}
           onWaDriver={detail.onWaDriver}
+          onShippingStatusOverride={detail.onShippingStatusOverride}
           displayUnitLabel={displayUnitLabel}
           driver1Name={driver1Name}
           driver2Name={driver2Name}
