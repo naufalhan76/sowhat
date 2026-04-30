@@ -297,19 +297,7 @@ export function TripMonitorDetailModal({
                 )}
               </div>
             </div>
-          {pendingSelesaiConfirm && (
-            <div className="tm-selesai-confirm">
-              <div className="tm-selesai-confirm-icon">!</div>
-              <div className="tm-selesai-confirm-text">
-                <strong>Ubah ke Selesai Pengiriman?</strong>
-                <p>Job Order akan langsung hilang dari board setelah status diubah.</p>
-              </div>
-              <div className="tm-selesai-confirm-actions">
-                <button type="button" className="tm-selesai-confirm-cancel" onClick={() => setPendingSelesaiConfirm(false)} disabled={statusSaving}>Batal</button>
-                <button type="button" className="tm-selesai-confirm-ok" onClick={handleConfirmSelesaiPengiriman} disabled={statusSaving}>{statusSaving ? 'Menyimpan...' : 'Ya, Selesaikan'}</button>
-              </div>
-            </div>
-          )}
+          {/* Selesai confirmation rendered as overlay outside modal body */}
           {false && effectiveForceClose && detail?.status !== 'closed' && (
               <button type="button" className="tm-force-close-link" onClick={() => setShowForceCloseConfirm(true)}>
                 Force Close Trip
@@ -458,26 +446,27 @@ export function TripMonitorDetailModal({
             </div>
           </details>
 
-          <div className="tm-stack-section tm-action-row tm-deep-dive-actions">
-            <button type="button" className="tm-action-btn" disabled={!fleetRow?.id} onClick={() => onOpenHistorical?.({ rowId: detail.id, ...fleetRow })}>
-              <FileText size={16} />
-              <span>Historical Records</span>
-            </button>
-            <button type="button" className="tm-action-btn" onClick={() => onOpenIncidents?.({ rowId: detail.id, ...fleetRow })}>
-              <AlertTriangle size={16} />
-              <span>Incident History</span>
-            </button>
-            <button type="button" className="tm-action-btn" onClick={() => onOpenOverrideLog?.({ rowId: detail.id, ...fleetRow })}>
-              <FileEdit size={16} />
-              <span>Override Audit Log</span>
-            </button>
-          </div>
+          {/* Deep dive actions merged into map action row */}
         </div>
       )}
     </div>
   );
 
-  if (mode === 'floating') return body;
+  const selesaiOverlay = pendingSelesaiConfirm ? (
+    <div className="tm-selesai-overlay" onClick={() => setPendingSelesaiConfirm(false)}>
+      <div className="tm-selesai-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="tm-selesai-confirm-icon">!</div>
+        <strong>Ubah ke Selesai Pengiriman?</strong>
+        <p>Job Order akan langsung hilang dari board setelah status diubah.</p>
+        <div className="tm-selesai-confirm-actions">
+          <button type="button" className="tm-selesai-confirm-cancel" onClick={() => setPendingSelesaiConfirm(false)} disabled={statusSaving}>Batal</button>
+          <button type="button" className="tm-selesai-confirm-ok" onClick={handleConfirmSelesaiPengiriman} disabled={statusSaving}>{statusSaving ? 'Menyimpan...' : 'Ya, Selesaikan'}</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (mode === 'floating') return <>{body}{selesaiOverlay}</>;
 
   return (
     <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
@@ -506,6 +495,7 @@ export function TripMonitorDetailModal({
         />
         {body}
       </div>
+      {selesaiOverlay}
     </div>
   );
 }
