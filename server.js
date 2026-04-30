@@ -5818,6 +5818,10 @@ function applyTripMonitorIncidentState(row, incidents) {
   }
   nextRow.severity = 'normal';
   nextRow.boardStatus = 'normal';
+  const effectiveShippingKey = nextRow.metadata?.shippingStatus?.key;
+  if (effectiveShippingKey === 'selesai-pengiriman' || effectiveShippingKey === 'selesai') {
+    nextRow.boardStatus = 'closed';
+  }
   return nextRow;
 }
 
@@ -5937,13 +5941,17 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now, overrideM
     } else if (incidents.some(function (incident) { return incident.severity === 'critical'; })) {
       severity = 'critical';
       boardStatus = 'critical';
-    } else if (incidents.length) {
-      severity = 'warning';
-      boardStatus = 'warning';
-    }
+  } else if (incidents.length) {
+    severity = 'warning';
+    boardStatus = 'warning';
+  }
+  const effectiveShippingKey = shippingStatus?.key;
+  if (effectiveShippingKey === 'selesai-pengiriman' || effectiveShippingKey === 'selesai') {
+    boardStatus = 'closed';
+  }
 
-    const driver = (headline.item.driverAssign || [])[0] || null;
-    rows.push({
+  const driver = (headline.item.driverAssign || [])[0] || null;
+  rows.push({
       rowId: `${headline.item.day}|${groupKey}`,
       day: headline.item.day,
       tenantLabel: headline.item.tenantLabel || '',

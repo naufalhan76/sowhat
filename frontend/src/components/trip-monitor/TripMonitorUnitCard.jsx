@@ -6,15 +6,6 @@ import { TripMonitorIncidentIcons } from './TripMonitorIncidentIcons.jsx';
 
 const fmtNum = (value, digits = 1) => (value == null ? '-' : Number(value).toFixed(digits));
 
-function compactDriverStatus(value) {
-  return String(value || '')
-    .split('|')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(' · ');
-}
-
 function formatEta(durationSeconds) {
   if (!durationSeconds) return null;
   const s = Number(durationSeconds);
@@ -33,8 +24,6 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
   const tempRange = normalizeTemperatureRange(row?.tempMin, row?.tempMax);
   const tempLabel = tempRange.min !== null ? `${fmtNum(tempRange.min)}° — ${fmtNum(tempRange.max)}°` : null;
   const incidentSummary = row?.incidentSummary && row.incidentSummary !== '-' ? row.incidentSummary : '';
-  const driverAppStatus = row?.driverAppStatus && row.driverAppStatus !== '-' ? row.driverAppStatus : '';
-  const driverAppCompact = compactDriverStatus(driverAppStatus);
   const severity = row?.severity || 'normal';
 
   const etaData = row?.eta || row?.metadata?.eta;
@@ -93,7 +82,6 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
       <div className="tm-card-footer">
         <span className="tm-card-jo" title={jobOrderId}>{jobOrderId}</span>
         {tempLabel ? <span className="tm-card-temp"><Thermometer size={11} /> {tempLabel}</span> : null}
-        {driverAppCompact ? <span className="tm-card-driver" title={driverAppStatus}>{driverAppCompact}</span> : null}
       </div>
 
       {/* Unmatched reason */}
