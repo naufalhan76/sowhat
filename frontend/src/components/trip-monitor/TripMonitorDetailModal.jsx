@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { ChevronDown, Clock3, Route, Truck, X } from 'lucide-react';
+import { ChevronDown, Clock3, Route, Truck, X, FileText, AlertTriangle, FileEdit } from 'lucide-react';
 import { Surface, SurfaceHeader, SurfaceBody, Action, Pill } from '../index.js';
 import {
   tmsSeverityLabel, tmsSeverityTone, tmsIncidentLabel,
@@ -61,6 +61,8 @@ export function TripMonitorDetailModal({
   onOpenFleet,
   onOpenMap,
   onOpenHistorical,
+  onOpenIncidents,
+  onOpenOverrideLog,
   renderTemperatureChart,
   renderUnitRouteMap,
   mode = 'drawer',
@@ -166,25 +168,9 @@ export function TripMonitorDetailModal({
     : null;
 
   const body = (
-    <CardContent>
+    <div className="tm-detail-modal-body">
       {busy ? <div className="empty-state">Loading detail...</div> : (
         <div className="tm-stack">
-          <div className="tm-stack-section tm-driver-section">
-            <div className="tm-driver-row">
-              <div className="tm-driver-info">
-                <span className="tm-stack-label">Drivers</span>
-                <strong className="tm-driver-names">
-                  {driver1Name}{driver2Name && driver2Name !== '-' ? <> <span className="tm-divider-dot">·</span> {driver2Name}</> : null}
-                </strong>
-              </div>
-              <span className={`tm-status-pill status-${String(shippingStatus?.label || '').toLowerCase().replace(/\s+/g, '-')}`}>
-                {shippingStatus?.label || 'Unknown'}
-              </span>
-            </div>
-            <p className="tm-route-line">{routeSummary}</p>
-            {appStatus && appStatus !== '-' ? <p className="tm-route-line">Driver app: {appStatus}</p> : null}
-          </div>
-
           <TripMonitorDetailMapSection
             fleetRow={fleetRow}
             headlineJob={headlineJob}
@@ -203,6 +189,11 @@ export function TripMonitorDetailModal({
             fmtNum={fmtNum}
             formatTripMonitorStatusTime={formatTripMonitorStatusTime}
           />
+
+          <details className="tm-stack-section tm-section-collapsible" ref={chartSentinelRef}>
+            <summary className="tm-section-summary"><span className="tm-section-title">Temperature Trend</span><span className="tm-section-meta"><span className="tm-section-count tm-range-chip">{historyLabel}</span><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
+            <div className="tm-section-content">{fleetRow?.id ? (chartVisible ? (temperatureContent || <div className="empty-state">Temperature renderer belum tersedia.</div>) : <div className="empty-state">Loading chart...</div>) : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}</div>
+          </details>
 
           <details className="tm-stack-section tm-section-collapsible" open>
             <summary className="tm-section-summary">
@@ -245,62 +236,23 @@ export function TripMonitorDetailModal({
             <div className="tm-section-content"><TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /></div>
           </details>
 
-          <details className="tm-stack-section tm-section-collapsible" ref={chartSentinelRef}>
-            <summary className="tm-section-summary"><span className="tm-section-title">Temperature Trend</span><span className="tm-section-meta"><span className="tm-section-count tm-range-chip">{historyLabel}</span><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
-            <div className="tm-section-content">{fleetRow?.id ? (chartVisible ? (temperatureContent || <div className="empty-state">Temperature renderer belum tersedia.</div>) : <div className="empty-state">Loading chart...</div>) : <div className="empty-state">Unit ini belum match ke Solofleet.</div>}</div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary"><span className="tm-section-title">Historical Records</span><span className="tm-section-meta"><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
-            <div className="tm-section-content">
-              {fleetRow?.id ? (
-                <DataTable
-                  pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }}
-                  columns={["Timestamp", "Status", "Speed", "Temp 1", "Temp 2", "Location", "Maps"]}
-                  emptyMessage="Belum ada historical rows untuk unit ini di topbar range yang dipilih."
-                  rows={historyRows.map((row) => [
-                    fmtDate(row.timestamp),
-                    <div><div>{row.geofenceStatusLabel || '-'}</div><div className="subtle-line">{row.geofenceLocationName || row.geofenceLocationType || 'Outside geofence'}</div></div>,
-                    fmtNum(row.speed, 0),
-                    fmtNum(row.temp1),
-                    fmtNum(row.temp2),
-                    <div><div>{row.locationSummary || '-'}</div><div className="subtle-line">{row.zoneName || `${fmtCoord(row.latitude)}, ${fmtCoord(row.longitude)}`}</div></div>,
-                    row.latitude !== null && row.longitude !== null ? <Link href={`https://www.google.com/maps?q=${row.latitude},${row.longitude}`} target="_blank" rel="noreferrer">Open map</Link> : '-',
-                  ])}
-                />
-              ) : <div className="empty-state">Historical belum tersedia karena unit belum terhubung ke Solofleet.</div>}
-            </div>
-          </details>
-
-          <details className="tm-stack-section tm-section-collapsible">
-            <summary className="tm-section-summary"><span className="tm-section-title">Incident History (full)</span><span className="tm-section-meta"><span className="tm-section-count">{incidentHistory.length}</span><ChevronDown size={14} className="tm-section-chevron" /></span></summary>
-            <div className="tm-section-content">
-              <div className="tm-section-more">Active {incidentHistoryActiveCount} · Resolved {incidentHistoryResolvedCount} · Total {formatMinutesText(incidentHistoryTotalMinutes)}</div>
-              <DataTable
-                pagination={{ initialRowsPerPage: 20, rowsPerPageOptions: [20, 50, 100] }}
-                columns={["Label", "Description", "Severity", "Status", "Duration", "Anomaly start", "Anomaly end", "Location", "Actions"]}
-                emptyMessage="Belum ada incident history untuk JO ini."
-                rows={incidentHistory.map((item) => {
-                  const description = buildTripMonitorIncidentHistoryDescription(item);
-                  const locationLabel = buildTripMonitorIncidentHistoryLocationLabel(item);
-                  return [
-                    <div><strong>{item.label || tmsIncidentLabel(item.incidentCode)}</strong><div className="subtle-line">{item.incidentCode || '-'}</div></div>,
-                    <div><div>{description.primary}</div>{description.secondary ? <div className="subtle-line">{description.secondary}</div> : null}</div>,
-                    <Chip color={tmsSeverityTone(item.severity)}>{tmsSeverityLabel(item.severity)}</Chip>,
-                    <Chip color={tripMonitorIncidentHistoryStatusTone(item.status)}>{tripMonitorIncidentHistoryStatusLabel(item.status)}</Chip>,
-                    formatMinutesText(item.durationMinutes || 0),
-                    fmtDate(item.openedAt),
-                    String(item.status || '').toLowerCase() === 'resolved' ? fmtDate(item.resolvedAt) : (item.lastSeenAt ? `${fmtDate(item.lastSeenAt)} (active)` : '-'),
-                    <div><div>{locationLabel.primary}</div><div className="subtle-line">{locationLabel.secondary}</div></div>,
-                    <TripMonitorIncidentComments incidentId={item.id} webSessionUser={webSessionUser} fmtDate={fmtDate} />,
-                  ];
-                })}
-              />
-            </div>
-          </details>
+          <div className="tm-stack-section tm-action-row tm-deep-dive-actions">
+            <button type="button" className="tm-action-btn" disabled={!fleetRow?.id} onClick={onOpenHistorical}>
+              <FileText size={16} />
+              <span>Historical Records</span>
+            </button>
+            <button type="button" className="tm-action-btn" onClick={onOpenIncidents}>
+              <AlertTriangle size={16} />
+              <span>Incident History</span>
+            </button>
+            <button type="button" className="tm-action-btn" onClick={onOpenOverrideLog}>
+              <FileEdit size={16} />
+              <span>Override Audit Log</span>
+            </button>
+          </div>
         </div>
       )}
-    </CardContent>
+    </div>
   );
 
   if (mode === 'floating') return body;
