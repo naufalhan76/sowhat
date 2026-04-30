@@ -12046,6 +12046,50 @@ async function hydrateTmsMonitorHistory() {
   }
 }
 
+async function ensureTmsOverrideTables() {
+  if (!getPostgresConfig().enabled) return;
+
+  try {
+    console.log('[Migration] Checking TMS override tables...');
+
+    await postgresQuery(`
+      CREATE TABLE IF NOT EXISTS tms_jo_overrides (
+        job_order_id TEXT PRIMARY KEY,
+        stops_override JSONB,
+        temp_range_override JSONB,
+        shipping_status_override JSONB,
+        force_closed BOOLEAN DEFAULT FALSE,
+        force_closed_at TIMESTAMPTZ,
+        force_close_reason TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await postgresQuery(`
+      CREATE TABLE IF NOT EXISTS tms_jo_override_audit (
+        id SERIAL PRIMARY KEY,
+        job_order_id TEXT NOT NULL,
+        field_changed TEXT NOT NULL,
+        old_value JSONB,
+        new_value JSONB,
+        performed_by TEXT,
+        reason TEXT,
+        performed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await postgresQuery('CREATE INDEX IF NOT EXISTS idx_tms_jo_overrides_job_order_id ON tms_jo_overrides(job_order_id)');
+    await postgresQuery('CREATE INDEX IF NOT EXISTS idx_tms_jo_override_audit_job_order_id ON tms_jo_override_audit(job_order_id)');
+    await postgresQuery('CREATE INDEX IF NOT EXISTS idx_tms_jo_override_audit_performed_at ON tms_jo_override_audit(performed_at)');
+
+    console.log('[Migration] TMS override tables ready');
+  } catch (error) {
+    console.error('[Migration Error]', error);
+    throw error;
+  }
+}
+
 if (require.main === module) {
   const server = http.createServer(requestHandler);
 
@@ -12057,6 +12101,7 @@ if (require.main === module) {
     console.log(`Solofleet auto monitor running at http://${HOST}:${PORT}`);
     try {
       await storageInitializationPromise;
+      await ensureTmsOverrideTables();
       scheduleNextTmsSync();
       hydrateTmsMonitorHistory().catch(function (error) { console.error('[TMS Hydration Error]', error); });
       if (config && config.autoStart) {
