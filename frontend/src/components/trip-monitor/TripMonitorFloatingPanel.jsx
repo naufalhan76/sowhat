@@ -196,7 +196,7 @@ export function TripMonitorFloatingPanel({
   return (
     <div
       ref={panelRef}
-      className={`tm-float-panel severity-${severityKey}`}
+      className="tm-float-panel"
       style={{
         position: 'fixed',
         left: position.x,

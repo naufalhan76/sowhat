@@ -35,8 +35,13 @@ export function TripMonitorDetailHeader({
     { key: 'sampai-load', label: 'SAMPAI LOAD' },
     { key: 'menuju-unload', label: 'MENUJU UNLOAD' },
     { key: 'sampai-unload', label: 'SAMPAI UNLOAD' },
-    { key: 'selesai', label: 'SELESAI' },
+    { key: 'selesai-bongkar', label: 'SELESAI BONGKAR' },
+    { key: 'selesai-pengiriman', label: 'SELESAI PENGIRIMAN' },
   ];
+
+  const normalizedShippingStatusKey = shippingStatus?.key === 'selesai'
+    ? 'selesai-pengiriman'
+    : shippingStatus?.key;
 
   const handleStatusOverride = async (stepKey) => {
     if (!onShippingStatusOverride) return;
@@ -82,8 +87,8 @@ export function TripMonitorDetailHeader({
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          background: 'var(--surface)',
-          borderBottom: '1px solid var(--border)',
+          background: '#ffffff',
+          borderBottom: '1px solid #e5e7eb',
           padding: '12px 16px',
           display: 'flex',
           alignItems: 'center',
@@ -91,8 +96,8 @@ export function TripMonitorDetailHeader({
           minHeight: '48px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600, fontFamily: 'Inter', letterSpacing: '-0.01em', color: 'var(--text-main)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, fontFamily: 'Inter', letterSpacing: '-0.01em', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {displayUnitLabel}
           </h2>
           
@@ -109,10 +114,10 @@ export function TripMonitorDetailHeader({
                 disabled={!onShippingStatusOverride || statusSaving}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 500,
+                  padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
                   border: shippingStatus.source === 'override' ? '1px solid var(--override-accent, #22d3ee)' : '1px solid var(--border)',
                   background: shippingStatus.source === 'override' ? 'rgba(34,211,238,0.08)' : 'transparent',
-                  color: 'var(--text-main)', cursor: onShippingStatusOverride ? 'pointer' : 'default',
+                  color: '#374151', cursor: onShippingStatusOverride ? 'pointer' : 'default',
                 }}
               >
                 {shippingStatus.label || 'Unknown Status'}
@@ -133,8 +138,8 @@ export function TripMonitorDetailHeader({
                       disabled={statusSaving}
                       style={{
                         display: 'block', width: '100%', textAlign: 'left', padding: '6px 12px',
-                        fontSize: '12px', border: 'none', background: shippingStatus.key === step.key ? 'rgba(120,120,130,0.08)' : 'transparent',
-                        color: 'var(--text-main)', cursor: 'pointer', fontWeight: shippingStatus.key === step.key ? 600 : 400,
+                        fontSize: '12px', border: 'none', background: normalizedShippingStatusKey === step.key ? 'rgba(120,120,130,0.08)' : 'transparent',
+                        color: 'var(--text-main)', cursor: 'pointer', fontWeight: normalizedShippingStatusKey === step.key ? 600 : 400,
                       }}
                     >
                       {step.label}
@@ -167,7 +172,7 @@ export function TripMonitorDetailHeader({
             <div 
               style={{ 
                 fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', 
-                fontSize: '14px', 
+                fontSize: '12px', 
                 fontWeight: 500,
                 letterSpacing: '-0.01em',
                 color: eta.status === 'on-time' ? 'var(--success)' : 
@@ -178,7 +183,7 @@ export function TripMonitorDetailHeader({
                 gap: '4px'
               }}
             >
-              <Clock3 size={14} />
+              <Clock3 size={13} />
               <span>
                 {eta.durationSeconds 
                   ? `~${Math.floor(eta.durationSeconds / 3600)}h ${Math.floor((eta.durationSeconds % 3600) / 60)}m` 
@@ -245,11 +250,14 @@ export function TripMonitorDetailHeader({
       <div 
         className="tm-drawer-header-tier2"
         style={{
-          padding: '16px',
+          padding: '10px 16px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          background: 'var(--bg)'
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px 12px',
+          background: '#ffffff'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
@@ -268,18 +276,18 @@ export function TripMonitorDetailHeader({
           />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: '300px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '10px', flex: '1 1 280px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: '240px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {(driver1Name || driver2Name) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {driver1Name && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>{driver1Name}</span>
+                    <span style={{ fontSize: '12px', color: '#374151' }}>{driver1Name}</span>
                     <Action 
                       variant="ghost" 
                       size="icon" 
                       onClick={() => onWaDriver?.(1)}
-                      style={{ width: '28px', height: '28px', color: 'var(--success)' }}
+                      style={{ width: '24px', height: '24px', color: 'var(--success)' }}
                       title="WhatsApp Driver 1"
                     >
                       <Phone size={14} />
@@ -293,12 +301,12 @@ export function TripMonitorDetailHeader({
                 
                 {driver2Name && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>{driver2Name}</span>
+                    <span style={{ fontSize: '12px', color: '#374151' }}>{driver2Name}</span>
                     <Action 
                       variant="ghost" 
                       size="icon" 
                       onClick={() => onWaDriver?.(2)}
-                      style={{ width: '28px', height: '28px', color: 'var(--success)' }}
+                      style={{ width: '24px', height: '24px', color: 'var(--success)' }}
                       title="WhatsApp Driver 2"
                     >
                       <Phone size={14} />
@@ -310,19 +318,23 @@ export function TripMonitorDetailHeader({
 
             {routeSummary && (
               <>
-                <div style={{ width: '1px', height: '16px', background: 'var(--border)' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                <div style={{ width: '1px', height: '14px', background: '#e5e7eb' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6b7280', fontSize: '12px', minWidth: 0 }}>
                   <Route size={14} />
-                  <span>{routeSummary}</span>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{routeSummary}</span>
                 </div>
               </>
             )}
           </div>
 
           {onForceClose && !showForceCloseConfirm && detail?.status !== 'closed' && (
-            <Action variant="danger" size="sm" onClick={() => setShowForceCloseConfirm(true)}>
+            <button
+              type="button"
+              onClick={() => setShowForceCloseConfirm(true)}
+              style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600, padding: '2px 0', textDecoration: 'none', background: 'transparent', border: 0 }}
+            >
               Force Close
-            </Action>
+            </button>
           )}
           
           {showForceCloseConfirm && (
@@ -349,7 +361,7 @@ export function TripMonitorDetailHeader({
                 <span>Confirm Force Close</span>
               </div>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                This will mark the job order as "Selesai" and bypass all remaining validations. A reason is required.
+                This will mark the job order as "Selesai Pengiriman" and bypass all remaining validations. A reason is required.
               </p>
               <textarea
                 value={forceCloseReason}

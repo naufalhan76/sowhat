@@ -108,6 +108,21 @@ export default function TripMonitorDetailMapSection({
       })
     : null;
 
+  const formatDateTimeCompact = (timestamp) => {
+    if (!timestamp) return '--';
+    try {
+      const d = new Date(timestamp);
+      if (Number.isNaN(d.getTime())) return '--';
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm} ${hh}:${min}`;
+    } catch {
+      return '--';
+    }
+  };
+
   return (
     <div className="tm-stack-section tm-map-section" ref={mapSentinelRef}>
       {/* Map Frame */}
@@ -143,13 +158,14 @@ export default function TripMonitorDetailMapSection({
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 1px;
-            background: var(--border);
-            border-radius: 6px;
+            background: #e5e7eb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
             overflow: hidden;
           }
           .tm-schedule-cell {
-            background: var(--surface);
-            padding: 8px 10px;
+            background: #ffffff;
+            padding: 7px 9px;
             display: flex;
             flex-direction: column;
             gap: 2px;
@@ -162,10 +178,10 @@ export default function TripMonitorDetailMapSection({
           }
           .tm-schedule-label {
             font-size: 11px;
-            font-weight: 400;
+            font-weight: 500;
             font-family: Inter, sans-serif;
-            letter-spacing: 0.01em;
-            color: var(--text-muted);
+            letter-spacing: 0;
+            color: #6b7280;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -174,7 +190,7 @@ export default function TripMonitorDetailMapSection({
             font-size: 13px;
             font-weight: 600;
             font-family: "JetBrains Mono", monospace;
-            color: var(--text);
+            color: #111827;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -279,11 +295,11 @@ export default function TripMonitorDetailMapSection({
         <div className="tm-schedule-grid">
           <div className="tm-schedule-cell">
             <span className="tm-schedule-label">ETA Load</span>
-            <strong className="tm-schedule-value">{formatTripMonitorStatusTime(shippingStatus?.loadEta)}</strong>
+            <strong className="tm-schedule-value">{formatDateTimeCompact(headlineJob?.etaOrigin)}</strong>
           </div>
           <div className="tm-schedule-cell">
             <span className="tm-schedule-label">ETD Unload</span>
-            <strong className="tm-schedule-value">{formatTripMonitorStatusTime(shippingStatus?.unloadEtd)}</strong>
+            <strong className="tm-schedule-value">{formatDateTimeCompact(headlineJob?.etaDestination)}</strong>
           </div>
           <div className={`tm-schedule-cell ${editMode ? 'is-editing' : ''}`} title={editMode ? '' : "Edit Temp Range"}>
             <span className="tm-schedule-label">

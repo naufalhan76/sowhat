@@ -4627,21 +4627,32 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   });
 }
 
-const TRIP_MONITOR_SHIPPING_STEP_ORDER = ['otw-load', 'sampai-load', 'menuju-unload', 'sampai-unload', 'selesai'];
+const TRIP_MONITOR_SHIPPING_STEP_ORDER = ['otw-load', 'sampai-load', 'menuju-unload', 'sampai-unload', 'selesai-bongkar', 'selesai-pengiriman'];
 const TRIP_MONITOR_SHIPPING_STEP_META = {
   'otw-load': { label: 'OTW LOAD' },
   'sampai-load': { label: 'SAMPAI LOAD' },
   'menuju-unload': { label: 'MENUJU UNLOAD' },
   'sampai-unload': { label: 'SAMPAI UNLOAD' },
-  selesai: { label: 'SELESAI' },
+  'selesai-bongkar': { label: 'SELESAI BONGKAR' },
+  'selesai-pengiriman': { label: 'SELESAI PENGIRIMAN' },
 };
+
+function normalizeTripMonitorShippingStatusKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'selesai') return 'selesai-pengiriman';
+  return key;
+}
+
+function isTripMonitorShippingComplete(shippingStatus) {
+  return normalizeTripMonitorShippingStatusKey(shippingStatus?.key) === 'selesai-pengiriman';
+}
 
 function normalizeShippingStatusOverride(input, now) {
   if (input === null) return null;
   if (!input || typeof input !== 'object') {
     throw new Error('shippingStatus harus berupa object atau null.');
   }
-  const key = String(input.key || '').trim().toLowerCase();
+  const key = normalizeTripMonitorShippingStatusKey(input.key);
   if (!TRIP_MONITOR_SHIPPING_STEP_ORDER.includes(key)) {
     throw new Error('shippingStatus key tidak valid.');
   }
@@ -4662,7 +4673,8 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
   const stepOrder = TRIP_MONITOR_SHIPPING_STEP_ORDER;
   const stepMeta = TRIP_MONITOR_SHIPPING_STEP_META;
   const shippingOverride = snapshot._shippingStatusOverride;
-  const overrideKey = shippingOverride && stepOrder.includes(shippingOverride.key) ? shippingOverride.key : null;
+  const normalizedOverrideKey = normalizeTripMonitorShippingStatusKey(shippingOverride?.key);
+  const overrideKey = shippingOverride && stepOrder.includes(normalizedOverrideKey) ? normalizedOverrideKey : null;
   if (!progress.length) {
     const fallbackKey = overrideKey || 'otw-load';
     const fallbackIndex = Math.max(0, stepOrder.indexOf(fallbackKey));
@@ -4711,16 +4723,16 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
     detail = shippingOverride.detail || `Status di-override ke ${stepMeta[shippingOverride.key]?.label || shippingOverride.key}.`;
     activeStopName = shippingOverride.activeStopName || '';
   } else if (isClosed) {
-    currentKey = 'selesai';
+    currentKey = 'selesai-pengiriman';
     changedAt = now;
     source = 'tms-status';
-    detail = `Selesai di ${finalStop?.stop?.taskAddress || finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
+    detail = `Pengiriman selesai di ${finalStop?.stop?.taskAddress || finalStop?.stop?.name || 'unload terakhir'} (Job Order Closed).`;
     activeStopName = finalStop?.stop?.taskAddress || finalStop?.stop?.name || '';
   } else if (finalStop && finalStop.departedAt !== null) {
-    currentKey = 'selesai';
+    currentKey = 'selesai-bongkar';
     changedAt = finalStop.departedAt;
     source = finalStop.departedSource || 'history';
-    detail = `Sudah berangkat dari ${finalStop.stop?.taskAddress || finalStop.stop?.name || 'unload terakhir'}, menunggu TMS Closed.`;
+    detail = `Bongkar selesai di ${finalStop.stop?.taskAddress || finalStop.stop?.name || 'unload terakhir'}, menunggu pengiriman closed.`;
     activeStopName = finalStop.stop?.taskAddress || finalStop.stop?.name || '';
   } else if (currentUnload) {
     currentKey = 'sampai-unload';
@@ -4747,21 +4759,24 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
     'sampai-load': loadStop?.arrivedAt ?? null,
     'menuju-unload': lastDeparted?.departedAt ?? loadStop?.departedAt ?? null,
     'sampai-unload': lastUnloadArrived?.arrivedAt ?? null,
-    selesai: isClosed ? now : finalStop?.departedAt ?? null,
+    'selesai-bongkar': finalStop?.departedAt ?? null,
+    'selesai-pengiriman': isClosed ? now : null,
   };
   const timelineSource = {
     'otw-load': null,
     'sampai-load': loadStop?.arrivedSource || null,
     'menuju-unload': lastDeparted?.departedSource || loadStop?.departedSource || null,
     'sampai-unload': lastUnloadArrived?.arrivedSource || null,
-    selesai: isClosed ? 'tms-status' : finalStop?.departedSource || null,
+    'selesai-bongkar': finalStop?.departedSource || null,
+    'selesai-pengiriman': isClosed ? 'tms-status' : null,
   };
   const timelineLocation = {
     'otw-load': loadStop?.stop?.taskAddress || loadStop?.stop?.name || '',
     'sampai-load': loadStop?.stop?.taskAddress || loadStop?.stop?.name || '',
     'menuju-unload': transitTarget?.stop?.taskAddress || lastUnloadArrived?.stop?.taskAddress || finalStop?.stop?.taskAddress || '',
     'sampai-unload': lastUnloadArrived?.stop?.taskAddress || finalStop?.stop?.taskAddress || '',
-    selesai: finalStop?.stop?.taskAddress || '',
+    'selesai-bongkar': finalStop?.stop?.taskAddress || '',
+    'selesai-pengiriman': finalStop?.stop?.taskAddress || '',
   };
   const activeIndex = Math.max(0, stepOrder.indexOf(currentKey));
   const steps = stepOrder.map(function (key, index) {
@@ -4826,13 +4841,13 @@ function setEtaCache(key, value) {
 }
 
 function pickTripMonitorEtaTargetStop(stops, shippingStatus) {
-  const statusKey = shippingStatus?.key || 'otw-load';
-  if (statusKey === 'selesai') return null;
+  const statusKey = normalizeTripMonitorShippingStatusKey(shippingStatus?.key) || 'otw-load';
+  if (statusKey === 'selesai-pengiriman') return null;
   const loadStop = stops.find(function (s) { return s.taskType === 'load'; }) || stops[0] || null;
   const unloadStops = stops.filter(function (s) { return s.taskType === 'unload'; });
   if (statusKey === 'otw-load') return loadStop;
   if (statusKey === 'sampai-load' || statusKey === 'menuju-unload') return unloadStops[0] || stops[stops.length - 1] || null;
-  if (statusKey === 'sampai-unload') {
+  if (statusKey === 'sampai-unload' || statusKey === 'selesai-bongkar') {
     const activeLocation = String(shippingStatus?.activeStopName || '').trim().toLowerCase();
     const activeIndex = unloadStops.findIndex(function (stop) {
       return activeLocation
@@ -10708,7 +10723,7 @@ async function handleApi(req, res, url) {
           const fleetRow = row.metadata?.fleetRow || null;
           const shippingStatus = row.metadata?.shippingStatus || null;
           const headline = row.metadata?.headlineJobOrder || null;
-          if (fleetRow && headline && shippingStatus?.key !== 'selesai') {
+          if (fleetRow && headline && !isTripMonitorShippingComplete(shippingStatus)) {
             const eta = await calculateTripMonitorEta(fleetRow, shippingStatus, headline);
             if (eta) {
               row.metadata = row.metadata || {};
@@ -10817,7 +10832,7 @@ async function handleApi(req, res, url) {
         const detailFleetRow = refreshed.metadata?.fleetRow || null;
         const detailShippingStatus = refreshed.metadata?.shippingStatus || null;
         const detailHeadline = refreshed.metadata?.headlineJobOrder || null;
-        if (detailFleetRow && detailHeadline && detailShippingStatus?.key !== 'selesai') {
+        if (detailFleetRow && detailHeadline && !isTripMonitorShippingComplete(detailShippingStatus)) {
           detailEta = await calculateTripMonitorEta(detailFleetRow, detailShippingStatus, detailHeadline);
         }
       } catch (_) { /* ETA failure non-fatal */ }
