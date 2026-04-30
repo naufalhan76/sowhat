@@ -5469,10 +5469,20 @@ function mapTmsMonitorRowForStorage(row) {
   };
 }
 
+function normalizeDayValue(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toISOString().slice(0, 10);
+  } catch { return String(value); }
+}
+
 function parseTmsMonitorStoredRow(row) {
   return {
     rowId: row.row_id,
-    day: String(row.day || ''),
+    day: normalizeDayValue(row.day),
     tenantLabel: String(row.tenant_label || ''),
     customerName: String(row.customer_name || ''),
     unitKey: String(row.unit_key || ''),

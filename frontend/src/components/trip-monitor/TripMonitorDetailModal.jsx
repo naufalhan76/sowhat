@@ -280,7 +280,7 @@ export function TripMonitorDetailModal({
                 )}
               </div>
             </div>
-            {effectiveForceClose && detail?.status !== 'closed' && (
+          {false && effectiveForceClose && detail?.status !== 'closed' && (
               <button type="button" className="tm-force-close-link" onClick={() => setShowForceCloseConfirm(true)}>
                 Force Close Trip
               </button>
