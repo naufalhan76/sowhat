@@ -13762,6 +13762,14 @@ body.fleet-workspace-resizing * {
   min-height: 0;
 }
 
+.tm-detail-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .tm-drawer-cardstack .tm-drawer-header {
   padding: 14px 18px;
 }

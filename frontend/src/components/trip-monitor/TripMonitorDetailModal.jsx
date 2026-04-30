@@ -101,6 +101,7 @@ export function TripMonitorDetailModal({
       changedAt: detail?.shippingStatusChangedAt || null,
       steps: [],
     };
+    const shippingStatusHistory = Array.isArray(detail?.metadata?.shippingStatusHistory) ? detail.metadata.shippingStatusHistory : [];
     const headlineDrivers = normalizeTmsDriverAssign(headlineJob?.driverAssign);
     const jobDrivers = headlineDrivers.length ? headlineDrivers : jobOrders.flatMap((job) => normalizeTmsDriverAssign(job?.driverAssign));
     const normalizedJobTempRange = normalizeTemperatureRange(headlineJob?.tempMin, headlineJob?.tempMax);
@@ -127,6 +128,7 @@ export function TripMonitorDetailModal({
       mapStops: headlineJob?.stops || [],
       severityKey: normalizeSeverity(detail?.severity),
       shippingStatus,
+      shippingStatusHistory,
       incidentCodes: dedupeTripMonitorIncidentCodes(incidents.map((incident) => incident.code)),
       driver1Name: extractTmsDriverName(jobDrivers[0]),
       driver2Name: extractTmsDriverName(jobDrivers[1]),
@@ -152,6 +154,7 @@ export function TripMonitorDetailModal({
     mapStops,
     severityKey,
     shippingStatus,
+    shippingStatusHistory,
     driver1Name,
     driver2Name,
     appStatus,
@@ -243,6 +246,32 @@ export function TripMonitorDetailModal({
                 hoveredStopKey={hoveredStopKey} 
                 onHoverStop={setHoveredStopKey} 
               />
+            </div>
+          </details>
+
+          <details className="tm-stack-section tm-section-collapsible">
+            <summary className="tm-section-summary">
+              <span className="tm-section-title">Status Change History</span>
+              <span className="tm-section-meta">{shippingStatusHistory.length > 0 ? <span className="tm-section-count">{shippingStatusHistory.length}</span> : null}<ChevronDown size={14} className="tm-section-chevron" /></span>
+            </summary>
+            <div className="tm-section-content">
+              {shippingStatusHistory.length === 0 ? <div className="tm-empty-soft">No status changes recorded.</div> : (
+                <div className="tm-incident-group-body">
+                  {shippingStatusHistory.map((item, index) => (
+                    <div key={index} className="tm-alert-row severity-normal">
+                      <span className="tm-alert-time">{formatAlertTime(item.timestamp)}</span>
+                      <span className="tm-alert-content">
+                        <strong className="tm-alert-label">{item.oldStatus?.label || 'UNKNOWN'} &rarr; {item.newStatus?.label || 'UNKNOWN'}</strong>
+                        <span className="tm-alert-meta">
+                          {item.source === 'override' ? <span className="tm-range-chip severity-warning">Manual Override</span> : <span className="tm-range-chip">Auto-detected</span>}
+                          {item.reason ? ` · ${item.reason}` : ''}
+                          {item.changedBy ? ` · by ${item.changedBy}` : ''}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </details>
 
