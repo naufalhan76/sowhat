@@ -168,7 +168,7 @@
 
 ## Final Verification Wave
 
-- [ ] **F1**: Code review — all changed files follow existing patterns
+- [x] **F1**: Code review — all changed files follow existing patterns
 - [ ] **F2**: Manual QA — test override CRUD, inline edit, deep dive nav
 - [ ] **F3**: Build verification — `npm run build` passes
 - [ ] **F4**: Integration test — full flow from board → override → verify board update
