@@ -128,7 +128,7 @@ export default function TripMonitorDetailMapSection({
         <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)} disabled={!fleetRow?.id}>
           <Route size={14} /> Track Route
         </button>
-        <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.(fleetRow)} disabled={!fleetRow?.id}>
+              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.({ rowId: headlineJob?.id, ...fleetRow })} disabled={!fleetRow?.id}>
           <Clock3 size={14} /> Trip History
         </button>
         <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)} disabled={!fleetRow?.id}>

@@ -247,15 +247,15 @@ export function TripMonitorDetailModal({
           </details>
 
           <div className="tm-stack-section tm-action-row tm-deep-dive-actions">
-            <button type="button" className="tm-action-btn" disabled={!fleetRow?.id} onClick={onOpenHistorical}>
+            <button type="button" className="tm-action-btn" disabled={!fleetRow?.id} onClick={() => onOpenHistorical?.({ rowId: detail.id, ...fleetRow })}>
               <FileText size={16} />
               <span>Historical Records</span>
             </button>
-            <button type="button" className="tm-action-btn" onClick={onOpenIncidents}>
+            <button type="button" className="tm-action-btn" onClick={() => onOpenIncidents?.({ rowId: detail.id, ...fleetRow })}>
               <AlertTriangle size={16} />
               <span>Incident History</span>
             </button>
-            <button type="button" className="tm-action-btn" onClick={onOpenOverrideLog}>
+            <button type="button" className="tm-action-btn" onClick={() => onOpenOverrideLog?.({ rowId: detail.id, ...fleetRow })}>
               <FileEdit size={16} />
               <span>Override Audit Log</span>
             </button>
