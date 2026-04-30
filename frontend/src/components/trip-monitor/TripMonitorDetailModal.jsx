@@ -10,6 +10,7 @@ import {
   buildTripMonitorIncidentHistoryDescription, buildTripMonitorIncidentHistoryLocationLabel,
 } from './helpers.jsx';
 import { TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
+import { TripMonitorStopsEditor } from './TripMonitorStopsEditor.jsx';
 import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
 import TripMonitorDetailMapSection from './TripMonitorDetailMapSection.jsx';
 import { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
@@ -233,7 +234,16 @@ export function TripMonitorDetailModal({
 
           <details className="tm-stack-section tm-section-collapsible" open>
             <summary className="tm-section-summary"><span className="tm-section-title">Stops Timeline</span><span className="tm-section-meta">{mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}<ChevronDown size={14} className="tm-section-chevron" /></span></summary>
-            <div className="tm-section-content"><TripMonitorShippingProgressClean shippingStatus={shippingStatus} headlineJob={headlineJob} hoveredStopKey={hoveredStopKey} onHoverStop={setHoveredStopKey} /></div>
+            <div className="tm-section-content">
+              <TripMonitorStopsEditor 
+                jobOrderId={detail.id}
+                originalStops={mapStops}
+                shippingStatus={shippingStatus} 
+                headlineJob={headlineJob} 
+                hoveredStopKey={hoveredStopKey} 
+                onHoverStop={setHoveredStopKey} 
+              />
+            </div>
           </details>
 
           <div className="tm-stack-section tm-action-row tm-deep-dive-actions">
