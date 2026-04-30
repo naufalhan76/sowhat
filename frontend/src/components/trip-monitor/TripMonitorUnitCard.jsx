@@ -40,6 +40,8 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
   const etaData = row?.eta || row?.metadata?.eta;
   const etaLabel = etaData ? formatEta(etaData.durationSeconds) : null;
   const etaStatus = etaData?.status || 'neutral';
+  
+  const isOverrideActive = row?.overrideActive === true || row?.metadata?.overrideActive === true;
 
   const cardClasses = [
     'tm-card',
@@ -96,6 +98,9 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
 
       {/* Unmatched reason */}
       {row?.unmatchedReason ? <div className="tm-card-note" title={row.unmatchedReason}>{row.unmatchedReason}</div> : null}
+      
+      {/* Override indicator */}
+      {isOverrideActive ? <div className="tm-card-override-dot" title="Override active" /> : null}
     </button>
   );
 });

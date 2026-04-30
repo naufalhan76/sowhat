@@ -146,6 +146,9 @@
   --map-popup-bg: #16181B;
   --map-popup-text: #E4E4E7;
 
+  /* Override system */
+  --override-accent: #06B6D4;
+
   /* Trip Monitor severity */
   --trip-button-bg: rgba(255, 255, 255, 0.03);
   --trip-chip-bg: rgba(255, 255, 255, 0.04);
@@ -16768,4 +16771,16 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .mp-sidebar { transition: none !important; }
   .mp-sidebar-chevron { transition: none !important; }
+}
+
+/* ---- Override Indicator ---- */
+.tm-card-override-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--override-accent);
+  border-radius: 50%;
+  z-index: 2;
 }
