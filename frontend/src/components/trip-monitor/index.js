@@ -9,3 +9,4 @@ export { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
 export { TripMonitorIncidentIcons } from './TripMonitorIncidentIcons.jsx';
 export { TripMonitorIncidentLegend } from './TripMonitorIncidentLegend.jsx';
 export { TripMonitorShippingProgress, TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
+export { TripMonitorStopsEditor } from './TripMonitorStopsEditor.jsx';
