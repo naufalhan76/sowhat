@@ -5200,6 +5200,9 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMa
     const override = overrideMap?.get(snapshot.jobOrderId);
     applyJoOverrides(snapshot, override);
   }
+  const overrideActive = jobOrders.some(function (snapshot) {
+    return Boolean(snapshot?.jobOrderId && overrideMap?.has(snapshot.jobOrderId));
+  });
 
   const activeItems = jobOrders.filter(function (item) { return item.active; });
   const inactiveItems = jobOrders.filter(function (item) { return !item.active; });
@@ -5260,6 +5263,7 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMa
     driverAppStatus: [driver?.assignment_status, driver?.driver_status, driver?.job_offer_status].filter(Boolean).join(' | ') || row.driverAppStatus,
     incidentCodes: summarizeIncidentCodes(incidents),
     incidentSummary: incidents.map(function (incident) { return incident.label; }).join(', '),
+    overrideActive,
     shippingStatusLabel: shippingStatus.label,
     shippingStatusChangedAt: shippingStatus.changedAt,
     unmatchedReason,
@@ -5267,6 +5271,7 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMa
       ...metadata,
       incidents,
       shippingStatus,
+      overrideActive,
       fleetRow: fleetRow || null,
       headlineJobOrder: headline.item,
       jobOrders,
@@ -6202,6 +6207,30 @@ async function listTmsMonitorRows(searchParams) {
   await syncTripMonitorIncidentHistoryForRows(refreshedRows, fleetIndex, tmsRuntime, now);
   await upsertTmsMonitorRows(refreshedRows);
   return refreshedRows;
+}
+
+function parseTmsOverrideAuditJsonValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function buildTmsShippingStatusHistory(auditRows) {
+  return (Array.isArray(auditRows) ? auditRows : []).map(function (row) {
+    return {
+      jobOrderId: String(row?.job_order_id || ''),
+      timestamp: row?.performed_at || null,
+      oldStatus: parseTmsOverrideAuditJsonValue(row?.old_value),
+      newStatus: parseTmsOverrideAuditJsonValue(row?.new_value),
+      source: 'override',
+      reason: row?.reason || '',
+      changedBy: row?.performed_by || '',
+    };
+  });
 }
 
 function buildTmsMonitorSummary(rows, logs, meta) {
@@ -10745,6 +10774,16 @@ async function handleApi(req, res, url) {
         || '',
       ).trim();
       const incidentHistory = await listTmsMonitorIncidentHistory(activeHeadlineJobOrderId);
+      const shippingStatusHistoryJobIds = activeHeadlineJobOrderId ? [activeHeadlineJobOrderId] : jobOrderIds;
+      const shippingStatusHistoryResult = shippingStatusHistoryJobIds.length ? await postgresQuery(
+        `SELECT job_order_id, old_value, new_value, performed_by, reason, performed_at
+         FROM tms_jo_override_audit
+         WHERE job_order_id = ANY($1) AND field_changed = $2
+         ORDER BY performed_at DESC`,
+        [shippingStatusHistoryJobIds, 'shipping_status_override'],
+      ) : { rows: [] };
+      const shippingStatusHistory = buildTmsShippingStatusHistory(shippingStatusHistoryResult.rows);
+      const overrideActive = Boolean(refreshed.overrideActive || refreshed.metadata?.overrideActive || overrideMap.size > 0);
       // Compute ETA for detail view
       let detailEta = null;
       try {
@@ -10776,7 +10815,12 @@ async function handleApi(req, res, url) {
             shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
             eta: detailEta,
             incidentHistory,
-            metadata: refreshed.metadata || {},
+            overrideActive,
+            metadata: {
+              ...(refreshed.metadata || {}),
+              shippingStatusHistory,
+              overrideActive,
+            },
           },
         });
     } catch (error) {
@@ -11103,6 +11147,37 @@ async function handleApi(req, res, url) {
         'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
         [jobOrderId, 'all_overrides', JSON.stringify(existing.rows[0]), null, username, 'Override deleted']
       );
+
+      let affectedRowsResult = await postgresQuery(
+        `SELECT * FROM tms_monitor_rows
+         WHERE metadata @> $1::jsonb`,
+        [JSON.stringify({ jobOrders: [{ jobOrderId }] })]
+      );
+      if (affectedRowsResult.rows.length === 0) {
+        affectedRowsResult = await postgresQuery(
+          `SELECT * FROM tms_monitor_rows
+           WHERE metadata::text LIKE $1`,
+          [`%${jobOrderId}%`]
+        );
+      }
+
+      if (affectedRowsResult.rows.length > 0) {
+        const now = Date.now();
+        const fleetIndex = buildFleetPlateIndex(now);
+        const tmsConfig = getTmsConfig();
+        const overrideMap = new Map();
+
+        for (const storedRow of affectedRowsResult.rows) {
+          const refreshed = refreshTripMonitorStoredRow(
+            parseTmsMonitorStoredRow(storedRow),
+            fleetIndex,
+            tmsConfig,
+            now,
+            overrideMap,
+          );
+          await upsertTmsMonitorRows([refreshed]);
+        }
+      }
       
       sendJson(res, 200, { ok: true, success: true });
     } catch (error) {

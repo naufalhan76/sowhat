@@ -239,7 +239,7 @@ export function TripMonitorDetailModal({
             <summary className="tm-section-summary"><span className="tm-section-title">Stops Timeline</span><span className="tm-section-meta">{mapStops.length ? <span className="tm-section-count">{mapStops.length}</span> : null}<ChevronDown size={14} className="tm-section-chevron" /></span></summary>
             <div className="tm-section-content">
               <TripMonitorStopsEditor 
-                jobOrderId={detail.id}
+                jobOrderId={headlineJob?.jobOrderId || detail.rowId}
                 originalStops={mapStops}
                 shippingStatus={shippingStatus} 
                 headlineJob={headlineJob} 
@@ -298,7 +298,7 @@ export function TripMonitorDetailModal({
 
   return (
     <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-      <Card className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
+      <div className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
         <TripMonitorDetailHeader
           detail={detail}
           headlineJob={headlineJob}
@@ -322,7 +322,7 @@ export function TripMonitorDetailModal({
           tmsSeverityLabel={tmsSeverityLabel}
         />
         {body}
-      </Card>
+      </div>
     </div>
   );
 }

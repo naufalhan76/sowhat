@@ -100,15 +100,13 @@ export function buildTripMonitorIncidentHistoryLocationLabel(item) {
   const last = String(item?.lastLocationSummary || '').trim();
   const resolved = String(item?.resolvedLocationSummary || '').trim();
   if (String(item?.status || '').toLowerCase() === 'resolved') {
-    return {
-      primary: first || last || resolved || '-',
-      secondary: resolved ? `Resolved: ${resolved}` : (last ? `Last: ${last}` : '-'),
-    };
+    const primary = first || last || resolved || '-';
+    const secondary = resolved ? `Resolved: ${resolved}` : (last ? `Last: ${last}` : '');
+    return secondary && secondary !== primary ? `${primary} · ${secondary}` : primary;
   }
-  return {
-    primary: first || last || '-',
-    secondary: last ? `Last: ${last}` : '-',
-  };
+  const primary = first || last || '-';
+  const secondary = last ? `Last: ${last}` : '';
+  return secondary && secondary !== primary ? `${primary} · ${secondary}` : primary;
 }
 
 export function buildTripMonitorIncidentHistoryDescription(item) {
@@ -119,9 +117,9 @@ export function buildTripMonitorIncidentHistoryDescription(item) {
   ).trim() || '-';
   const secondary = String(item?.detailOpen || '').trim();
   if (String(item?.status || '').toLowerCase() === 'resolved' && secondary && secondary !== primary) {
-    return { primary, secondary: `Opened: ${secondary}` };
+    return `${primary} · Opened: ${secondary}`;
   }
-  return { primary, secondary: '' };
+  return primary;
 }
 
 export function formatTripMonitorStatusTime(value) {

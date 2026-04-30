@@ -2010,7 +2010,8 @@ export default function App() {
           if (!confirm('Apakah Anda yakin ingin Force Close job ini menjadi Selesai?')) return;
           try {
             startBusy('Force closing job...');
-            const jobOrderId = detail.metadata?.id || detail.rowId;
+            const jobOrderId = detail.metadata?.headlineJobOrder?.jobOrderId;
+            if (!jobOrderId) throw new Error('Missing headline job order ID');
             await api(`/api/tms/overrides/${jobOrderId}`, {
               method: 'POST',
               body: JSON.stringify({ forceClose: true, reason })
