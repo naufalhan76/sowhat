@@ -5,7 +5,7 @@ import { TripMonitorDeepDiveShell } from './TripMonitorDeepDiveShell.jsx';
 /**
  * Deep-dive Historical Records sub-view.
  * Full-width DataTable showing historical temperature/location records for a unit.
- * Self-fetches data from /api/historical endpoint.
+ * Self-fetches data from /api/unit-history endpoint.
  */
 export function TripMonitorHistoricalView({ context, range, onBack, DataTable, fmtDate, fmtNum }) {
   const [records, setRecords] = useState([]);
@@ -27,7 +27,7 @@ export function TripMonitorHistoricalView({ context, range, onBack, DataTable, f
         ...(range?.startDate ? { startDate: range.startDate } : {}),
         ...(range?.endDate ? { endDate: range.endDate } : {}),
       });
-      const response = await fetch(`/api/historical?${params.toString()}`);
+      const response = await fetch(`/api/unit-history?${params.toString()}`);
       const payload = await response.json().catch(() => ({ ok: false }));
       if (!response.ok || payload.ok === false) throw new Error(payload.error || `HTTP ${response.status}`);
       setRecords(payload.records || []);

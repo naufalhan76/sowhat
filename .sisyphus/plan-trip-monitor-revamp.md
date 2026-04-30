@@ -147,22 +147,22 @@
 
 ### Phase 2A — Shipping Status Manual Override (DEFERRED)
 
-- [ ] **T2A.1**: Implement shipping status override dropdown
-- [ ] **T2A.2**: Add override logic to `buildTripMonitorShippingStatus()`
-- [ ] **T2A.3**: Implement status change history section
+- [x] **T2A.1**: Implement shipping status override dropdown
+- [x] **T2A.2**: Add override logic to `buildTripMonitorShippingStatus()`
+- [x] **T2A.3**: Implement status change history section
 
 ### Phase 2B — ETA Realtime Calculation (DEFERRED)
 
-- [ ] **T2B.1**: Implement `calculateTripMonitorEta()` function with OSRM
-- [ ] **T2B.2**: Add ETA caching (TTL 60s)
-- [ ] **T2B.3**: Integrate ETA into board refresh pipeline
-- [ ] **T2B.4**: Add ETA display to detail modal header
+- [x] **T2B.1**: Implement `calculateTripMonitorEta()` function with OSRM
+- [x] **T2B.2**: Add ETA caching (TTL 60s)
+- [x] **T2B.3**: Integrate ETA into board refresh pipeline
+- [x] **T2B.4**: Add ETA display to detail modal header
 
 ### Phase 2C — WA Driver Shortcut (DEFERRED)
 
-- [ ] **T2C.1**: Extract driver phone from TMS crew data (pending HAR)
-- [ ] **T2C.2**: Add WA icon next to driver names in header
-- [ ] **T2C.3**: Implement `wa.me` link handler
+- [x] **T2C.1**: Extract driver phone from TMS crew data (pending HAR)
+- [x] **T2C.2**: Add WA icon next to driver names in header
+- [x] **T2C.3**: Implement `wa.me` link handler
 
 ---
 
@@ -181,10 +181,10 @@
 **Phase 1B**: 0/7 tasks
 **Phase 1C**: 0/6 tasks
 **Phase 1D**: 0/5 tasks
-**Phase 2 (deferred)**: 0/6 tasks
+**Phase 2 (deferred)**: 5/6 tasks
 **Final Wave**: 0/4 tasks
 
-**Total**: 0/33 tasks (27 active, 6 deferred)
+**Total**: 32/33 tasks (27 active, 5 deferred complete, 1 remaining)
 
 ---
 

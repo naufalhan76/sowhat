@@ -49,10 +49,10 @@ export default function TripMonitorDetailMapSection({
   }, [headlineJob, normalizedJobTempRange, editMode]);
 
   const handleSaveTempRange = async () => {
-    if (!headlineJob?.id) return;
+    if (!headlineJob?.jobOrderId) return;
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/tms/overrides/${headlineJob.id}`, {
+      const response = await fetch(`/api/tms/overrides/${headlineJob.jobOrderId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tempRange: { tempMin: Number(minValue), tempMax: Number(maxValue) } })
@@ -72,10 +72,10 @@ export default function TripMonitorDetailMapSection({
   };
 
   const handleResetTempRange = async () => {
-    if (!headlineJob?.id) return;
+    if (!headlineJob?.jobOrderId) return;
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/tms/overrides/${headlineJob.id}`, {
+      const response = await fetch(`/api/tms/overrides/${headlineJob.jobOrderId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tempRange: null })
