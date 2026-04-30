@@ -1,88 +1,28 @@
-import React, { useState } from 'react';
-import { X, Clock3, Route, Truck, Phone, RefreshCw, AlertTriangle, ChevronDown } from 'lucide-react';
-import { Action, Pill, Surface, TripMonitorOverrideBadge } from '../index';
+import React from 'react';
+import { X, Clock3, Phone, RefreshCw } from 'lucide-react';
+import { Action, TripMonitorOverrideBadge } from '../index';
 
 export function TripMonitorDetailHeader({
   detail,
   headlineJob,
-  shippingStatus,
   eta,
-  overrideActive,
   isStale,
   refreshing,
   onClose,
   onRefresh,
-  onForceClose,
   onOverrideBadge,
   onWaDriver,
-  onShippingStatusOverride,
   displayUnitLabel,
   driver1Name,
   driver2Name,
-  routeSummary,
   severityKey,
   customerName,
   tmsSeverityLabel
 }) {
-  const [showForceCloseConfirm, setShowForceCloseConfirm] = useState(false);
-  const [forceCloseReason, setForceCloseReason] = useState('');
-  const [isSubmittingClose, setIsSubmittingClose] = useState(false);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [statusSaving, setStatusSaving] = useState(false);
-
-  const SHIPPING_STEPS = [
-    { key: 'otw-load', label: 'OTW LOAD' },
-    { key: 'sampai-load', label: 'SAMPAI LOAD' },
-    { key: 'menuju-unload', label: 'MENUJU UNLOAD' },
-    { key: 'sampai-unload', label: 'SAMPAI UNLOAD' },
-    { key: 'selesai-bongkar', label: 'SELESAI BONGKAR' },
-    { key: 'selesai-pengiriman', label: 'SELESAI PENGIRIMAN' },
-  ];
-
-  const normalizedShippingStatusKey = shippingStatus?.key === 'selesai'
-    ? 'selesai-pengiriman'
-    : shippingStatus?.key;
-
-  const handleStatusOverride = async (stepKey) => {
-    if (!onShippingStatusOverride) return;
-    setStatusSaving(true);
-    try {
-      const step = SHIPPING_STEPS.find((s) => s.key === stepKey);
-      await onShippingStatusOverride({ key: stepKey, label: step?.label || stepKey });
-      setShowStatusDropdown(false);
-    } finally {
-      setStatusSaving(false);
-    }
-  };
-
-  const handleStatusReset = async () => {
-    if (!onShippingStatusOverride) return;
-    setStatusSaving(true);
-    try {
-      await onShippingStatusOverride(null);
-      setShowStatusDropdown(false);
-    } finally {
-      setStatusSaving(false);
-    }
-  };
-
-  const handleForceCloseSubmit = async () => {
-    if (forceCloseReason.length < 5) return;
-    setIsSubmittingClose(true);
-    try {
-      await onForceClose(forceCloseReason);
-      setShowForceCloseConfirm(false);
-      setForceCloseReason('');
-    } finally {
-      setIsSubmittingClose(false);
-    }
-  };
-
   return (
     <div className="tm-drawer-header-wrapper">
-      {/* Tier 1: Sticky Glance */}
-      <div 
-        className="tm-drawer-header-tier1" 
+      <div
+        className="tm-drawer-header-tier1"
         style={{
           position: 'sticky',
           top: 0,
@@ -96,88 +36,26 @@ export function TripMonitorDetailHeader({
           minHeight: '48px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, fontFamily: 'Inter', letterSpacing: '-0.01em', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {displayUnitLabel}
           </h2>
-          
+
+          <span className={`tm-severity-dot severity-${severityKey}`} />
           <span className={`tm-severity-badge severity-${severityKey}`}>
             {tmsSeverityLabel ? tmsSeverityLabel(detail?.severity) : (detail?.severity || 'Unknown')}
           </span>
 
-          {shippingStatus && (
-            <div style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className={`tm-status-override-trigger ${shippingStatus.source === 'override' ? 'is-overridden' : ''}`}
-                onClick={() => onShippingStatusOverride && setShowStatusDropdown((v) => !v)}
-                disabled={!onShippingStatusOverride || statusSaving}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-                  border: shippingStatus.source === 'override' ? '1px solid var(--override-accent, #22d3ee)' : '1px solid var(--border)',
-                  background: shippingStatus.source === 'override' ? 'rgba(34,211,238,0.08)' : 'transparent',
-                  color: '#374151', cursor: onShippingStatusOverride ? 'pointer' : 'default',
-                }}
-              >
-                {shippingStatus.label || 'Unknown Status'}
-                {onShippingStatusOverride ? <ChevronDown size={10} /> : null}
-              </button>
-              {showStatusDropdown && (
-                <div className="tm-status-dropdown" style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 60,
-                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px',
-                  boxShadow: 'var(--shadow-lg)', minWidth: '180px', padding: '4px 0',
-                }}>
-                  {SHIPPING_STEPS.map((step) => (
-                    <button
-                      key={step.key}
-                      type="button"
-                      className="tm-status-dropdown-item"
-                      onClick={() => handleStatusOverride(step.key)}
-                      disabled={statusSaving}
-                      style={{
-                        display: 'block', width: '100%', textAlign: 'left', padding: '6px 12px',
-                        fontSize: '12px', border: 'none', background: normalizedShippingStatusKey === step.key ? 'rgba(120,120,130,0.08)' : 'transparent',
-                        color: 'var(--text-main)', cursor: 'pointer', fontWeight: normalizedShippingStatusKey === step.key ? 600 : 400,
-                      }}
-                    >
-                      {step.label}
-                    </button>
-                  ))}
-                  {shippingStatus.source === 'override' && (
-                    <>
-                      <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
-                      <button
-                        type="button"
-                        className="tm-status-dropdown-item"
-                        onClick={handleStatusReset}
-                        disabled={statusSaving}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left', padding: '6px 12px',
-                          fontSize: '12px', border: 'none', background: 'transparent',
-                          color: 'var(--danger)', cursor: 'pointer',
-                        }}
-                      >
-                        Reset to auto-detected
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {eta ? (
-            <div 
-              style={{ 
-                fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', 
-                fontSize: '12px', 
+            <div
+              style={{
+                fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
+                fontSize: '12px',
                 fontWeight: 500,
                 letterSpacing: '-0.01em',
-                color: eta.status === 'on-time' ? 'var(--success)' : 
-                       eta.status === 'at-risk' ? 'var(--warning)' : 
-                       eta.status === 'late' ? 'var(--danger)' : 'var(--text-secondary)',
+                color: eta.status === 'on-time' ? 'var(--success)' :
+                  eta.status === 'at-risk' ? 'var(--warning)' :
+                  eta.status === 'late' ? 'var(--danger)' : 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px'
@@ -185,8 +63,8 @@ export function TripMonitorDetailHeader({
             >
               <Clock3 size={13} />
               <span>
-                {eta.durationSeconds 
-                  ? `~${Math.floor(eta.durationSeconds / 3600)}h ${Math.floor((eta.durationSeconds % 3600) / 60)}m` 
+                {eta.durationSeconds
+                  ? `~${Math.floor(eta.durationSeconds / 3600)}h ${Math.floor((eta.durationSeconds % 3600) / 60)}m`
                   : 'ETA Unknown'}
               </span>
               {eta.distanceMeters && (
@@ -203,19 +81,19 @@ export function TripMonitorDetailHeader({
           )}
 
           {isStale && (
-            <div 
+            <div
               style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)', fontSize: '11px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)' }}
               onClick={onRefresh}
               title="Data updated on board. Click to refresh detail."
             >
-              <div 
-                style={{ 
-                  width: '6px', 
-                  height: '6px', 
-                  borderRadius: '50%', 
+              <div
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
                   backgroundColor: 'var(--warning)',
                   animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-                }} 
+                }}
               />
               Data updated
             </div>
@@ -224,21 +102,21 @@ export function TripMonitorDetailHeader({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {onRefresh && (
-            <Action 
-              variant="ghost" 
-              size="icon" 
-              onClick={onRefresh} 
+            <Action
+              variant="ghost"
+              size="icon"
+              onClick={onRefresh}
               disabled={refreshing}
               title="Refresh Data"
             >
               <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
             </Action>
           )}
-          <Action 
-            variant="ghost" 
-            size="icon" 
-            onClick={onClose} 
-            aria-label="Close drawer" 
+          <Action
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Close drawer"
             title="Close (Esc)"
           >
             <X size={18} />
@@ -246,8 +124,7 @@ export function TripMonitorDetailHeader({
         </div>
       </div>
 
-      {/* Tier 2: Scrolling Reference */}
-      <div 
+      <div
         className="tm-drawer-header-tier2"
         style={{
           padding: '10px 16px',
@@ -261,150 +138,36 @@ export function TripMonitorDetailHeader({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          {customerName && (
-            <span className="tm-brand-chip">{customerName}</span>
-          )}
-          
-          {headlineJob?.name && (
-            <span className="tm-jo-chip">{headlineJob.name}</span>
-          )}
-
-          <TripMonitorOverrideBadge 
-            overrides={detail?.overrides || {}} 
-            joId={detail?.joId} 
-            onReset={onOverrideBadge} 
+          {customerName && <span className="tm-brand-chip">{customerName}</span>}
+          {headlineJob?.name && <span className="tm-jo-chip">{headlineJob.name}</span>}
+          <TripMonitorOverrideBadge
+            overrides={detail?.overrides || {}}
+            joId={detail?.joId}
+            onReset={onOverrideBadge}
           />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '10px', flex: '1 1 280px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: '240px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            {(driver1Name || driver2Name) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {driver1Name && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', color: '#374151' }}>{driver1Name}</span>
-                    <Action 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => onWaDriver?.(1)}
-                      style={{ width: '24px', height: '24px', color: 'var(--success)' }}
-                      title="WhatsApp Driver 1"
-                    >
-                      <Phone size={14} />
-                    </Action>
-                  </div>
-                )}
-                
-                {driver1Name && driver2Name && (
-                  <div style={{ width: '1px', height: '12px', background: 'var(--border)' }} />
-                )}
-                
-                {driver2Name && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', color: '#374151' }}>{driver2Name}</span>
-                    <Action 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => onWaDriver?.(2)}
-                      style={{ width: '24px', height: '24px', color: 'var(--success)' }}
-                      title="WhatsApp Driver 2"
-                    >
-                      <Phone size={14} />
-                    </Action>
-                  </div>
-                )}
+        {(driver1Name || driver2Name) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '8px', flex: '1 1 220px' }}>
+            {driver1Name && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', color: '#374151' }}>{driver1Name}</span>
+                <Action variant="ghost" size="icon" onClick={() => onWaDriver?.(1)} style={{ width: '24px', height: '24px', color: 'var(--success)' }} title="WhatsApp Driver 1">
+                  <Phone size={14} />
+                </Action>
               </div>
             )}
-
-            {routeSummary && (
-              <>
-                <div style={{ width: '1px', height: '14px', background: '#e5e7eb' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6b7280', fontSize: '12px', minWidth: 0 }}>
-                  <Route size={14} />
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{routeSummary}</span>
-                </div>
-              </>
+            {driver1Name && driver2Name && <div style={{ width: '1px', height: '12px', background: 'var(--border)' }} />}
+            {driver2Name && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', color: '#374151' }}>{driver2Name}</span>
+                <Action variant="ghost" size="icon" onClick={() => onWaDriver?.(2)} style={{ width: '24px', height: '24px', color: 'var(--success)' }} title="WhatsApp Driver 2">
+                  <Phone size={14} />
+                </Action>
+              </div>
             )}
           </div>
-
-          {onForceClose && !showForceCloseConfirm && detail?.status !== 'closed' && (
-            <button
-              type="button"
-              onClick={() => setShowForceCloseConfirm(true)}
-              style={{ color: '#dc2626', fontSize: '12px', fontWeight: 600, padding: '2px 0', textDecoration: 'none', background: 'transparent', border: 0 }}
-            >
-              Force Close
-            </button>
-          )}
-          
-          {showForceCloseConfirm && (
-            <Surface 
-              variant="elevated" 
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: '16px',
-                width: '320px',
-                padding: '16px',
-                zIndex: 50,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-                boxShadow: 'var(--shadow-xl)',
-                border: '1px solid var(--border-danger)',
-                background: 'var(--surface)',
-                borderRadius: '8px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontWeight: 600, fontSize: '14px' }}>
-                <AlertTriangle size={16} />
-                <span>Confirm Force Close</span>
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                This will mark the job order as "Selesai Pengiriman" and bypass all remaining validations. A reason is required.
-              </p>
-              <textarea
-                value={forceCloseReason}
-                onChange={e => setForceCloseReason(e.target.value)}
-                placeholder="Reason for force closing (min 5 chars)..."
-                style={{
-                  width: '100%',
-                  minHeight: '80px',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  color: 'var(--text-main)',
-                  resize: 'vertical',
-                  fontFamily: 'Inter'
-                }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-                <Action 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => {
-                    setShowForceCloseConfirm(false);
-                    setForceCloseReason('');
-                  }}
-                  disabled={isSubmittingClose}
-                >
-                  Cancel
-                </Action>
-                <Action 
-                  variant="danger" 
-                  size="sm" 
-                  onClick={handleForceCloseSubmit}
-                  disabled={forceCloseReason.length < 5 || isSubmittingClose}
-                  loading={isSubmittingClose}
-                >
-                  Confirm Close
-                </Action>
-              </div>
-            </Surface>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

@@ -51,6 +51,11 @@ function formatAlertTime(value) {
   }
 }
 
+const defaultFmtDate = (value) => value || '-';
+const defaultFmtNum = (value) => (Number.isFinite(Number(value)) ? Number(value).toLocaleString('id-ID') : '-');
+const defaultFmtCoord = (value) => (Number.isFinite(Number(value)) ? Number(value).toFixed(6) : '-');
+const defaultFormatMinutesText = (value) => `${Number(value) || 0} min`;
+
 export function TripMonitorDetailModal({
   detail,
   busy,
@@ -71,8 +76,24 @@ export function TripMonitorDetailModal({
   fmtNum = defaultFmtNum,
   fmtCoord = defaultFmtCoord,
   formatMinutesText = defaultFormatMinutesText,
+  onShippingStatusOverride,
+  onForceClose,
 }) {
   const [hoveredStopKey, setHoveredStopKey] = useState(null);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [showForceCloseConfirm, setShowForceCloseConfirm] = useState(false);
+  const [forceCloseReason, setForceCloseReason] = useState('');
+  const [isSubmittingClose, setIsSubmittingClose] = useState(false);
+
+  const SHIPPING_STEPS = [
+    { key: 'otw-load', label: 'OTW LOAD' },
+    { key: 'sampai-load', label: 'SAMPAI LOAD' },
+    { key: 'menuju-unload', label: 'MENUJU UNLOAD' },
+    { key: 'sampai-unload', label: 'SAMPAI UNLOAD' },
+    { key: 'selesai-bongkar', label: 'SELESAI BONGKAR' },
+    { key: 'selesai-pengiriman', label: 'SELESAI PENGIRIMAN' },
+  ];
 
   useEffect(() => {
     if (!detail || mode !== 'drawer') return undefined;
@@ -166,6 +187,46 @@ export function TripMonitorDetailModal({
 
   const totalIncidents = incidentHistory.length;
   const [chartSentinelRef, chartVisible] = useIsVisible();
+  const effectiveShippingOverride = onShippingStatusOverride || detail?.onShippingStatusOverride;
+  const effectiveForceClose = onForceClose || detail?.onForceClose;
+  const normalizedShippingStatusKey = shippingStatus?.key === 'selesai'
+    ? 'selesai-pengiriman'
+    : shippingStatus?.key;
+
+  const handleStatusOverride = async (stepKey) => {
+    if (!effectiveShippingOverride) return;
+    setStatusSaving(true);
+    try {
+      const step = SHIPPING_STEPS.find((s) => s.key === stepKey);
+      await effectiveShippingOverride({ key: stepKey, label: step?.label || stepKey });
+      setShowStatusDropdown(false);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleStatusReset = async () => {
+    if (!effectiveShippingOverride) return;
+    setStatusSaving(true);
+    try {
+      await effectiveShippingOverride(null);
+      setShowStatusDropdown(false);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleForceCloseSubmit = async () => {
+    if (!effectiveForceClose || forceCloseReason.length < 5) return;
+    setIsSubmittingClose(true);
+    try {
+      await effectiveForceClose(forceCloseReason);
+      setShowForceCloseConfirm(false);
+      setForceCloseReason('');
+    } finally {
+      setIsSubmittingClose(false);
+    }
+  };
 
   const temperatureContent = fleetRow?.id && renderTemperatureChart && chartVisible
     ? renderTemperatureChart({ records: historyDetail?.records || [], busy: historyBusy, title: 'Temperature trend', description: `Historical Solofleet mengikuti topbar range ${historyLabel}.`, compact: true, chartHeight: 240, thresholdMin: normalizedJobTempRange.min, thresholdMax: normalizedJobTempRange.max, thresholdLabel: 'TMS range' })
@@ -175,6 +236,98 @@ export function TripMonitorDetailModal({
     <div className="tm-detail-modal-body">
       {busy ? <div className="empty-state">Loading detail...</div> : (
         <div className="tm-stack">
+          <div className="tm-status-section">
+            <div className="tm-status-row">
+              <span className="tm-status-label">Shipping Status</span>
+              <div className="tm-status-select-wrap">
+                <button
+                  type="button"
+                  className={`tm-status-select ${shippingStatus?.source === 'override' ? 'is-overridden' : ''}`}
+                  onClick={() => effectiveShippingOverride && setShowStatusDropdown((value) => !value)}
+                  disabled={!effectiveShippingOverride || statusSaving}
+                >
+                  {shippingStatus?.label || 'Unknown Status'}
+                  {effectiveShippingOverride ? <ChevronDown size={14} /> : null}
+                </button>
+                {showStatusDropdown && (
+                  <div className="tm-status-dropdown">
+                    {SHIPPING_STEPS.map((step) => (
+                      <button
+                        key={step.key}
+                        type="button"
+                        className="tm-status-dropdown-item"
+                        onClick={() => handleStatusOverride(step.key)}
+                        disabled={statusSaving}
+                      >
+                        <span>{step.label}</span>
+                        {normalizedShippingStatusKey === step.key ? <span>✓</span> : null}
+                      </button>
+                    ))}
+                    {shippingStatus?.source === 'override' && (
+                      <>
+                        <div className="tm-status-dropdown-divider" />
+                        <button
+                          type="button"
+                          className="tm-status-dropdown-item is-danger"
+                          onClick={handleStatusReset}
+                          disabled={statusSaving}
+                        >
+                          Reset to auto-detected
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {effectiveForceClose && detail?.status !== 'closed' && (
+              <button type="button" className="tm-force-close-link" onClick={() => setShowForceCloseConfirm(true)}>
+                Force Close Trip
+              </button>
+            )}
+            {showForceCloseConfirm && (
+              <Surface variant="elevated" className="tm-force-close-dialog">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontWeight: 600, fontSize: '14px' }}>
+                  <AlertTriangle size={16} />
+                  <span>Confirm Force Close</span>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                  This will mark the job order as "Selesai Pengiriman" and bypass all remaining validations. A reason is required.
+                </p>
+                <textarea
+                  value={forceCloseReason}
+                  onChange={event => setForceCloseReason(event.target.value)}
+                  placeholder="Reason for force closing (min 5 chars)..."
+                />
+                <div className="tm-force-close-actions">
+                  <Action variant="ghost" size="sm" onClick={() => { setShowForceCloseConfirm(false); setForceCloseReason(''); }} disabled={isSubmittingClose}>
+                    Cancel
+                  </Action>
+                  <Action variant="danger" size="sm" onClick={handleForceCloseSubmit} disabled={forceCloseReason.length < 5 || isSubmittingClose} loading={isSubmittingClose}>
+                    Confirm Close
+                  </Action>
+                </div>
+              </Surface>
+            )}
+          </div>
+
+          {headlineJob && (
+            <div className="tm-order-detail">
+              <div className="tm-order-row">
+                <span className="tm-order-label">Job Order</span>
+                <span className="tm-order-value">{headlineJob.name || '-'}</span>
+              </div>
+              <div className="tm-order-row">
+                <span className="tm-order-label">Route</span>
+                <span className="tm-order-value">{headlineJob.originName || '-'} → {headlineJob.destinationName || '-'}</span>
+              </div>
+              <div className="tm-order-row">
+                <span className="tm-order-label">Customer</span>
+                <span className="tm-order-value">{detail.customerName || '-'}</span>
+              </div>
+            </div>
+          )}
+
           <TripMonitorDetailMapSection
             fleetRow={fleetRow}
             headlineJob={headlineJob}

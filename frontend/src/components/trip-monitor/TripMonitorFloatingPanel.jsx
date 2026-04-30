@@ -196,7 +196,7 @@ export function TripMonitorFloatingPanel({
   return (
     <div
       ref={panelRef}
-      className="tm-float-panel"
+      className={`tm-float-panel severity-${severityKey}`}
       style={{
         position: 'fixed',
         left: position.x,
@@ -254,7 +254,7 @@ export function TripMonitorFloatingPanel({
         )}
       </div>
 
-      <div className="tm-float-body">
+      <div className="tm-float-body" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
         {panel.detailBusy ? (
           <div className="empty-state">Loading detail...</div>
         ) : panel.detailError ? (
@@ -281,6 +281,8 @@ export function TripMonitorFloatingPanel({
             fmtNum={fmtNum}
             fmtCoord={fmtCoord}
             formatMinutesText={formatMinutesText}
+            onShippingStatusOverride={detail?.onShippingStatusOverride}
+            onForceClose={detail?.onForceClose}
             mode="floating"
           />
         )}
