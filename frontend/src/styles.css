@@ -12715,6 +12715,42 @@ body.fleet-workspace-resizing * {
 .tm-card-eta--at-risk { color: var(--eta-at-risk); }
 .tm-card-eta--late    { color: var(--eta-late); }
 .tm-card-eta--neutral { color: var(--text-muted); }
+.tm-card-eta--loading {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.tm-status-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  overflow-x: auto;
+}
+
+.tm-status-filter-chip {
+  padding: 4px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.tm-status-filter-chip:hover {
+  background: #f3f4f6;
+}
+
+.tm-status-filter-chip.is-active {
+  background: #1f2937;
+  color: #ffffff;
+  border-color: #1f2937;
+}
 
 .tm-card-status {
   font-size: 11.5px;

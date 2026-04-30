@@ -29,6 +29,10 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
   const etaData = row?.eta || row?.metadata?.eta;
   const etaLabel = etaData ? formatEta(etaData.durationSeconds) : null;
   const etaStatus = etaData?.status || 'neutral';
+  const etaDistanceKm = etaData?.distanceMeters ? Math.round(etaData.distanceMeters / 1000) : null;
+  const etaTitle = etaData
+    ? `ETA ${etaLabel || '-'} ke ${etaData?.stopName || 'tujuan'} (${etaDistanceKm ?? 0}km)`
+    : 'Menghitung ETA...';
   
   const isOverrideActive = row?.overrideActive === true || row?.metadata?.overrideActive === true;
 
@@ -71,12 +75,10 @@ export const TripMonitorUnitCard = React.memo(function TripMonitorUnitCard({ row
       </div>
 
       {/* ETA row */}
-      {etaLabel && (
-        <div className={`tm-card-eta tm-card-eta--${etaStatus}`} title={`ETA to ${etaData?.stopName || 'destination'}`}>
-          <Clock3 size={11} />
-          <span>{etaLabel}</span>
-        </div>
-      )}
+      <div className={`tm-card-eta ${etaData ? `tm-card-eta--${etaStatus}` : 'tm-card-eta--loading'}`} title={etaTitle}>
+        <Clock3 size={11} />
+        <span>{etaLabel ? `${etaLabel}${etaDistanceKm ? ` · ${etaDistanceKm}km` : ''}` : 'Menghitung ETA...'}</span>
+      </div>
 
       {/* Metadata footer */}
       <div className="tm-card-footer">

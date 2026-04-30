@@ -5125,7 +5125,7 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
             <span><i className="legend-dot legend-dot-temp2" /> Temp 2</span>
             {(thresholdMin != null || thresholdMax != null) && (
               <span>
-                <i className="legend-dot legend-dot-threshold" style={{ background: 'var(--chart-threshold-high)' }} /> 
+            <i className="legend-dot legend-dot-threshold" style={{ background: '#dc2626' }} /> 
                 {thresholdLabel}
               </span>
             )}
@@ -5162,8 +5162,8 @@ const TemperatureChart = React.memo(function TemperatureChart({ records, busy, t
       <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${Math.round(v)}°`} width={40} />
       <Tooltip labelFormatter={(v) => new Date(v).toLocaleString()} formatter={(val, name) => [`${val}°C`, name === 'temp1' ? 'Temp 1' : 'Temp 2']} />
       
-      {thresholdMin != null && <ReferenceLine y={thresholdMin} stroke="var(--chart-threshold-low)" strokeDasharray="3 3" />}
-      {thresholdMax != null && <ReferenceLine y={thresholdMax} stroke="var(--chart-threshold-high)" strokeDasharray="3 3" />}
+      {thresholdMin != null && <ReferenceLine y={thresholdMin} stroke="#dc2626" strokeWidth={2} strokeDasharray="6 3" label={{ value: 'Min', position: 'right', fill: '#dc2626', fontSize: 11, fontWeight: 700 }} />}
+      {thresholdMax != null && <ReferenceLine y={thresholdMax} stroke="#dc2626" strokeWidth={2} strokeDasharray="6 3" label={{ value: 'Max', position: 'right', fill: '#dc2626', fontSize: 11, fontWeight: 700 }} />}
       {dragRange && Number.isFinite(dragRange.start) && Number.isFinite(dragRange.end) ? <ReferenceArea x1={Math.min(dragRange.start, dragRange.end)} x2={Math.max(dragRange.start, dragRange.end)} strokeOpacity={0} fill="var(--primary)" fillOpacity={0.12} /> : null}
       <Area type="monotone" dataKey="temp1" stroke="var(--chart-temp1)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp1Id})`} isAnimationActive={false} />
       <Area type="monotone" dataKey="temp2" stroke="var(--chart-temp2)" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientTemp2Id})`} isAnimationActive={false} />

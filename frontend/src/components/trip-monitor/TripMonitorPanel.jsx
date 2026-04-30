@@ -43,10 +43,17 @@ export function TripMonitorPanel({
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [subView, setSubView] = useState({ type: 'board', context: null });
+  const [statusFilter, setStatusFilter] = useState('all');
   const filters = tripMonitorFilters || {};
   const summary = tripMonitorSummary || {};
   const visibleRows = tripMonitorVisibleRows || [];
   const severityCounts = tripMonitorSeverityCounts || {};
+  const filteredRows = statusFilter === 'all'
+    ? visibleRows
+    : visibleRows.filter((row) => {
+      const key = row?.metadata?.shippingStatus?.key || '';
+      return key === statusFilter;
+    });
 
   // Consume pending sub-view from floating panel navigation
   useEffect(() => {
@@ -232,12 +239,33 @@ export function TripMonitorPanel({
 
       {/* ── Main Content Area ── */}
       {subView.type === 'board' ? (
-        <TripMonitorKanban
-          rows={visibleRows}
-          selectedRowId={selectedTripMonitorRowId(tripMonitorPanels)}
-          onOpen={(row) => onOpenDetail?.(row.rowId)}
-          severityCounts={severityCounts}
-        />
+        <>
+          <div className="tm-status-filter-row">
+            {[
+              { key: 'all', label: 'Semua' },
+              { key: 'otw-load', label: 'OTW Load' },
+              { key: 'sampai-load', label: 'Sampai Load' },
+              { key: 'menuju-unload', label: 'Menuju Unload' },
+              { key: 'sampai-unload', label: 'Sampai Unload' },
+              { key: 'selesai-bongkar', label: 'Selesai Bongkar' },
+            ].map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                className={`tm-status-filter-chip ${statusFilter === filter.key ? 'is-active' : ''}`}
+                onClick={() => setStatusFilter(filter.key)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          <TripMonitorKanban
+            rows={filteredRows}
+            selectedRowId={selectedTripMonitorRowId(tripMonitorPanels)}
+            onOpen={(row) => onOpenDetail?.(row.rowId)}
+            severityCounts={severityCounts}
+          />
+        </>
       ) : (
         <TripMonitorDeepDiveShell
           title={

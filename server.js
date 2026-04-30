@@ -4257,16 +4257,11 @@ function buildResolvedTmsStops(taskList, orderList, addressLookup) {
       ? orderList.find(function (item) { return String(item?.load_location || '').trim(); }) || null
       : orderList[unloadCounter] || null;
     const taskAddress = String(task?.task_address || (taskType === 'load' ? fallbackOrder?.load_location : fallbackOrder?.unload_location) || '').trim();
-    const addressEntry = resolveTmsAddressEntry(addressLookup, taskAddress);
     const directLatitude = toNumber(task?.latitude);
     const directLongitude = toNumber(task?.longitude);
-    const latitude = directLatitude ?? addressEntry?.latitude ?? null;
-    const longitude = directLongitude ?? addressEntry?.longitude ?? null;
-    const coordinateSource = directLatitude !== null && directLongitude !== null
-      ? 'task_list'
-      : latitude !== null && longitude !== null
-        ? 'address_cache'
-        : 'unresolved';
+    const latitude = directLatitude;
+    const longitude = directLongitude;
+    const coordinateSource = latitude !== null && longitude !== null ? 'task_list' : 'unresolved';
     const stopLabel = taskType === 'load' ? 'LOAD' : `U${unloadCounter + 1}`;
     const stopName = taskType === 'load' ? 'Load' : `Unload ${unloadCounter + 1}`;
     const stop = {
@@ -4339,6 +4334,7 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel, addressLookup) {
     doc?.custom_maximum_temperature,
   );
   return {
+    name: String(doc?.name || '').trim(),
     jobOrderId: String(doc?.name || '').trim(),
     day: formatLocalDay(startTimestamp || Date.now()),
     tenantLabel: tenantLabel || '',
@@ -4446,6 +4442,8 @@ function getTripMonitorSnapshotStops(snapshot) {
   if (Array.isArray(snapshot?.stops) && snapshot.stops.length) {
     return snapshot.stops.map(function (stop, index) {
       const taskType = String(stop?.taskType || stop?.task_type || '').trim().toLowerCase() === 'unload' ? 'unload' : 'load';
+      const coordinateSource = String(stop?.coordinateSource || stop?.resolved_coordinate_source || '').trim().toLowerCase();
+      const useStoredCoordinates = !coordinateSource || coordinateSource === 'task_list';
       return {
         idx: Number(stop?.idx || index + 1),
         taskIdx: Number(stop?.taskIdx || stop?.task_idx || stop?.idx || index + 1),
@@ -4453,8 +4451,8 @@ function getTripMonitorSnapshotStops(snapshot) {
         label: String(stop?.label || (taskType === 'load' ? 'LOAD' : `U${index}`)).trim(),
         name: String(stop?.name || (taskType === 'load' ? 'Load' : `Unload ${index}`)).trim(),
         taskAddress: String(stop?.taskAddress || stop?.task_address || '').trim(),
-        latitude: toNumber(stop?.latitude),
-        longitude: toNumber(stop?.longitude),
+        latitude: useStoredCoordinates ? toNumber(stop?.latitude) : null,
+        longitude: useStoredCoordinates ? toNumber(stop?.longitude) : null,
         eta: toTimestampMaybe(stop?.eta),
         etd: toTimestampMaybe(stop?.etd),
         ata: toTimestampMaybe(stop?.ata),
@@ -4477,8 +4475,8 @@ function getTripMonitorSnapshotStops(snapshot) {
       label: taskType === 'load' ? 'LOAD' : `U${unloadCounter}`,
       name: taskType === 'load' ? 'Load' : `Unload ${unloadCounter}`,
       taskAddress: String(task?.task_address || '').trim(),
-      latitude: toNumber(task?.resolved_latitude ?? task?.latitude),
-      longitude: toNumber(task?.resolved_longitude ?? task?.longitude),
+      latitude: toNumber(task?.latitude),
+      longitude: toNumber(task?.longitude),
       eta: toTimestampMaybe(task?.eta),
       etd: toTimestampMaybe(task?.etd),
       ata: toTimestampMaybe(task?.ata),
@@ -4641,6 +4639,18 @@ function normalizeTripMonitorShippingStatusKey(value) {
   const key = String(value || '').trim().toLowerCase();
   if (key === 'selesai') return 'selesai-pengiriman';
   return key;
+}
+
+function normalizeTripMonitorHeadlineJobOrder(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  const jobOrderName = String(snapshot.name || snapshot.jobOrderId || '').trim();
+  return {
+    ...snapshot,
+    name: jobOrderName,
+    jobOrderId: String(snapshot.jobOrderId || jobOrderName).trim(),
+    originName: String(snapshot.originName || '').trim(),
+    destinationName: String(snapshot.destinationName || '').trim(),
+  };
 }
 
 function isTripMonitorShippingComplete(shippingStatus) {
@@ -5209,8 +5219,8 @@ function resolveFleetContextForTripMonitor(source, fleetIndex) {
 
 function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMap) {
   const metadata = row?.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
-  const jobOrders = Array.isArray(metadata.jobOrders) ? metadata.jobOrders.filter(Boolean) : [];
-  const referenceSnapshot = metadata.headlineJobOrder || jobOrders[0] || {
+  const jobOrders = Array.isArray(metadata.jobOrders) ? metadata.jobOrders.filter(Boolean).map(normalizeTripMonitorHeadlineJobOrder) : [];
+  const referenceSnapshot = normalizeTripMonitorHeadlineJobOrder(metadata.headlineJobOrder) || jobOrders[0] || {
     plateRaw: row?.unitLabel || '',
     normalizedPlate: row?.normalizedPlate || '',
     plateCandidates: collectPlateCandidates(row?.unitLabel, row?.normalizedPlate),
@@ -5315,7 +5325,7 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMa
       shippingStatus,
       overrideActive,
       fleetRow: fleetRow || null,
-      headlineJobOrder: headline.item,
+      headlineJobOrder: normalizeTripMonitorHeadlineJobOrder(headline.item),
       jobOrders,
     },
   };
@@ -5980,7 +5990,7 @@ function buildTmsMonitorRows(jobSnapshots, fleetIndex, tmsConfig, now, overrideM
         incidents,
         shippingStatus,
         fleetRow: group.fleetContext?.row || null,
-        headlineJobOrder: headline.item,
+        headlineJobOrder: normalizeTripMonitorHeadlineJobOrder(headline.item),
         jobOrders: group.items,
       },
     });
@@ -10736,6 +10746,7 @@ async function handleApi(req, res, url) {
       const window = buildTmsMonitorWindow(Date.now());
       const rows = await listTmsMonitorRows(url.searchParams);
       // Compute ETA best-effort with bounded OSRM concurrency.
+      const etaUpdatedRows = [];
       await mapWithConcurrency(rows.slice(0, 30), 4, async function (row) {
         try {
           const fleetRow = row.metadata?.fleetRow || null;
@@ -10745,11 +10756,15 @@ async function handleApi(req, res, url) {
             const eta = await calculateTripMonitorEta(fleetRow, shippingStatus, headline);
             if (eta) {
               row.metadata = row.metadata || {};
-              row.metadata.eta = eta;
+              row.metadata.eta = { ...eta, calculatedAt: Date.now() };
+              etaUpdatedRows.push(row);
             }
           }
         } catch (_) { /* ETA failure non-fatal */ }
       });
+      if (etaUpdatedRows.length) {
+        await upsertTmsMonitorRows(etaUpdatedRows);
+      }
       const logs = await listTmsSyncLogs(1);
       const runtime = getTmsConfig();
       console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | window ${window.startDay}..${window.endDay} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
@@ -10856,7 +10871,8 @@ async function handleApi(req, res, url) {
       } catch (_) { /* ETA failure non-fatal */ }
       if (detailEta) {
         refreshed.metadata = refreshed.metadata || {};
-        refreshed.metadata.eta = detailEta;
+        refreshed.metadata.eta = { ...detailEta, calculatedAt: Date.now() };
+        await upsertTmsMonitorRows([refreshed]);
       }
       const responseEta = detailEta || refreshed.metadata?.eta || null;
       console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
