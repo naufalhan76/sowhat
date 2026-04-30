@@ -102,11 +102,15 @@ export function TripMonitorDetailHeader({
           )}
 
           {isStale && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)', fontSize: '12px' }}>
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--warning)', fontSize: '11px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)' }}
+              onClick={onRefresh}
+              title="Data updated on board. Click to refresh detail."
+            >
               <div 
                 style={{ 
-                  width: '8px', 
-                  height: '8px', 
+                  width: '6px', 
+                  height: '6px', 
                   borderRadius: '50%', 
                   backgroundColor: 'var(--warning)',
                   animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
