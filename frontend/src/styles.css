@@ -14685,16 +14685,20 @@ details.tm-incident-group[open] > .tm-incident-group-summary > .tm-section-chevr
 }
 
 .tm-float-header {
-  align-items: center;
   background: #ffffff;
   cursor: grab;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
   padding: 0;
   user-select: none;
-  border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tm-drawer-header-wrapper {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tm-float-header:active { cursor: grabbing; }

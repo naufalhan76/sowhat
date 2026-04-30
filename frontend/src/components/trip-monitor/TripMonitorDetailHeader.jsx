@@ -33,7 +33,9 @@ export function TripMonitorDetailHeader({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          minHeight: '48px'
+          minHeight: '48px',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flexWrap: 'wrap' }}>
