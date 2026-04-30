@@ -4988,7 +4988,7 @@ function resolveFleetContextForTripMonitor(source, fleetIndex) {
   }).find(Boolean) || (source.normalizedPlate ? fleetIndex.byPlate.get(source.normalizedPlate) : null) || null;
 }
 
-function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
+function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMap) {
   const metadata = row?.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
   const jobOrders = Array.isArray(metadata.jobOrders) ? metadata.jobOrders.filter(Boolean) : [];
   const referenceSnapshot = metadata.headlineJobOrder || jobOrders[0] || {
@@ -5017,6 +5017,11 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now) {
         fleetRow: fleetRow || metadata.fleetRow || null,
       },
     };
+  }
+
+  for (const snapshot of jobOrders) {
+    const override = overrideMap?.get(snapshot.jobOrderId);
+    applyJoOverrides(snapshot, override);
   }
 
   const activeItems = jobOrders.filter(function (item) { return item.active; });
@@ -5956,6 +5961,11 @@ async function listTmsMonitorRows(searchParams) {
   }
   query += ` order by day desc, updated_at desc`;
   const result = await postgresQuery(query, params);
+  const overridesResult = await postgresQuery('SELECT * FROM tms_jo_overrides');
+  const overrideMap = new Map();
+  for (const row of overridesResult.rows) {
+    overrideMap.set(row.job_order_id, row);
+  }
   let refreshedRows = result.rows.map(function (row) {
     return refreshTripMonitorStoredRow({
       rowId: row.row_id,
@@ -5981,7 +5991,7 @@ async function listTmsMonitorRows(searchParams) {
       incidentSummary: String(row.incident_summary || ''),
       unmatchedReason: String(row.unmatched_reason || ''),
       metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
-    }, fleetIndex, tmsRuntime, now);
+    }, fleetIndex, tmsRuntime, now, overrideMap);
   });
   refreshedRows = await applyTripMonitorIncidentDebounceToRows(refreshedRows);
   await syncTripMonitorIncidentHistoryForRows(refreshedRows, fleetIndex, tmsRuntime, now);
