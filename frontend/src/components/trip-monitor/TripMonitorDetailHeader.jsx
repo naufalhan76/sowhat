@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Clock3, Route, Truck, Phone, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Clock3, Route, Truck, Phone, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Action, Pill, Surface } from '../index';
 
 export function TripMonitorDetailHeader({
@@ -23,6 +23,22 @@ export function TripMonitorDetailHeader({
   customerName,
   tmsSeverityLabel
 }) {
+  const [showForceCloseConfirm, setShowForceCloseConfirm] = useState(false);
+  const [forceCloseReason, setForceCloseReason] = useState('');
+  const [isSubmittingClose, setIsSubmittingClose] = useState(false);
+
+  const handleForceCloseSubmit = async () => {
+    if (forceCloseReason.length < 5) return;
+    setIsSubmittingClose(true);
+    try {
+      await onForceClose(forceCloseReason);
+      setShowForceCloseConfirm(false);
+      setForceCloseReason('');
+    } finally {
+      setIsSubmittingClose(false);
+    }
+  };
+
   return (
     <div className="tm-drawer-header-wrapper">
       {/* Tier 1: Sticky Glance */}
@@ -215,10 +231,78 @@ export function TripMonitorDetailHeader({
             )}
           </div>
 
-          {onForceClose && (
-            <Action variant="danger" size="sm" onClick={onForceClose}>
+          {onForceClose && !showForceCloseConfirm && detail?.status !== 'closed' && (
+            <Action variant="danger" size="sm" onClick={() => setShowForceCloseConfirm(true)}>
               Force Close
             </Action>
+          )}
+          
+          {showForceCloseConfirm && (
+            <Surface 
+              variant="elevated" 
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: '16px',
+                width: '320px',
+                padding: '16px',
+                zIndex: 50,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                boxShadow: 'var(--shadow-xl)',
+                border: '1px solid var(--border-danger)',
+                background: 'var(--surface)',
+                borderRadius: '8px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontWeight: 600, fontSize: '14px' }}>
+                <AlertTriangle size={16} />
+                <span>Confirm Force Close</span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                This will mark the job order as "Selesai" and bypass all remaining validations. A reason is required.
+              </p>
+              <textarea
+                value={forceCloseReason}
+                onChange={e => setForceCloseReason(e.target.value)}
+                placeholder="Reason for force closing (min 5 chars)..."
+                style={{
+                  width: '100%',
+                  minHeight: '80px',
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--text-main)',
+                  resize: 'vertical',
+                  fontFamily: 'Inter'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                <Action 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setShowForceCloseConfirm(false);
+                    setForceCloseReason('');
+                  }}
+                  disabled={isSubmittingClose}
+                >
+                  Cancel
+                </Action>
+                <Action 
+                  variant="danger" 
+                  size="sm" 
+                  onClick={handleForceCloseSubmit}
+                  disabled={forceCloseReason.length < 5 || isSubmittingClose}
+                  loading={isSubmittingClose}
+                >
+                  Confirm Close
+                </Action>
+              </div>
+            </Surface>
           )}
         </div>
       </div>

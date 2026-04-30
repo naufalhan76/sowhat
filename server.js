@@ -10551,23 +10551,24 @@ async function handleApi(req, res, url) {
       ).trim();
       const incidentHistory = await listTmsMonitorIncidentHistory(activeHeadlineJobOrderId);
       console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
-      sendJson(res, 200, {
-        ok: true,
-        detail: {
-          rowId: refreshed.rowId,
-          day: refreshed.day,
-        severity: refreshed.severity,
-        boardStatus: refreshed.boardStatus,
-        unitId: refreshed.unitId,
-        unitLabel: refreshed.unitLabel,
-        customerName: refreshed.customerName,
-        driverAppStatus: refreshed.driverAppStatus || '',
-        shippingStatusLabel: refreshed.shippingStatusLabel || '',
-        shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
-        incidentHistory,
-        metadata: refreshed.metadata || {},
-      },
-    });
+        sendJson(res, 200, {
+          ok: true,
+          detail: {
+            rowId: refreshed.rowId,
+            day: refreshed.day,
+            status: refreshed.metadata?.headlineJobOrder?.status || 'active',
+            severity: refreshed.severity,
+            boardStatus: refreshed.boardStatus,
+            unitId: refreshed.unitId,
+            unitLabel: refreshed.unitLabel,
+            customerName: refreshed.customerName,
+            driverAppStatus: refreshed.driverAppStatus || '',
+            shippingStatusLabel: refreshed.shippingStatusLabel || '',
+            shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
+            incidentHistory,
+            metadata: refreshed.metadata || {},
+          },
+        });
     } catch (error) {
       sendApiError(res, error, 'Trip monitor detail gagal diambil.', 404);
     }
