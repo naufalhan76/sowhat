@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { TripMonitorShippingProgressClean } from './TripMonitorShippingProgress.jsx';
+import { TripMonitorMapPicker } from './TripMonitorMapPicker.jsx';
 
 export function TripMonitorStopsEditor({ 
   jobOrderId, 
@@ -13,6 +14,9 @@ export function TripMonitorStopsEditor({
   const [editMode, setEditMode] = useState(false);
   const [stops, setStops] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [editingStopIdx, setEditingStopIdx] = useState(null);
+  
   const dragItemIdx = useRef(null);
   const dragOverItemIdx = useRef(null);
 
@@ -237,8 +241,16 @@ export function TripMonitorStopsEditor({
                 step="0.000001"
                 style={{ width: '80px', padding: '4px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc' }} 
             />
-            {/* Map Picker button placeholder for next task */}
-            <button type="button" disabled style={{ padding: '4px 8px', fontSize: '12px', opacity: 0.5, cursor: 'not-allowed' }}>Map</button>
+            <button 
+                type="button" 
+                onClick={() => {
+                  setEditingStopIdx(idx);
+                  setMapPickerOpen(true);
+                }}
+                style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', background: 'var(--override-accent, #06b6d4)', color: 'white', border: 'none', borderRadius: '4px' }}
+            >
+                Map
+            </button>
             <button 
                 type="button" 
                 onClick={() => handleRemoveStop(idx)} 
@@ -250,6 +262,25 @@ export function TripMonitorStopsEditor({
           </div>
         ))}
       </div>
+
+      {mapPickerOpen && editingStopIdx !== null && (
+        <TripMonitorMapPicker 
+          isOpen={mapPickerOpen}
+          initialLat={stops[editingStopIdx]?.latitude}
+          initialLng={stops[editingStopIdx]?.longitude}
+          onConfirm={(lat, lng) => {
+            handleChange(editingStopIdx, 'latitude', lat);
+            handleChange(editingStopIdx, 'longitude', lng);
+            setMapPickerOpen(false);
+            setEditingStopIdx(null);
+          }}
+          onCancel={() => {
+            setMapPickerOpen(false);
+            setEditingStopIdx(null);
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
           <button 
             type="button" 
