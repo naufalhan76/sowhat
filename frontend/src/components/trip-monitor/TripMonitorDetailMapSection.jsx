@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Route, Clock3, Truck, Pencil, Check, X, RotateCcw } from 'lucide-react';
+import { Route, Clock3, Truck, Pencil, Check, X, RotateCcw, FileText, AlertTriangle, FileEdit } from 'lucide-react';
 import { useIsVisible } from './TripMonitorDetailModal';
 
 /**
@@ -20,6 +20,8 @@ export default function TripMonitorDetailMapSection({
   onHoverStop,
   onOpenMap,
   onOpenHistorical,
+  onOpenIncidents,
+  onOpenOverrideLog,
   onOpenFleet,
   renderUnitRouteMap,
   fmtNum,
@@ -139,15 +141,25 @@ export default function TripMonitorDetailMapSection({
       </div>
 
       {/* Action Buttons */}
-      <div className="tm-action-row" style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+      <div className="tm-action-row">
         <button type="button" className="tm-action-btn" onClick={() => onOpenMap?.(fleetRow)} disabled={!fleetRow?.id}>
           <Route size={14} /> Track Route
         </button>
-              <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.({ rowId: headlineJob?.id, ...fleetRow })} disabled={!fleetRow?.id}>
+        <button type="button" className="tm-action-btn" onClick={() => onOpenHistorical?.({ rowId: headlineJob?.id, ...fleetRow })} disabled={!fleetRow?.id}>
           <Clock3 size={14} /> Trip History
         </button>
         <button type="button" className="tm-action-btn" onClick={() => onOpenFleet?.(fleetRow)} disabled={!fleetRow?.id}>
           <Truck size={14} /> Open Fleet
+        </button>
+        {/* Deep Dive Actions */}
+        <button type="button" className="tm-action-btn" onClick={onOpenHistorical} disabled={!fleetRow?.id}>
+          <FileText size={14} /> Historical Records
+        </button>
+        <button type="button" className="tm-action-btn" onClick={onOpenIncidents} disabled={!fleetRow?.id}>
+          <AlertTriangle size={14} /> Incident History
+        </button>
+        <button type="button" className="tm-action-btn" onClick={onOpenOverrideLog} disabled={!headlineJob?.id}>
+          <FileEdit size={14} /> Override Audit Log
         </button>
       </div>
 

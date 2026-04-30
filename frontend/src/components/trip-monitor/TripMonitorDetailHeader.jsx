@@ -150,7 +150,7 @@ export function TripMonitorDetailHeader({
         </div>
 
         {(driver1Name || driver2Name) && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '8px', flex: '1 1 220px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', flexWrap: 'wrap', gap: '8px', flex: '1 1 220px' }}>
             {driver1Name && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#374151' }}>{driver1Name}</span>

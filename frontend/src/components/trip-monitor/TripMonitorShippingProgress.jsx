@@ -119,9 +119,9 @@ export function TripMonitorShippingProgressClean({
           return (
             <React.Fragment key={stepKey}>
               {index > 0 && <div className="trip-monitor-progress-connector" aria-hidden="true" />}
-              <div className="trip-monitor-progress-step">
+              <div className={`trip-monitor-progress-step ${step?.completed ? 'is-completed' : (step?.active ? 'is-active' : 'is-pending')}`}>
                 <span className="trip-monitor-progress-marker" aria-hidden="true">
-                  {Icon ? <Icon size={13} /> : (step?.completed ? '✓' : '')}
+                  {Icon ? <Icon size={14} /> : (step?.completed ? '✓' : '')}
                 </span>
 
                 <div className="trip-monitor-progress-copy">

@@ -358,8 +358,10 @@ export function TripMonitorDetailModal({
             hoveredStopKey={hoveredStopKey}
             onHoverStop={setHoveredStopKey}
             onOpenMap={onOpenMap}
-            onOpenHistorical={onOpenHistorical}
-            onOpenFleet={onOpenFleet}
+            onOpenHistorical={() => onOpenHistorical?.({ rowId: detail.id, ...fleetRow })}
+            onOpenFleet={() => onOpenFleet?.(fleetRow)}
+            onOpenIncidents={() => onOpenIncidents?.({ rowId: detail.id, ...fleetRow })}
+            onOpenOverrideLog={() => onOpenOverrideLog?.({ rowId: detail.id, ...fleetRow })}
             renderUnitRouteMap={renderUnitRouteMap}
             fmtNum={fmtNum}
             formatTripMonitorStatusTime={formatTripMonitorStatusTime}

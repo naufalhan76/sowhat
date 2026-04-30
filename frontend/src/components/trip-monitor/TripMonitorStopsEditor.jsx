@@ -163,12 +163,14 @@ export function TripMonitorStopsEditor({
             <Pencil size={14} />
           </button>
         </div>
-        <TripMonitorShippingProgressClean 
-            shippingStatus={shippingStatus} 
-            headlineJob={headlineJob} 
-            hoveredStopKey={hoveredStopKey} 
-            onHoverStop={onHoverStop} 
-        />
+        <div style={{ marginTop: '4px' }}>
+          <TripMonitorShippingProgressClean 
+              shippingStatus={shippingStatus} 
+              headlineJob={headlineJob} 
+              hoveredStopKey={hoveredStopKey} 
+              onHoverStop={onHoverStop} 
+          />
+        </div>
       </div>
     );
   }
