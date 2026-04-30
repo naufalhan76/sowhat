@@ -4339,6 +4339,7 @@ function buildTmsJobSnapshotFromDoc(doc, tenantLabel, addressLookup) {
 }
 
 function applyJoOverrides(snapshot, overrideRow) {
+  delete snapshot._shippingStatusOverride;
   if (!overrideRow) return snapshot;
 
   if (overrideRow.stops_override) {
@@ -4599,36 +4600,61 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   });
 }
 
+const TRIP_MONITOR_SHIPPING_STEP_ORDER = ['otw-load', 'sampai-load', 'menuju-unload', 'sampai-unload', 'selesai'];
+const TRIP_MONITOR_SHIPPING_STEP_META = {
+  'otw-load': { label: 'OTW LOAD' },
+  'sampai-load': { label: 'SAMPAI LOAD' },
+  'menuju-unload': { label: 'MENUJU UNLOAD' },
+  'sampai-unload': { label: 'SAMPAI UNLOAD' },
+  selesai: { label: 'SELESAI' },
+};
+
+function normalizeShippingStatusOverride(input, now) {
+  if (input === null) return null;
+  if (!input || typeof input !== 'object') {
+    throw new Error('shippingStatus harus berupa object atau null.');
+  }
+  const key = String(input.key || '').trim().toLowerCase();
+  if (!TRIP_MONITOR_SHIPPING_STEP_ORDER.includes(key)) {
+    throw new Error('shippingStatus key tidak valid.');
+  }
+  return {
+    key,
+    label: TRIP_MONITOR_SHIPPING_STEP_META[key].label,
+    changedAt: toTimestampMaybe(input.changedAt) || now || Date.now(),
+    detail: String(input.detail || `Status di-override ke ${TRIP_MONITOR_SHIPPING_STEP_META[key].label}.`).trim(),
+    activeStopName: String(input.activeStopName || '').trim(),
+  };
+}
+
 function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig, now) {
   const progress = buildTripMonitorStopProgress(snapshot, fleetRow, unitState, {
     radiusMeters: TRIP_MONITOR_STATUS_RADIUS_METERS,
     now,
   });
-  const stepOrder = ['otw-load', 'sampai-load', 'menuju-unload', 'sampai-unload', 'selesai'];
-  const stepMeta = {
-    'otw-load': { label: 'OTW LOAD' },
-    'sampai-load': { label: 'SAMPAI LOAD' },
-    'menuju-unload': { label: 'MENUJU UNLOAD' },
-    'sampai-unload': { label: 'SAMPAI UNLOAD' },
-    selesai: { label: 'SELESAI' },
-  };
+  const stepOrder = TRIP_MONITOR_SHIPPING_STEP_ORDER;
+  const stepMeta = TRIP_MONITOR_SHIPPING_STEP_META;
+  const shippingOverride = snapshot._shippingStatusOverride;
+  const overrideKey = shippingOverride && stepOrder.includes(shippingOverride.key) ? shippingOverride.key : null;
   if (!progress.length) {
+    const fallbackKey = overrideKey || 'otw-load';
+    const fallbackIndex = Math.max(0, stepOrder.indexOf(fallbackKey));
     return {
-      key: 'otw-load',
-      label: stepMeta['otw-load'].label,
-      changedAt: null,
-      source: 'default',
-      detail: 'Stop TMS belum tersedia.',
-      activeStopName: '',
+      key: fallbackKey,
+      label: stepMeta[fallbackKey].label,
+      changedAt: overrideKey ? shippingOverride.changedAt : null,
+      source: overrideKey ? 'override' : 'default',
+      detail: overrideKey ? (shippingOverride.detail || `Status di-override ke ${stepMeta[fallbackKey].label}.`) : 'Stop TMS belum tersedia.',
+      activeStopName: shippingOverride?.activeStopName || '',
       steps: stepOrder.map(function (key, index) {
         return {
           key,
           label: stepMeta[key].label,
           changedAt: null,
-          source: null,
+          source: overrideKey && key === fallbackKey ? 'override' : null,
           locationName: '',
-          completed: false,
-          active: index === 0,
+          completed: index < fallbackIndex,
+          active: index === fallbackIndex,
         };
       }),
     };
@@ -4651,10 +4677,9 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
   let activeStopName = loadStop?.stop?.taskAddress || loadStop?.stop?.name || '';
 
   // Shipping status override — if admin manually set a status, use it directly.
-  const shippingOverride = snapshot._shippingStatusOverride;
-  if (shippingOverride && shippingOverride.key && stepOrder.includes(shippingOverride.key)) {
-    currentKey = shippingOverride.key;
-    changedAt = shippingOverride.changedAt ? new Date(shippingOverride.changedAt).getTime() : now;
+  if (overrideKey) {
+    currentKey = overrideKey;
+    changedAt = shippingOverride.changedAt || now;
     source = 'override';
     detail = shippingOverride.detail || `Status di-override ke ${stepMeta[shippingOverride.key]?.label || shippingOverride.key}.`;
     activeStopName = shippingOverride.activeStopName || '';
@@ -4735,6 +4760,145 @@ function buildTripMonitorShippingStatus(snapshot, fleetRow, unitState, tmsConfig
     loadEta: loadStop?.stop?.eta ?? null,
     unloadEtd: finalStop?.stop?.etd ?? null,
   };
+}
+
+// ── ETA Calculation via OSRM ──
+const OSRM_BASE_URL = 'https://router.project-osrm.org';
+const ETA_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const etaCache = new Map();
+
+function etaCacheKey(fromLat, fromLng, toLat, toLng) {
+  // Round to ~100m precision for cache hits on nearby positions
+  return `${fromLat.toFixed(3)},${fromLng.toFixed(3)}->${toLat.toFixed(3)},${toLng.toFixed(3)}`;
+}
+
+function getEtaFromCache(key) {
+  const entry = etaCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > ETA_CACHE_TTL_MS) {
+    etaCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setEtaCache(key, value) {
+  etaCache.set(key, { value, cachedAt: Date.now() });
+  // Evict old entries if cache grows too large
+  if (etaCache.size > 2000) {
+    const cutoff = Date.now() - ETA_CACHE_TTL_MS;
+    for (const [k, v] of etaCache) {
+      if (v.cachedAt < cutoff) etaCache.delete(k);
+    }
+    while (etaCache.size > 2000) {
+      const oldestKey = etaCache.keys().next().value;
+      if (!oldestKey) break;
+      etaCache.delete(oldestKey);
+    }
+  }
+}
+
+function pickTripMonitorEtaTargetStop(stops, shippingStatus) {
+  const statusKey = shippingStatus?.key || 'otw-load';
+  if (statusKey === 'selesai') return null;
+  const loadStop = stops.find(function (s) { return s.taskType === 'load'; }) || stops[0] || null;
+  const unloadStops = stops.filter(function (s) { return s.taskType === 'unload'; });
+  if (statusKey === 'otw-load') return loadStop;
+  if (statusKey === 'sampai-load' || statusKey === 'menuju-unload') return unloadStops[0] || stops[stops.length - 1] || null;
+  if (statusKey === 'sampai-unload') {
+    const activeLocation = String(shippingStatus?.activeStopName || '').trim().toLowerCase();
+    const activeIndex = unloadStops.findIndex(function (stop) {
+      return activeLocation
+        && String(stop.taskAddress || stop.name || '').trim().toLowerCase() === activeLocation;
+    });
+    if (activeIndex >= 0) return unloadStops[activeIndex + 1] || null;
+    return unloadStops[1] || null;
+  }
+  return unloadStops[0] || loadStop;
+}
+
+async function calculateTripMonitorEta(fleetRow, shippingStatus, snapshot) {
+  if (!fleetRow) return null;
+  const vehicleLat = toNumber(fleetRow.latitude);
+  const vehicleLng = toNumber(fleetRow.longitude);
+  if (vehicleLat === null || vehicleLng === null) return null;
+
+  // Find next stop (first non-completed active or next step)
+  const stops = getTripMonitorSnapshotStops(snapshot);
+  if (!stops.length) return null;
+
+  const targetStop = pickTripMonitorEtaTargetStop(stops, shippingStatus);
+
+  if (!targetStop) return null;
+  const destLat = toNumber(targetStop.latitude);
+  const destLng = toNumber(targetStop.longitude);
+  if (destLat === null || destLng === null) return null;
+
+  // Check cache
+  const cacheKey = etaCacheKey(vehicleLat, vehicleLng, destLat, destLng);
+  const cached = getEtaFromCache(cacheKey);
+  if (cached) return cached;
+
+  // Call OSRM
+  let timeout = null;
+  try {
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${vehicleLng},${vehicleLat};${destLng},${destLat}?overview=false`;
+    const controller = new AbortController();
+    timeout = setTimeout(function () { controller.abort(); }, 2500);
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes.length) return null;
+
+    const route = data.routes[0];
+    const durationSeconds = Math.round(route.duration || 0);
+    const distanceMeters = Math.round(route.distance || 0);
+
+    // Determine ETA status based on TMS ETA if available
+    let status = 'neutral';
+    const tmsEta = targetStop.eta;
+    if (tmsEta && durationSeconds > 0) {
+      const arrivalTime = Date.now() + durationSeconds * 1000;
+      const buffer = 30 * 60 * 1000; // 30 min buffer
+      if (arrivalTime <= tmsEta) {
+        status = 'on-time';
+      } else if (arrivalTime <= tmsEta + buffer) {
+        status = 'at-risk';
+      } else {
+        status = 'late';
+      }
+    }
+
+    const result = {
+      durationSeconds,
+      distanceMeters,
+      status,
+      stopName: targetStop.taskAddress || targetStop.name || '',
+      stopType: targetStop.taskType || '',
+    };
+
+    setEtaCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    // OSRM unavailable — silently return null
+    return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = [];
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async function () {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function evaluateTripMonitorTemperatureGate(snapshot, fleetRow, unitState, tmsConfig, now) {
@@ -7011,6 +7175,9 @@ async function ensurePostgresSchema() {
       performed_at timestamptz not null default now(),
       reason text
     );
+
+    alter table tms_jo_overrides
+      add column if not exists shipping_status_override jsonb;
 
     create index if not exists idx_tms_job_order_snapshots_day on tms_job_order_snapshots(day desc);
     create index if not exists idx_tms_job_order_snapshots_plate on tms_job_order_snapshots(normalized_plate);
@@ -10479,6 +10646,21 @@ async function handleApi(req, res, url) {
       const severity = String(url.searchParams.get('severity') || '').trim() || 'all';
       const window = buildTmsMonitorWindow(Date.now());
       const rows = await listTmsMonitorRows(url.searchParams);
+      // Compute ETA best-effort with bounded OSRM concurrency.
+      await mapWithConcurrency(rows.slice(0, 30), 4, async function (row) {
+        try {
+          const fleetRow = row.metadata?.fleetRow || null;
+          const shippingStatus = row.metadata?.shippingStatus || null;
+          const headline = row.metadata?.headlineJobOrder || null;
+          if (fleetRow && headline && shippingStatus?.key !== 'selesai') {
+            const eta = await calculateTripMonitorEta(fleetRow, shippingStatus, headline);
+            if (eta) {
+              row.metadata = row.metadata || {};
+              row.metadata.eta = eta;
+            }
+          }
+        } catch (_) { /* ETA failure non-fatal */ }
+      });
       const logs = await listTmsSyncLogs(1);
       const runtime = getTmsConfig();
       console.log(`[TMS] Board request by ${session.username || session.id || 'unknown-user'} | window ${window.startDay}..${window.endDay} | customer ${customer} | severity ${severity} | rows ${rows.length}`);
@@ -10563,6 +10745,20 @@ async function handleApi(req, res, url) {
         || '',
       ).trim();
       const incidentHistory = await listTmsMonitorIncidentHistory(activeHeadlineJobOrderId);
+      // Compute ETA for detail view
+      let detailEta = null;
+      try {
+        const detailFleetRow = refreshed.metadata?.fleetRow || null;
+        const detailShippingStatus = refreshed.metadata?.shippingStatus || null;
+        const detailHeadline = refreshed.metadata?.headlineJobOrder || null;
+        if (detailFleetRow && detailHeadline && detailShippingStatus?.key !== 'selesai') {
+          detailEta = await calculateTripMonitorEta(detailFleetRow, detailShippingStatus, detailHeadline);
+        }
+      } catch (_) { /* ETA failure non-fatal */ }
+      if (detailEta) {
+        refreshed.metadata = refreshed.metadata || {};
+        refreshed.metadata.eta = detailEta;
+      }
       console.log(`[TMS] Detail request by ${session.username || session.id || 'unknown-user'} | row ${rowId} | unit ${refreshed.unitId || refreshed.unitLabel || '-'} | severity ${refreshed.severity || 'normal'}`);
         sendJson(res, 200, {
           ok: true,
@@ -10578,12 +10774,31 @@ async function handleApi(req, res, url) {
             driverAppStatus: refreshed.driverAppStatus || '',
             shippingStatusLabel: refreshed.shippingStatusLabel || '',
             shippingStatusChangedAt: refreshed.shippingStatusChangedAt || null,
+            eta: detailEta,
             incidentHistory,
             metadata: refreshed.metadata || {},
           },
         });
     } catch (error) {
       sendApiError(res, error, 'Trip monitor detail gagal diambil.', 404);
+    }
+    return true;
+  }
+
+  // Crew phone lookup — fetches contact_no from TMS Master Crew doc
+  if (pathname === '/api/tms/crew-phone' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) return true;
+    try {
+      const crewId = String(url.searchParams.get('crewId') || '').trim();
+      if (!crewId) throw new Error('crewId wajib diisi.');
+      const doc = await fetchTmsDocByName('Master Crew', crewId);
+      if (!doc) throw new Error(`Crew ${crewId} tidak ditemukan di TMS.`);
+      const phone = String(doc.contact_no || doc.cell_phone_number || doc.no_hp || doc.phone || doc.mobile_no || '').trim();
+      const name = String(doc.nama_lengkap || doc.employee_name || doc.name || '').trim();
+      sendJson(res, 200, { ok: true, crewId, phone: phone || null, name: name || crewId });
+    } catch (error) {
+      sendApiError(res, error, 'Gagal mengambil data crew.');
     }
     return true;
   }
@@ -10716,6 +10931,9 @@ async function handleApi(req, res, url) {
       const body = await readRequestBody(req);
       const { stops, tempRange, forceClose, shippingStatus, reason, notes } = body;
       const username = session.user.username || session.user.id || 'unknown';
+      const normalizedShippingStatus = shippingStatus !== undefined
+        ? normalizeShippingStatusOverride(shippingStatus, Date.now())
+        : undefined;
       
       // Fetch existing override for audit
       const existing = await postgresQuery('SELECT * FROM tms_jo_overrides WHERE job_order_id = $1', [jobOrderId]);
@@ -10747,8 +10965,11 @@ async function handleApi(req, res, url) {
         
         if (forceClose) {
           updateFields.push(`force_closed_at = NOW()`);
+          insertFields.push('force_closed_at');
+          values.push(new Date().toISOString());
+          paramIndex++;
           updateFields.push(`force_closed_reason = $${paramIndex}`);
-          insertFields.push('force_closed_at', 'force_closed_reason');
+          insertFields.push('force_closed_reason');
           values.push(reason || null);
           paramIndex++;
         } else {
@@ -10759,7 +10980,7 @@ async function handleApi(req, res, url) {
       if (shippingStatus !== undefined) {
         updateFields.push(`shipping_status_override = $${paramIndex}`);
         insertFields.push('shipping_status_override');
-        values.push(JSON.stringify(shippingStatus));
+        values.push(normalizedShippingStatus === null ? null : JSON.stringify(normalizedShippingStatus));
         paramIndex++;
       }
       if (notes !== undefined) {
@@ -10801,10 +11022,10 @@ async function handleApi(req, res, url) {
           [jobOrderId, 'force_closed', String(oldRow?.force_closed || false), String(forceClose), username, reason || null]
         );
       }
-      if (shippingStatus !== undefined && JSON.stringify(oldRow?.shipping_status_override) !== JSON.stringify(shippingStatus)) {
+      if (shippingStatus !== undefined && JSON.stringify(oldRow?.shipping_status_override ?? null) !== JSON.stringify(normalizedShippingStatus)) {
         await postgresQuery(
           'INSERT INTO tms_jo_override_audit (job_order_id, field_changed, old_value, new_value, performed_by, reason) VALUES ($1, $2, $3, $4, $5, $6)',
-          [jobOrderId, 'shipping_status_override', JSON.stringify(oldRow?.shipping_status_override || null), JSON.stringify(shippingStatus), username, reason || null]
+          [jobOrderId, 'shipping_status_override', JSON.stringify(oldRow?.shipping_status_override || null), JSON.stringify(normalizedShippingStatus), username, reason || null]
         );
       }
       if (notes !== undefined && oldRow?.notes !== notes) {

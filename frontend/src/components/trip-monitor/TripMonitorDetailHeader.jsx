@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Clock3, Route, Truck, Phone, RefreshCw, AlertTriangle } from 'lucide-react';
+import { X, Clock3, Route, Truck, Phone, RefreshCw, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Action, Pill, Surface, TripMonitorOverrideBadge } from '../index';
 
 export function TripMonitorDetailHeader({
@@ -15,6 +15,7 @@ export function TripMonitorDetailHeader({
   onForceClose,
   onOverrideBadge,
   onWaDriver,
+  onShippingStatusOverride,
   displayUnitLabel,
   driver1Name,
   driver2Name,
@@ -26,6 +27,39 @@ export function TripMonitorDetailHeader({
   const [showForceCloseConfirm, setShowForceCloseConfirm] = useState(false);
   const [forceCloseReason, setForceCloseReason] = useState('');
   const [isSubmittingClose, setIsSubmittingClose] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+
+  const SHIPPING_STEPS = [
+    { key: 'otw-load', label: 'OTW LOAD' },
+    { key: 'sampai-load', label: 'SAMPAI LOAD' },
+    { key: 'menuju-unload', label: 'MENUJU UNLOAD' },
+    { key: 'sampai-unload', label: 'SAMPAI UNLOAD' },
+    { key: 'selesai', label: 'SELESAI' },
+  ];
+
+  const handleStatusOverride = async (stepKey) => {
+    if (!onShippingStatusOverride) return;
+    setStatusSaving(true);
+    try {
+      const step = SHIPPING_STEPS.find((s) => s.key === stepKey);
+      await onShippingStatusOverride({ key: stepKey, label: step?.label || stepKey });
+      setShowStatusDropdown(false);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleStatusReset = async () => {
+    if (!onShippingStatusOverride) return;
+    setStatusSaving(true);
+    try {
+      await onShippingStatusOverride(null);
+      setShowStatusDropdown(false);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const handleForceCloseSubmit = async () => {
     if (forceCloseReason.length < 5) return;
@@ -67,9 +101,66 @@ export function TripMonitorDetailHeader({
           </span>
 
           {shippingStatus && (
-            <Pill variant="default" size="sm">
-              {shippingStatus.label || 'Unknown Status'}
-            </Pill>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`tm-status-override-trigger ${shippingStatus.source === 'override' ? 'is-overridden' : ''}`}
+                onClick={() => onShippingStatusOverride && setShowStatusDropdown((v) => !v)}
+                disabled={!onShippingStatusOverride || statusSaving}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 500,
+                  border: shippingStatus.source === 'override' ? '1px solid var(--override-accent, #22d3ee)' : '1px solid var(--border)',
+                  background: shippingStatus.source === 'override' ? 'rgba(34,211,238,0.08)' : 'transparent',
+                  color: 'var(--text-main)', cursor: onShippingStatusOverride ? 'pointer' : 'default',
+                }}
+              >
+                {shippingStatus.label || 'Unknown Status'}
+                {onShippingStatusOverride ? <ChevronDown size={10} /> : null}
+              </button>
+              {showStatusDropdown && (
+                <div className="tm-status-dropdown" style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 60,
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px',
+                  boxShadow: 'var(--shadow-lg)', minWidth: '180px', padding: '4px 0',
+                }}>
+                  {SHIPPING_STEPS.map((step) => (
+                    <button
+                      key={step.key}
+                      type="button"
+                      className="tm-status-dropdown-item"
+                      onClick={() => handleStatusOverride(step.key)}
+                      disabled={statusSaving}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', padding: '6px 12px',
+                        fontSize: '12px', border: 'none', background: shippingStatus.key === step.key ? 'rgba(120,120,130,0.08)' : 'transparent',
+                        color: 'var(--text-main)', cursor: 'pointer', fontWeight: shippingStatus.key === step.key ? 600 : 400,
+                      }}
+                    >
+                      {step.label}
+                    </button>
+                  ))}
+                  {shippingStatus.source === 'override' && (
+                    <>
+                      <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+                      <button
+                        type="button"
+                        className="tm-status-dropdown-item"
+                        onClick={handleStatusReset}
+                        disabled={statusSaving}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left', padding: '6px 12px',
+                          fontSize: '12px', border: 'none', background: 'transparent',
+                          color: 'var(--danger)', cursor: 'pointer',
+                        }}
+                      >
+                        Reset to auto-detected
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {eta && (

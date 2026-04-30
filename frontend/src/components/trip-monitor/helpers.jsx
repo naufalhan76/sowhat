@@ -200,6 +200,24 @@ export function extractTmsDriverName(driver) {
   return pickFirstText(...bucket.names, ...bucket.ids) || '-';
 }
 
+export function extractTmsDriverPhone(driver) {
+  if (!driver || typeof driver !== 'object') return null;
+  // Try common phone field names from TMS/Frappe
+  const phoneCandidates = [
+    driver.contact_no, driver.contactNo,
+    driver.cell_phone_number, driver.cellPhoneNumber,
+    driver.no_hp, driver.noHp,
+    driver.phone, driver.mobile, driver.mobile_no, driver.mobileNo,
+    driver.contact_phone, driver.contactPhone,
+    driver.hp, driver.telepon, driver.no_telepon,
+  ];
+  for (const candidate of phoneCandidates) {
+    const text = String(candidate || '').trim();
+    if (text && /^\+?\d[\d\s\-]{6,}$/.test(text)) return text.replace(/[\s\-]/g, '');
+  }
+  return null;
+}
+
 export function formatTripMonitorRangeLabel(range) {
   if (!range?.startDate || !range?.endDate) return '-';
   return `${range.startDate} to ${range.endDate}`;
