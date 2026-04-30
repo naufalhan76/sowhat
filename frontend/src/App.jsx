@@ -1967,7 +1967,37 @@ export default function App() {
     setTripMonitorPanels((current) => [...current, newPanel]);
     try {
       const payload = await api(`/api/tms/board/detail?${new URLSearchParams({ rowId }).toString()}`);
-      const detail = payload.detail || null;
+      let detail = payload.detail || null;
+      if (detail) {
+        detail.onForceClose = async (reason) => {
+          if (!reason || reason.length < 5) {
+            setBanner({ tone: 'error', message: 'Reason required for force close' });
+            return;
+          }
+          if (!confirm('Apakah Anda yakin ingin Force Close job ini menjadi Selesai?')) return;
+          try {
+            startBusy('Force closing job...');
+            const jobOrderId = detail.metadata?.id || detail.rowId;
+            await api(`/api/tms/overrides/${jobOrderId}`, {
+              method: 'POST',
+              body: JSON.stringify({ forceClose: true, reason })
+            });
+            setBanner({ tone: 'success', message: 'Job order successfully force closed' });
+            await loadJobOrders(true); // refresh kanban
+            // Update local panel state
+            setTripMonitorPanels(current => current.map(p => 
+              p.id === panelId && p.detail 
+                ? { ...p, detail: { ...p.detail, status: 'closed' } } 
+                : p
+            ));
+          } catch (e) {
+            setBanner({ tone: 'error', message: `Failed to force close: ${e.message}` });
+            throw e;
+          } finally {
+            stopBusy();
+          }
+        };
+      }
       setTripMonitorPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, detail, detailBusy: false } : panel));
     } catch (error) {
       setBanner({ tone: 'error', message: error.message || 'Detail Trip Monitor gagal diambil.' });
