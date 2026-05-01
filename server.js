@@ -8661,6 +8661,67 @@ function csvEscape(value) {
   return /[",\n]/.test(textValue) ? '"' + textValue.replace(/"/g, '""') + '"' : textValue;
 }
 
+function toCsvIsoTimestamp(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const ms = Number(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : String(value);
+}
+
+function buildCsvTextWithColumns(rows, columns) {
+  const headerRow = columns.join(',');
+  const dataRows = Array.isArray(rows) ? rows.map(function (row) {
+    return columns.map(function (column) {
+      return csvEscape(row?.[column]);
+    }).join(',');
+  }) : [];
+  return [headerRow, ...dataRows].join('\n');
+}
+
+function buildTmsMasterDataFilters(url) {
+  const filters = [];
+  const params = [];
+
+  function addParam(value) {
+    params.push(value);
+    return `$${params.length}`;
+  }
+
+  const from = String(url.searchParams.get('from') || '').trim();
+  const to = String(url.searchParams.get('to') || '').trim();
+  const customer = String(url.searchParams.get('customer') || '').trim();
+  const driver = String(url.searchParams.get('driver') || '').trim();
+  const plate = String(url.searchParams.get('plate') || '').trim();
+
+  if (from) {
+    filters.push(`day >= ${addParam(from)}`);
+  }
+  if (to) {
+    filters.push(`day <= ${addParam(to)}`);
+  }
+  if (customer) {
+    filters.push(`customer_name ILIKE ${addParam(`%${customer}%`)}`);
+  }
+  if (driver) {
+    filters.push(`driver_1_name ILIKE ${addParam(`%${driver}%`)}`);
+  }
+  if (plate) {
+    filters.push(`plate ILIKE ${addParam(`%${plate}%`)}`);
+  }
+
+  return {
+    from,
+    to,
+    customer,
+    driver,
+    plate,
+    filters,
+    params,
+    whereClause: filters.length ? ` WHERE ${filters.join(' AND ')}` : '',
+  };
+}
+
 function buildCsvText(rows) {
   if (!rows.length) {
     return '';
@@ -11363,6 +11424,120 @@ async function handleApi(req, res, url) {
       });
     } catch (error) {
       sendApiError(res, error, 'Master Data summary gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/export' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const format = String(url.searchParams.get('format') || 'summary').trim().toLowerCase();
+      if (!['summary', 'stops', 'both'].includes(format)) {
+        const error = new Error('format harus summary, stops, atau both.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const { from, to, whereClause, params } = buildTmsMasterDataFilters(url);
+      const summaryColumns = [
+        'jo_id', 'day', 'customer_name', 'plate', 'driver_1_name', 'driver_2_name', 'origin_name', 'destination_name',
+        'stop_count', 'trip_start_at', 'trip_end_at', 'total_duration_min', 'actual_distance_km', 'planned_distance_km',
+        'route_efficiency', 'temp_min', 'temp_max', 'temp_avg', 'breach_count', 'breach_total_min', 'temp_compliant',
+        'incident_count', 'incident_codes', 'total_idle_min', 'speed_violation_count', 'status', 'finalized_at',
+      ];
+      const stopsColumns = [
+        'jo_id', 'stop_idx', 'stop_type', 'stop_label', 'address_name', 'latitude', 'longitude', 'geofence_arrival_at',
+        'geofence_departure_at', 'dwell_time_min', 'leg_temp_min', 'leg_temp_max', 'leg_temp_avg', 'leg_breach_count',
+        'leg_distance_km', 'eta', 'ata_geofence', 'on_time',
+      ];
+
+      const buildSummaryCsv = function (rows) {
+        return buildCsvTextWithColumns(rows.map(function (row) {
+          return {
+            ...row,
+            trip_start_at: toCsvIsoTimestamp(row.trip_start_at),
+            trip_end_at: toCsvIsoTimestamp(row.trip_end_at),
+            incident_codes: Array.isArray(row.incident_codes) ? row.incident_codes.join(';') : String(row.incident_codes || ''),
+            finalized_at: toCsvIsoTimestamp(row.finalized_at),
+          };
+        }), summaryColumns);
+      };
+
+      const buildStopsCsv = function (rows) {
+        return buildCsvTextWithColumns(rows.map(function (row) {
+          return {
+            ...row,
+            geofence_arrival_at: toCsvIsoTimestamp(row.geofence_arrival_at),
+            geofence_departure_at: toCsvIsoTimestamp(row.geofence_departure_at),
+            eta: toCsvIsoTimestamp(row.eta),
+            ata_geofence: toCsvIsoTimestamp(row.ata_geofence),
+          };
+        }), stopsColumns);
+      };
+
+      if (format === 'summary' || format === 'both') {
+        const summaryResult = await postgresQuery(
+          `SELECT
+             jo_id, day, customer_name, plate, driver_1_name, driver_2_name, origin_name, destination_name, stop_count,
+             trip_start_at, trip_end_at, total_duration_min, actual_distance_km, planned_distance_km, route_efficiency,
+             temp_min, temp_max, temp_avg, breach_count, breach_total_min, temp_compliant, incident_count, incident_codes,
+             total_idle_min, speed_violation_count, status, finalized_at
+           FROM tms_master_data${whereClause}
+           ORDER BY day DESC, created_at DESC`,
+          params,
+        );
+        const summaryCsv = buildSummaryCsv(summaryResult.rows || []);
+        if (format === 'summary') {
+          const filenameFrom = from || 'all';
+          const filenameTo = to || 'all';
+          send(res, 200, summaryCsv, 'text/csv', {
+            'Content-Disposition': `attachment; filename="jo_summary_${filenameFrom}_${filenameTo}.csv"`,
+          });
+          return true;
+        }
+
+        const stopParams = params.slice();
+        const stopsResult = await postgresQuery(
+          `WITH filtered_master AS (
+             SELECT * FROM tms_master_data${whereClause}
+           )
+           SELECT
+             s.jo_id, s.stop_idx, s.stop_type, s.stop_label, s.address_name, s.latitude, s.longitude,
+             s.geofence_arrival_at, s.geofence_departure_at, s.dwell_time_min, s.leg_temp_min, s.leg_temp_max,
+             s.leg_temp_avg, s.leg_breach_count, s.leg_distance_km, s.eta, s.ata_geofence, s.on_time
+           FROM tms_master_data_stops s
+           INNER JOIN filtered_master m ON m.jo_id = s.jo_id
+           ORDER BY m.day DESC, m.created_at DESC, s.stop_idx ASC`,
+          stopParams,
+        );
+        send(res, 200, JSON.stringify({ summary: summaryCsv, stops: buildStopsCsv(stopsResult.rows || []) }), 'application/json');
+        return true;
+      }
+
+      const stopsResult = await postgresQuery(
+        `WITH filtered_master AS (
+           SELECT * FROM tms_master_data${whereClause}
+         )
+         SELECT
+           s.jo_id, s.stop_idx, s.stop_type, s.stop_label, s.address_name, s.latitude, s.longitude,
+           s.geofence_arrival_at, s.geofence_departure_at, s.dwell_time_min, s.leg_temp_min, s.leg_temp_max,
+           s.leg_temp_avg, s.leg_breach_count, s.leg_distance_km, s.eta, s.ata_geofence, s.on_time
+         FROM tms_master_data_stops s
+         INNER JOIN filtered_master m ON m.jo_id = s.jo_id
+         ORDER BY m.day DESC, m.created_at DESC, s.stop_idx ASC`,
+        params,
+      );
+      const stopsCsv = buildStopsCsv(stopsResult.rows || []);
+      const filenameFrom = from || 'all';
+      const filenameTo = to || 'all';
+      send(res, 200, stopsCsv, 'text/csv', {
+        'Content-Disposition': `attachment; filename="jo_stops_${filenameFrom}_${filenameTo}.csv"`,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Master Data export gagal diproses.');
     }
     return true;
   }
