@@ -19,6 +19,14 @@ function formatTempRange(min, max) {
   return `${min}°C - ${max}°C`;
 }
 
+function getExpiryDaysRemaining(expiresAt) {
+  const expiryMs = Number(expiresAt);
+  if (!Number.isFinite(expiryMs)) return null;
+  const daysRemaining = Math.ceil((expiryMs - Date.now()) / (24 * 60 * 60 * 1000));
+  if (daysRemaining < 1 || daysRemaining > 3) return null;
+  return daysRemaining;
+}
+
 function today(offset = 0) {
   const date = new Date(Date.now() + (offset * 24 * 60 * 60 * 1000));
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -158,8 +166,16 @@ export function MasterDataPage() {
     { label: 'Incidents', value: summary.incidents || 0 },
   ] : [];
 
+  const expiringSoonCount = rows.reduce((count, row) => count + (getExpiryDaysRemaining(row.expires_at) ? 1 : 0), 0);
+
   return (
     <div className="master-data-page">
+      {expiringSoonCount > 0 && (
+        <div className="master-data-expiry-banner">
+          {expiringSoonCount} records expiring soon. Export before deletion.
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="master-data-filters">
         <div className="master-data-filter-group">
@@ -288,25 +304,33 @@ export function MasterDataPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} onClick={() => handleRowClick(row)} className="master-data-table-row">
-                    <td className="master-data-table-cell-mono">{row.joNumber || '-'}</td>
-                    <td>{row.date || '-'}</td>
-                    <td>{row.customer || '-'}</td>
-                    <td className="master-data-table-cell-mono">{row.plate || '-'}</td>
-                    <td>{row.driver || '-'}</td>
-                    <td className="master-data-table-cell-route">{row.route || '-'}</td>
-                    <td className="master-data-table-cell-mono">{row.stopCount || 0}</td>
-                    <td className="master-data-table-cell-mono">{formatDuration(row.duration)}</td>
-                    <td className="master-data-table-cell-mono">{formatDistance(row.distance)}</td>
-                    <td className="master-data-table-cell-mono">{formatTempRange(row.tempMin, row.tempMax)}</td>
-                    <td>
-                      <span className={`master-data-temp-badge master-data-temp-badge-${row.tempStatus === 'compliant' ? 'success' : 'danger'}`}>
-                        {row.tempStatus === 'compliant' ? 'Compliant' : 'Breach'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row, i) => {
+                  const expiryDaysRemaining = getExpiryDaysRemaining(row.expires_at);
+                  return (
+                    <tr key={i} onClick={() => handleRowClick(row)} className="master-data-table-row">
+                      <td className="master-data-table-cell-mono">{row.joNumber || '-'}</td>
+                      <td>{row.date || '-'}</td>
+                      <td>{row.customer || '-'}</td>
+                      <td className="master-data-table-cell-mono">{row.plate || '-'}</td>
+                      <td>{row.driver || '-'}</td>
+                      <td className="master-data-table-cell-route">{row.route || '-'}</td>
+                      <td className="master-data-table-cell-mono">{row.stopCount || 0}</td>
+                      <td className="master-data-table-cell-mono">{formatDuration(row.duration)}</td>
+                      <td className="master-data-table-cell-mono">{formatDistance(row.distance)}</td>
+                      <td className="master-data-table-cell-mono">{formatTempRange(row.tempMin, row.tempMax)}</td>
+                      <td>
+                        <span className={`master-data-temp-badge master-data-temp-badge-${row.tempStatus === 'compliant' ? 'success' : 'danger'}`}>
+                          {row.tempStatus === 'compliant' ? 'Compliant' : 'Breach'}
+                        </span>
+                        {expiryDaysRemaining ? (
+                          <span className="master-data-expiry-badge">
+                            Expires in {expiryDaysRemaining} days
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 

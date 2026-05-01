@@ -129,6 +129,9 @@ let remoteResetInFlight = false;
 let astroSyncTimer = null;
 let tmsSyncTimer = null;
 let isFirstTmsSyncSchedule = true;
+let masterDataCleanupTimer = null;
+let masterDataCleanupIntervalTimer = null;
+let isFirstMasterDataCleanupSchedule = true;
 const ASTRO_SYNC_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const ASTRO_SNAPSHOT_LOG_LIMIT = 100;
 const astroSnapshotLogs = [];
@@ -6611,6 +6614,47 @@ function scheduleNextTmsSync() {
       }).catch(function () {});
     }).finally(scheduleNextTmsSync);
   }, delayMs);
+}
+
+async function cleanupExpiredMasterData() {
+  const now = Date.now();
+  const result = await postgresQuery(
+    'DELETE FROM tms_master_data WHERE expires_at IS NOT NULL AND expires_at < $1',
+    [now],
+  );
+  const deletedCount = Number(result?.rowCount || 0);
+  console.log(`[TMS] Master data cleanup: deleted ${deletedCount} expired records`);
+  return deletedCount;
+}
+
+function scheduleMasterDataCleanup() {
+  if (masterDataCleanupTimer) {
+    clearTimeout(masterDataCleanupTimer);
+    masterDataCleanupTimer = null;
+  }
+  if (masterDataCleanupIntervalTimer) {
+    clearInterval(masterDataCleanupIntervalTimer);
+    masterDataCleanupIntervalTimer = null;
+  }
+  const startCleanupLoop = function () {
+    cleanupExpiredMasterData().catch(function (error) {
+      console.error('[TMS] Master data cleanup failed:', error);
+    });
+    masterDataCleanupIntervalTimer = setInterval(function () {
+      cleanupExpiredMasterData().catch(function (error) {
+        console.error('[TMS] Master data cleanup failed:', error);
+      });
+    }, 24 * 60 * 60 * 1000);
+  };
+  if (isFirstMasterDataCleanupSchedule) {
+    isFirstMasterDataCleanupSchedule = false;
+    masterDataCleanupTimer = setTimeout(function () {
+      masterDataCleanupTimer = null;
+      startCleanupLoop();
+    }, 60 * 1000);
+    return;
+  }
+  startCleanupLoop();
 }
 
 async function findLatestTmsMonitorDay() {
@@ -13120,6 +13164,7 @@ if (require.main === module) {
       await storageInitializationPromise;
       await ensureTmsOverrideTables();
       scheduleNextTmsSync();
+      scheduleMasterDataCleanup();
       hydrateTmsMonitorHistory().catch(function (error) { console.error('[TMS Hydration Error]', error); });
       if (config && config.autoStart) {
         console.log('[Boot] Starting sequential poll cycle FIRST, Astro snapshot will wait...');

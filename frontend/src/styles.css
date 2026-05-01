@@ -17355,6 +17355,16 @@ body {
   margin: 0 auto;
 }
 
+.master-data-expiry-banner {
+  padding: 12px 16px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .master-data-filters {
   display: flex;
   gap: 12px;
@@ -17530,6 +17540,20 @@ body {
 .master-data-temp-badge-danger {
   background: var(--danger-surface);
   color: var(--danger-text);
+}
+
+.master-data-expiry-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #f59e0b;
+  vertical-align: middle;
 }
 
 .master-data-pagination {
