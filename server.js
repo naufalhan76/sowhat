@@ -4451,7 +4451,7 @@ function getTripMonitorSnapshotStops(snapshot) {
     return snapshot.stops.map(function (stop, index) {
       const taskType = String(stop?.taskType || stop?.task_type || '').trim().toLowerCase() === 'unload' ? 'unload' : 'load';
       const coordinateSource = String(stop?.coordinateSource || stop?.resolved_coordinate_source || '').trim().toLowerCase();
-      const useStoredCoordinates = !coordinateSource || coordinateSource === 'task_list';
+      const useStoredCoordinates = !coordinateSource || coordinateSource === 'task_list' || coordinateSource === 'address_cache';
       return {
         idx: Number(stop?.idx || index + 1),
         taskIdx: Number(stop?.taskIdx || stop?.task_idx || stop?.idx || index + 1),
