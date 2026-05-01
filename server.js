@@ -11472,6 +11472,48 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/tms/master-data/customers' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await postgresQuery("SELECT DISTINCT customer_name FROM tms_master_data WHERE customer_name != '' ORDER BY customer_name");
+      sendJson(res, 200, result.rows.map(function (row) { return row.customer_name; }));
+    } catch (error) {
+      sendApiError(res, error, 'Master Data customers gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/drivers' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await postgresQuery("SELECT DISTINCT driver_1_name FROM tms_master_data WHERE driver_1_name != '' ORDER BY driver_1_name");
+      sendJson(res, 200, result.rows.map(function (row) { return row.driver_1_name; }));
+    } catch (error) {
+      sendApiError(res, error, 'Master Data drivers gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/plates' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await postgresQuery("SELECT DISTINCT plate FROM tms_master_data WHERE plate != '' ORDER BY plate");
+      sendJson(res, 200, result.rows.map(function (row) { return row.plate; }));
+    } catch (error) {
+      sendApiError(res, error, 'Master Data plates gagal diambil.');
+    }
+    return true;
+  }
+
   if (pathname === '/api/tms/master-data/detail' && method === 'GET') {
     const session = await requireWebSession(req, res);
     if (!session) {
