@@ -6117,6 +6117,167 @@ async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
   return { snapshotsSaved, rowsSaved };
 }
 
+function resolveTmsMasterDataDriverNames(snapshot) {
+  const drivers = Array.isArray(snapshot?.driverAssign) ? snapshot.driverAssign : [];
+  return drivers.slice(0, 2).map(function (driver) {
+    return firstNonEmptyText(
+      driver?.driver_name,
+      driver?.driverName,
+      driver?.full_name,
+      driver?.fullName,
+      driver?.employee_name,
+      driver?.name,
+      driver?.driver,
+    );
+  });
+}
+
+async function populateMasterDataFromSync(row, snapshot, fleetContext, now) {
+  const joId = firstNonEmptyText(row?.jobOrderId, snapshot?.jobOrderId, snapshot?.name);
+  if (!getPostgresConfig().enabled || !joId) {
+    return 0;
+  }
+
+  const resolvedNow = Number.isFinite(now) ? now : Date.now();
+  const stops = getTripMonitorSnapshotStops(snapshot);
+  const driverNames = resolveTmsMasterDataDriverNames(snapshot);
+  const fleetRow = fleetContext?.row || null;
+  const unitState = fleetContext?.unitState || null;
+  return postgresUpsertRows(
+    'tms_master_data',
+    [{
+      jo_id: joId,
+      day: firstNonEmptyText(row?.day, snapshot?.day, formatLocalDay(resolvedNow)),
+      tenant_label: firstNonEmptyText(row?.tenantLabel, snapshot?.tenantLabel),
+      customer_name: firstNonEmptyText(row?.customerName, snapshot?.customerName),
+      plate: firstNonEmptyText(row?.unitLabel, fleetRow?.alias, fleetRow?.label, unitState?.vehicle, snapshot?.plateRaw, snapshot?.unitLabel),
+      normalized_plate: firstNonEmptyText(row?.normalizedPlate, snapshot?.normalizedPlate),
+      driver_1_name: driverNames[0] || '',
+      driver_2_name: driverNames[1] || '',
+      origin_name: firstNonEmptyText(row?.originName, snapshot?.originName),
+      destination_name: firstNonEmptyText(row?.destinationName, snapshot?.destinationName),
+      stop_count: stops.length,
+      status: 'in_progress',
+      metadata: {
+        unitId: firstNonEmptyText(row?.unitId, fleetRow?.id),
+        unitKey: firstNonEmptyText(row?.unitKey, fleetRow?.rowKey),
+      },
+      created_at: resolvedNow,
+      updated_at: resolvedNow,
+    }],
+    ['jo_id', 'day', 'tenant_label', 'customer_name', 'plate', 'normalized_plate', 'driver_1_name', 'driver_2_name', 'origin_name', 'destination_name', 'stop_count', 'status', 'metadata', 'created_at', 'updated_at'],
+    ['jo_id'],
+    { touchUpdatedAt: false },
+  );
+}
+
+async function populateMasterDataStops(joId, snapshot, now) {
+  const resolvedJoId = String(joId || '').trim();
+  if (!getPostgresConfig().enabled || !resolvedJoId) {
+    return 0;
+  }
+
+  const resolvedNow = Number.isFinite(now) ? now : Date.now();
+  const stops = getTripMonitorSnapshotStops(snapshot);
+  if (!stops.length) {
+    return 0;
+  }
+
+  return postgresUpsertRows(
+    'tms_master_data_stops',
+    stops.map(function (stop, index) {
+      const stopIdx = Number(stop?.idx || index + 1);
+      const stopType = String(stop?.taskType || stop?.task_type || '').trim().toLowerCase() === 'load' ? 'load' : 'unload';
+      return {
+        jo_id: resolvedJoId,
+        stop_idx: Number.isFinite(stopIdx) && stopIdx > 0 ? stopIdx : index + 1,
+        stop_type: stopType,
+        stop_label: firstNonEmptyText(stop?.label, stop?.name, stopType === 'load' ? 'LOAD' : `U${index + 1}`),
+        address_name: firstNonEmptyText(stop?.taskAddress, stop?.task_address, stop?.addressName, stop?.address_name, stop?.name),
+        latitude: toNumber(stop?.latitude),
+        longitude: toNumber(stop?.longitude),
+        eta: toTimestampMaybe(stop?.eta),
+        metadata: {
+          taskIdx: stop?.taskIdx ?? stop?.task_idx ?? null,
+        },
+        created_at: resolvedNow,
+        updated_at: resolvedNow,
+      };
+    }),
+    ['jo_id', 'stop_idx', 'stop_type', 'stop_label', 'address_name', 'latitude', 'longitude', 'eta', 'metadata', 'created_at', 'updated_at'],
+    ['jo_id', 'stop_idx'],
+    { touchUpdatedAt: false },
+  );
+}
+
+function resolveGpsPointTemperature(record) {
+  const directTemperature = toNumber(record?.temperature ?? record?.temp);
+  if (directTemperature !== null) {
+    return directTemperature;
+  }
+  const temperatures = [toNumber(record?.temp1), toNumber(record?.temp2)].filter(function (value) {
+    return value !== null;
+  });
+  if (!temperatures.length) {
+    return null;
+  }
+  return temperatures.reduce(function (sum, value) { return sum + value; }, 0) / temperatures.length;
+}
+
+async function accumulateGpsPoints(joId, unitId, accountState, now) {
+  const resolvedJoId = String(joId || '').trim();
+  const resolvedUnitId = String(unitId || '').trim();
+  if (!getPostgresConfig().enabled || !resolvedJoId || !resolvedUnitId) {
+    return 0;
+  }
+
+  const unitState = accountState?.units?.[resolvedUnitId] || null;
+  const records = Array.isArray(unitState?.records) ? unitState.records : [];
+  if (!records.length) {
+    return 0;
+  }
+
+  const lastResult = await postgresQuery(
+    'SELECT MAX(timestamp_ms) AS last_timestamp FROM tms_master_data_gps_points WHERE jo_id = $1',
+    [resolvedJoId],
+  );
+  const lastTimestamp = Number(lastResult.rows?.[0]?.last_timestamp || 0);
+  const resolvedNow = Number.isFinite(now) ? now : Date.now();
+  const newPoints = records.map(function (record) {
+    const timestampMs = toTimestampMaybe(record?.timestampMs ?? record?.timestamp);
+    return {
+      timestampMs,
+      latitude: toNumber(record?.latitude),
+      longitude: toNumber(record?.longitude),
+      speed: toNumber(record?.speed),
+      temperature: resolveGpsPointTemperature(record),
+    };
+  }).filter(function (point) {
+    return point.timestampMs !== null
+      && point.timestampMs > lastTimestamp
+      && point.latitude !== null
+      && point.longitude !== null;
+  }).sort(function (left, right) { return left.timestampMs - right.timestampMs; });
+
+  if (!newPoints.length) {
+    return 0;
+  }
+
+  const columns = ['jo_id', 'timestamp_ms', 'latitude', 'longitude', 'speed', 'temperature', 'created_at'];
+  const params = [];
+  const valueRows = newPoints.map(function (point, rowIndex) {
+    params.push(resolvedJoId, point.timestampMs, point.latitude, point.longitude, point.speed, point.temperature, resolvedNow);
+    return `(${columns.map(function (_column, columnIndex) {
+      return `$${rowIndex * columns.length + columnIndex + 1}`;
+    }).join(', ')})`;
+  });
+  await postgresQuery(
+    `insert into tms_master_data_gps_points (${columns.join(', ')}) values ${valueRows.join(', ')}`,
+    params,
+  );
+  return newPoints.length;
+}
+
 async function syncTmsMonitor(options) {
   const runtime = getTmsConfig();
   if (!runtime.baseUrl) {
@@ -6157,6 +6318,60 @@ async function syncTmsMonitor(options) {
   await resolveInactiveTmsMonitorIncidentEvents(jobSnapshots.map(function (snapshot) {
     return snapshot.jobOrderId;
   }), now);
+
+  // Master Data population (A9 + A10)
+  for (const monitorRow of monitorRows) {
+    try {
+      const joId = monitorRow.jobOrderId || '';
+      if (!joId) continue;
+      const snapshot = jobSnapshots.find(function (s) { return s.jobOrderId === joId; }) || null;
+      if (!snapshot) continue;
+      await populateMasterDataFromSync(monitorRow, snapshot, fleetIndex, now);
+      await populateMasterDataStops(joId, snapshot, now);
+      // GPS accumulation + geofence detection
+      const fleetRow = monitorRow.metadata?.fleetRow || null;
+      if (fleetRow && fleetRow.id) {
+        const accountConfig = getAllAccountConfigs().find(function (cfg) {
+          return cfg.id === (fleetRow.accountId || 'primary');
+        }) || getAllAccountConfigs()[0];
+        if (accountConfig) {
+          const accountState = ensureAccountState(accountConfig.id);
+          await accumulateGpsPoints(joId, fleetRow.id, accountState, now);
+          // A10: Geofence arrival/departure detection per stop
+          const unitState = accountState.units[fleetRow.id] || null;
+          if (unitState) {
+            const stops = getTripMonitorSnapshotStops(snapshot);
+            const records = unitState.records || [];
+            for (const stop of stops) {
+              if (stop.latitude === null || stop.longitude === null) continue;
+              const geofenceStats = extractGeofenceVisitStats(records, stop, TRIP_MONITOR_STATUS_RADIUS_METERS);
+              if (geofenceStats.firstInside || geofenceStats.lastInside) {
+                const arrivalAt = geofenceStats.firstInside?.timestampMs || geofenceStats.firstInside?.timestamp || null;
+                const departureAt = geofenceStats.lastInside?.timestampMs || geofenceStats.lastInside?.timestamp || null;
+                const dwellMin = arrivalAt && departureAt && departureAt > arrivalAt
+                  ? Math.round((departureAt - arrivalAt) / 60000 * 10) / 10
+                  : null;
+                await postgresQuery(
+                  `UPDATE tms_master_data_stops
+                   SET geofence_arrival_at = COALESCE(geofence_arrival_at, $1),
+                       geofence_departure_at = $2,
+                       dwell_time_min = $3,
+                       ata_geofence = COALESCE(ata_geofence, $1),
+                       on_time = CASE WHEN eta IS NOT NULL AND $1 IS NOT NULL THEN $1 <= eta ELSE on_time END,
+                       updated_at = $4
+                   WHERE jo_id = $5 AND stop_idx = $6`,
+                  [arrivalAt, departureAt, dwellMin, now, joId, stop.idx]
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (masterDataError) {
+      // Master data population is non-fatal — log and continue
+      console.warn(`[TMS] Master data populate failed for ${monitorRow.jobOrderId || 'unknown'}: ${masterDataError.message || masterDataError}`);
+    }
+  }
 
   const fetchedCount = jobSnapshots.length;
   const matchedCount = monitorRows.filter(function (row) { return row.severity !== 'unmatched'; }).length;
@@ -7377,6 +7592,7 @@ async function ensurePostgresSchema() {
     create index if not exists idx_master_data_status on tms_master_data(status);
     create index if not exists idx_master_data_customer on tms_master_data(customer_name);
     create index if not exists idx_master_data_expires on tms_master_data(expires_at);
+    create unique index if not exists idx_master_stops_jo_stop on tms_master_data_stops(jo_id, stop_idx);
     create index if not exists idx_master_stops_jo on tms_master_data_stops(jo_id);
     create index if not exists idx_master_stops_address on tms_master_data_stops(address_name);
     create index if not exists idx_master_gps_jo on tms_master_data_gps_points(jo_id);
