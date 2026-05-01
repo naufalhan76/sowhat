@@ -6280,6 +6280,172 @@ async function accumulateGpsPoints(joId, unitId, accountState, now) {
   return newPoints.length;
 }
 
+async function calculateMasterDataPlannedDistanceKm(joId) {
+  const stopsResult = await postgresQuery(
+    `SELECT latitude, longitude
+     FROM tms_master_data_stops
+     WHERE jo_id = $1
+       AND latitude IS NOT NULL
+       AND longitude IS NOT NULL
+     ORDER BY stop_idx`,
+    [joId],
+  );
+  const coords = stopsResult.rows.map(function (stop) {
+    const lat = toNumber(stop.latitude);
+    const lng = toNumber(stop.longitude);
+    if (lat === null || lng === null) return null;
+    return `${lng},${lat}`;
+  }).filter(Boolean);
+  if (coords.length < 2) {
+    return null;
+  }
+
+  let timeout = null;
+  try {
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${coords.join(';')}?overview=false`;
+    const controller = new AbortController();
+    timeout = setTimeout(function () { controller.abort(); }, 5000);
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const distanceMeters = toNumber(data?.routes?.[0]?.distance);
+    return distanceMeters !== null ? Math.round((distanceMeters / 1000) * 10) / 10 : null;
+  } catch (_error) {
+    return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function finalizeMasterDataJo(joId, now) {
+  const resolvedJoId = String(joId || '').trim();
+  if (!getPostgresConfig().enabled || !resolvedJoId) {
+    return false;
+  }
+
+  const masterResult = await postgresQuery(
+    `SELECT jo_id, trip_start_at, trip_end_at
+     FROM tms_master_data
+     WHERE jo_id = $1 AND status = 'in_progress'`,
+    [resolvedJoId],
+  );
+  const masterRow = masterResult.rows?.[0] || null;
+  if (!masterRow) {
+    return false;
+  }
+
+  const pointsResult = await postgresQuery(
+    `SELECT timestamp_ms, latitude, longitude, speed, temperature
+     FROM tms_master_data_gps_points
+     WHERE jo_id = $1
+     ORDER BY timestamp_ms`,
+    [resolvedJoId],
+  );
+  const points = pointsResult.rows || [];
+  const movingPoints = points.filter(function (point) {
+    const speed = toNumber(point.speed);
+    return speed === null || speed > 1;
+  });
+
+  let actualDistanceMeters = 0;
+  for (let index = 1; index < movingPoints.length; index += 1) {
+    const previous = movingPoints[index - 1];
+    const current = movingPoints[index];
+    const distance = distanceMetersBetween(previous.latitude, previous.longitude, current.latitude, current.longitude);
+    if (distance !== null) {
+      actualDistanceMeters += distance;
+    }
+  }
+  const actualDistanceKm = actualDistanceMeters > 0 ? Math.round((actualDistanceMeters / 1000) * 10) / 10 : null;
+
+  let plannedDistanceKm = null;
+  try {
+    plannedDistanceKm = await calculateMasterDataPlannedDistanceKm(resolvedJoId);
+  } catch (_error) {
+    plannedDistanceKm = null;
+  }
+
+  const routeEfficiency = plannedDistanceKm !== null && actualDistanceKm !== null && actualDistanceKm > 0
+    ? Math.round((plannedDistanceKm / actualDistanceKm * 100) * 10) / 10
+    : null;
+  const speedViolationCount = points.filter(function (point) {
+    const speed = toNumber(point.speed);
+    return speed !== null && speed > 80;
+  }).length;
+
+  let totalIdleMs = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const previousSpeed = toNumber(previous.speed);
+    const currentSpeed = toNumber(current.speed);
+    const previousIdle = previousSpeed !== null && previousSpeed <= 1;
+    const currentIdle = currentSpeed !== null && currentSpeed <= 1;
+    const previousTimestamp = toNumber(previous.timestamp_ms);
+    const currentTimestamp = toNumber(current.timestamp_ms);
+    if (previousIdle && currentIdle && previousTimestamp !== null && currentTimestamp !== null && currentTimestamp > previousTimestamp) {
+      const durationMs = currentTimestamp - previousTimestamp;
+      if (durationMs > 3 * 60 * 1000) {
+        totalIdleMs += durationMs;
+      }
+    }
+  }
+  const totalIdleMin = Math.round((totalIdleMs / 60000) * 10) / 10;
+
+  const temperatures = points.map(function (point) {
+    return toNumber(point.temperature);
+  }).filter(function (value) {
+    return value !== null;
+  });
+  const tempMin = temperatures.length ? Math.min(...temperatures) : null;
+  const tempMax = temperatures.length ? Math.max(...temperatures) : null;
+  const tempAvg = temperatures.length
+    ? Math.round((temperatures.reduce(function (sum, value) { return sum + value; }, 0) / temperatures.length) * 10) / 10
+    : null;
+
+  const tripStartAt = toNumber(masterRow.trip_start_at);
+  const tripEndAt = toNumber(masterRow.trip_end_at);
+  const totalDurationMin = tripStartAt !== null && tripEndAt !== null && tripEndAt > tripStartAt
+    ? Math.round(((tripEndAt - tripStartAt) / 60000) * 10) / 10
+    : null;
+  const resolvedNow = Number.isFinite(now) ? now : Date.now();
+  const expiresAt = resolvedNow + (34 * 24 * 60 * 60 * 1000);
+
+  await postgresQuery(
+    `UPDATE tms_master_data
+     SET actual_distance_km = $1,
+         planned_distance_km = $2,
+         route_efficiency = $3,
+         speed_violation_count = $4,
+         total_idle_min = $5,
+         temp_min = $6,
+         temp_max = $7,
+         temp_avg = $8,
+         total_duration_min = $9,
+         status = 'completed',
+         finalized_at = $10,
+         expires_at = $11,
+         updated_at = $10
+     WHERE jo_id = $12 AND status = 'in_progress'`,
+    [
+      actualDistanceKm,
+      plannedDistanceKm,
+      routeEfficiency,
+      speedViolationCount,
+      totalIdleMin,
+      tempMin,
+      tempMax,
+      tempAvg,
+      totalDurationMin,
+      resolvedNow,
+      expiresAt,
+      resolvedJoId,
+    ],
+  );
+  console.log(`[TMS] Finalized master data for ${resolvedJoId}`);
+  return true;
+}
+
 async function syncTmsMonitor(options) {
   const runtime = getTmsConfig();
   if (!runtime.baseUrl) {
@@ -6330,6 +6496,11 @@ async function syncTmsMonitor(options) {
       if (!snapshot) continue;
       await populateMasterDataFromSync(monitorRow, snapshot, fleetIndex, now);
       await populateMasterDataStops(joId, snapshot, now);
+      const shippingStatus = monitorRow.metadata?.shippingStatus || null;
+      const isClosed = String(snapshot.jobOrderStatus || '').toLowerCase() === 'closed';
+      if (isTripMonitorShippingComplete(shippingStatus) || isClosed) {
+        await finalizeMasterDataJo(joId, now);
+      }
       // GPS accumulation + geofence detection
       const fleetRow = monitorRow.metadata?.fleetRow || null;
       if (fleetRow && fleetRow.id) {
