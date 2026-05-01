@@ -11053,6 +11053,149 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/tms/master-data' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const filters = [];
+      const params = [];
+      function addParam(value) {
+        params.push(value);
+        return `$${params.length}`;
+      }
+
+      const from = String(url.searchParams.get('from') || '').trim();
+      const to = String(url.searchParams.get('to') || '').trim();
+      const customer = String(url.searchParams.get('customer') || '').trim();
+      const driver = String(url.searchParams.get('driver') || '').trim();
+      const plate = String(url.searchParams.get('plate') || '').trim();
+      const page = Math.max(1, Number.parseInt(url.searchParams.get('page') || '1', 10) || 1);
+      const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+      const offset = (page - 1) * limit;
+
+      if (from) {
+        filters.push(`day >= ${addParam(from)}`);
+      }
+      if (to) {
+        filters.push(`day <= ${addParam(to)}`);
+      }
+      if (customer) {
+        filters.push(`customer_name ILIKE ${addParam(`%${customer}%`)}`);
+      }
+      if (driver) {
+        filters.push(`driver_1_name ILIKE ${addParam(`%${driver}%`)}`);
+      }
+      if (plate) {
+        filters.push(`plate ILIKE ${addParam(`%${plate}%`)}`);
+      }
+
+      const whereClause = filters.length ? ` WHERE ${filters.join(' AND ')}` : '';
+      const countResult = await postgresQuery(`SELECT COUNT(*)::int AS total FROM tms_master_data${whereClause}`, params);
+      const rowParams = params.slice();
+      rowParams.push(limit, offset);
+      const rowsResult = await postgresQuery(
+        `SELECT * FROM tms_master_data${whereClause} ORDER BY day DESC, created_at DESC LIMIT $${rowParams.length - 1} OFFSET $${rowParams.length}`,
+        rowParams,
+      );
+
+      sendJson(res, 200, {
+        ok: true,
+        rows: rowsResult.rows,
+        total: countResult.rows[0]?.total || 0,
+        page,
+        limit,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Master Data gagal diambil.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/summary' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const filters = [];
+      const params = [];
+      function addParam(value) {
+        params.push(value);
+        return `$${params.length}`;
+      }
+
+      const from = String(url.searchParams.get('from') || '').trim();
+      const to = String(url.searchParams.get('to') || '').trim();
+      const customer = String(url.searchParams.get('customer') || '').trim();
+      const driver = String(url.searchParams.get('driver') || '').trim();
+      const plate = String(url.searchParams.get('plate') || '').trim();
+
+      if (from) {
+        filters.push(`day >= ${addParam(from)}`);
+      }
+      if (to) {
+        filters.push(`day <= ${addParam(to)}`);
+      }
+      if (customer) {
+        filters.push(`customer_name ILIKE ${addParam(`%${customer}%`)}`);
+      }
+      if (driver) {
+        filters.push(`driver_1_name ILIKE ${addParam(`%${driver}%`)}`);
+      }
+      if (plate) {
+        filters.push(`plate ILIKE ${addParam(`%${plate}%`)}`);
+      }
+
+      const whereClause = filters.length ? ` WHERE ${filters.join(' AND ')}` : '';
+      const summaryResult = await postgresQuery(
+        `WITH filtered_master AS (
+          SELECT * FROM tms_master_data${whereClause}
+        ), master_summary AS (
+          SELECT
+            COUNT(*)::int AS total_jo,
+            COALESCE(COUNT(*) FILTER (WHERE temp_compliant = true)::float / NULLIF(COUNT(*), 0) * 100, 0) AS temp_compliance_rate,
+            COALESCE(AVG(total_duration_min) FILTER (WHERE status = 'completed'), 0) AS avg_duration_min,
+            COALESCE(AVG(actual_distance_km) FILTER (WHERE status = 'completed'), 0) AS avg_distance_km,
+            COALESCE(SUM(incident_count), 0)::int AS incident_count
+          FROM filtered_master
+        ), stop_summary AS (
+          SELECT
+            COALESCE(COUNT(*) FILTER (WHERE s.on_time = true)::float / NULLIF(COUNT(*), 0) * 100, 0) AS on_time_rate
+          FROM tms_master_data_stops s
+          INNER JOIN filtered_master m ON m.jo_id = s.jo_id
+          WHERE s.eta IS NOT NULL
+        )
+        SELECT
+          master_summary.total_jo,
+          stop_summary.on_time_rate,
+          master_summary.temp_compliance_rate,
+          master_summary.avg_duration_min,
+          master_summary.avg_distance_km,
+          master_summary.incident_count
+        FROM master_summary CROSS JOIN stop_summary`,
+        params,
+      );
+      const summaryRow = summaryResult.rows[0] || {};
+
+      sendJson(res, 200, {
+        ok: true,
+        summary: {
+          totalJo: Number(summaryRow.total_jo || 0),
+          onTimeRate: Number(summaryRow.on_time_rate || 0),
+          tempComplianceRate: Number(summaryRow.temp_compliance_rate || 0),
+          avgDurationMin: Number(summaryRow.avg_duration_min || 0),
+          avgDistanceKm: Number(summaryRow.avg_distance_km || 0),
+          incidentCount: Number(summaryRow.incident_count || 0),
+        },
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Master Data summary gagal diambil.');
+    }
+    return true;
+  }
+
   if (pathname === '/api/tms/board/add' && method === 'POST') {
     const session = await requireWebSession(req, res);
     if (!session) {

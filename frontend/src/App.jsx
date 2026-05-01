@@ -33,9 +33,10 @@ import { AstroReportPanel } from './components/AstroReportPanel.jsx';
 import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
 import { StopIdlePanel } from './components/StopIdlePanel.jsx';
+import { MasterDataPage } from './components/master-data/index.js';
 
 const ROUTE_PANEL_IDS = new Set([
-  'overview', 'fleet', 'trip-monitor', 'map', 'astro-report', 'temp-errors',
+  'overview', 'fleet', 'trip-monitor', 'master-data', 'map', 'astro-report', 'temp-errors',
   'stop', 'api-monitor', 'historical', 'pod', 'config', 'admin',
 ]);
 
@@ -3636,6 +3637,7 @@ export default function App() {
             pendingSubView={tripMonitorPendingSubView}
             clearPendingSubView={() => setTripMonitorPendingSubView(null)}
           /> : null}
+          {activePanel === 'master-data' ? <MasterDataPage /> : null}
           {activePanel === 'fleet' ? <FleetWorkspace
             rows={prioritizedFleet}
             selectedRow={selectedFleetRow}

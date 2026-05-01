@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   LayoutDashboard, Navigation, Truck, Map as MapIcon, BarChart3, Thermometer,
-  Flag, Activity, Settings, Shield, ChevronRight, ChevronLeft, Sun, MoonStar, LogOut, User
+  Flag, Activity, Settings, Shield, ChevronRight, ChevronLeft, Sun, MoonStar, LogOut, User, Database
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -11,6 +11,7 @@ const SECTIONS = [
       { id: 'overview', label: 'Overview', icon: LayoutDashboard },
       { id: 'fleet', label: 'Fleet', icon: Navigation },
       { id: 'trip-monitor', label: 'Trips', icon: Truck },
+      { id: 'master-data', label: 'Master Data', icon: Database },
       { id: 'map', label: 'Map', icon: MapIcon },
     ],
   },

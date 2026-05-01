@@ -17,3 +17,4 @@ export { MapPanel } from './MapPanel.jsx';
 export { TempErrorsPanel } from './TempErrorsPanel.jsx';
 export { StopIdlePanel } from './StopIdlePanel.jsx';
 export { TripMonitorOverrideBadge } from './trip-monitor/TripMonitorOverrideBadge.jsx';
+export { MasterDataPage } from './master-data/index.js';
