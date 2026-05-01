@@ -39,7 +39,7 @@ function today(offset = 0) {
   return `${lookup.year || ''}-${lookup.month || ''}-${lookup.day || ''}`;
 }
 
-export function MasterDataPage() {
+export function MasterDataPage({ onNavigateToDetail }) {
   const [filters, setFilters] = useState({
     from: today(-7),
     to: today(0),
@@ -130,7 +130,9 @@ export function MasterDataPage() {
   }
 
   function handleRowClick(row) {
-    console.log('Row clicked:', row.joId);
+    if (onNavigateToDetail) {
+      onNavigateToDetail(row.joId);
+    }
   }
 
   async function handleExportCSV() {

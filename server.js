@@ -11472,6 +11472,59 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/tms/master-data/detail' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const joId = String(url.searchParams.get('joId') || '').trim();
+      if (!joId) {
+        const error = new Error('joId parameter is required.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const joResult = await postgresQuery(
+        `SELECT
+           jo_id, day, customer_name, plate, driver_1_name, driver_2_name, origin_name, destination_name, stop_count,
+           trip_start_at, trip_end_at, total_duration_min, actual_distance_km, planned_distance_km, route_efficiency,
+           temp_min, temp_max, temp_avg, breach_count, breach_total_min, temp_compliant, incident_count, incident_codes,
+           total_idle_min, speed_violation_count, status, finalized_at, created_at, updated_at
+         FROM tms_master_data
+         WHERE jo_id = $1
+         LIMIT 1`,
+        [joId],
+      );
+
+      if (!joResult.rows || joResult.rows.length === 0) {
+        const error = new Error('JO not found.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const stopsResult = await postgresQuery(
+        `SELECT
+           jo_id, stop_idx, stop_type, stop_label, address_name, latitude, longitude,
+           geofence_arrival_at, geofence_departure_at, dwell_time_min, leg_temp_min, leg_temp_max,
+           leg_temp_avg, leg_breach_count, leg_distance_km, eta, ata_geofence, on_time
+         FROM tms_master_data_stops
+         WHERE jo_id = $1
+         ORDER BY stop_idx ASC`,
+        [joId],
+      );
+
+      send(res, 200, JSON.stringify({
+        ok: true,
+        jo: joResult.rows[0],
+        stops: stopsResult.rows || [],
+      }), 'application/json');
+    } catch (error) {
+      sendApiError(res, error, 'Master Data detail gagal diambil.');
+    }
+    return true;
+  }
+
   if (pathname === '/api/tms/master-data/export' && method === 'GET') {
     const session = await requireWebSession(req, res);
     if (!session) {

@@ -33,10 +33,10 @@ import { AstroReportPanel } from './components/AstroReportPanel.jsx';
 import { MapPanel } from './components/MapPanel.jsx';
 import { TempErrorsPanel } from './components/TempErrorsPanel.jsx';
 import { StopIdlePanel } from './components/StopIdlePanel.jsx';
-import { MasterDataPage } from './components/master-data/index.js';
+import { MasterDataPage, MasterDataDetailPage } from './components/master-data/index.js';
 
 const ROUTE_PANEL_IDS = new Set([
-  'overview', 'fleet', 'trip-monitor', 'master-data', 'map', 'astro-report', 'temp-errors',
+  'overview', 'fleet', 'trip-monitor', 'master-data', 'master-data-detail', 'map', 'astro-report', 'temp-errors',
   'stop', 'api-monitor', 'historical', 'pod', 'config', 'admin',
 ]);
 
@@ -973,6 +973,7 @@ export default function App() {
   const [tripMonitorPanels, setTripMonitorPanels] = useState([]);
   const [tripMonitorPendingSubView, setTripMonitorPendingSubView] = useState(null);
   const [tmsConfigSectionOpen, setTmsConfigSectionOpen] = useState(false);
+  const [masterDataDetailJoId, setMasterDataDetailJoId] = useState('');
   const astroLocationCardRef = useRef(null);
   const astroRouteCardRef = useRef(null);
   const busyTimeoutRef = useRef(null);
@@ -3637,7 +3638,17 @@ export default function App() {
             pendingSubView={tripMonitorPendingSubView}
             clearPendingSubView={() => setTripMonitorPendingSubView(null)}
           /> : null}
-          {activePanel === 'master-data' ? <MasterDataPage /> : null}
+          {activePanel === 'master-data' ? <MasterDataPage onNavigateToDetail={(joId) => {
+            setMasterDataDetailJoId(joId);
+            setActivePanel('master-data-detail');
+          }} /> : null}
+          {activePanel === 'master-data-detail' ? <MasterDataDetailPage
+            joId={masterDataDetailJoId}
+            onBack={() => {
+              setMasterDataDetailJoId('');
+              setActivePanel('master-data');
+            }}
+          /> : null}
           {activePanel === 'fleet' ? <FleetWorkspace
             rows={prioritizedFleet}
             selectedRow={selectedFleetRow}
