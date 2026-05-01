@@ -10630,6 +10630,31 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/tms/address-cache-stats' && method === 'GET') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    try {
+      const result = await postgresQuery(`
+        select status, count(*) as cnt,
+               count(*) filter (where latitude is not null and longitude is not null) as with_coords
+        from tms_address_cache
+        group by status
+      `);
+      const sample = await postgresQuery(`
+        select address_name, latitude, longitude, status, fetched_at
+        from tms_address_cache
+        order by last_seen_at desc
+        limit 30
+      `);
+      sendJson(res, 200, { ok: true, stats: result.rows, sample: sample.rows });
+    } catch (error) {
+      sendApiError(res, error, 'Address cache stats gagal.');
+    }
+    return true;
+  }
+
   if (pathname === '/api/tms/config' && method === 'GET') {
     const session = await requireAdminSession(req, res);
     if (!session) {
