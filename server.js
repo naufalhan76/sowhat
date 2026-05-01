@@ -4259,9 +4259,17 @@ function buildResolvedTmsStops(taskList, orderList, addressLookup) {
     const taskAddress = String(task?.task_address || (taskType === 'load' ? fallbackOrder?.load_location : fallbackOrder?.unload_location) || '').trim();
     const directLatitude = toNumber(task?.latitude);
     const directLongitude = toNumber(task?.longitude);
-    const latitude = directLatitude;
-    const longitude = directLongitude;
-    const coordinateSource = latitude !== null && longitude !== null ? 'task_list' : 'unresolved';
+    let latitude = directLatitude;
+    let longitude = directLongitude;
+    let coordinateSource = latitude !== null && longitude !== null ? 'task_list' : 'unresolved';
+    if (coordinateSource === 'unresolved' && addressLookup && addressLookup.size > 0) {
+      const resolved = resolveTmsAddressEntry(addressLookup, taskAddress);
+      if (resolved && resolved.latitude !== null && resolved.longitude !== null) {
+        latitude = resolved.latitude;
+        longitude = resolved.longitude;
+        coordinateSource = 'address_cache';
+      }
+    }
     const stopLabel = taskType === 'load' ? 'LOAD' : `U${unloadCounter + 1}`;
     const stopName = taskType === 'load' ? 'Load' : `Unload ${unloadCounter + 1}`;
     const stop = {

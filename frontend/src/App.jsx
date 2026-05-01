@@ -592,9 +592,12 @@ const sanitizeTripMonitorStops = (stops = []) => {
   const next = [];
   const offsets = new Map();
   stops.forEach((stop, index) => {
-    const latitude = Number(stop?.latitude);
-    const longitude = Number(stop?.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    if (stop?.latitude == null || stop?.longitude == null) {
+      return;
+    }
+    const latitude = Number(stop.latitude);
+    const longitude = Number(stop.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || (latitude === 0 && longitude === 0)) {
       return;
     }
     const key = `${latitude.toFixed(6)}:${longitude.toFixed(6)}`;
