@@ -4259,16 +4259,22 @@ function buildResolvedTmsStops(taskList, orderList, addressLookup) {
     const taskAddress = String(task?.task_address || (taskType === 'load' ? fallbackOrder?.load_location : fallbackOrder?.unload_location) || '').trim();
     const directLatitude = toNumber(task?.latitude);
     const directLongitude = toNumber(task?.longitude);
-    let latitude = directLatitude;
-    let longitude = directLongitude;
-    let coordinateSource = latitude !== null && longitude !== null ? 'task_list' : 'unresolved';
-    if (coordinateSource === 'unresolved' && addressLookup && addressLookup.size > 0) {
+    let latitude = null;
+    let longitude = null;
+    let coordinateSource = 'unresolved';
+    // Prefer address_cache (static Address doctype coords) over task_list (driver GPS swipe position)
+    if (addressLookup && addressLookup.size > 0) {
       const resolved = resolveTmsAddressEntry(addressLookup, taskAddress);
       if (resolved && resolved.latitude !== null && resolved.longitude !== null) {
         latitude = resolved.latitude;
         longitude = resolved.longitude;
         coordinateSource = 'address_cache';
       }
+    }
+    if (coordinateSource === 'unresolved' && directLatitude !== null && directLongitude !== null) {
+      latitude = directLatitude;
+      longitude = directLongitude;
+      coordinateSource = 'task_list';
     }
     const stopLabel = taskType === 'load' ? 'LOAD' : `U${unloadCounter + 1}`;
     const stopName = taskType === 'load' ? 'Load' : `Unload ${unloadCounter + 1}`;
@@ -10630,30 +10636,6 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  if (pathname === '/api/tms/address-cache-stats' && method === 'GET') {
-    const session = await requireWebSession(req, res);
-    if (!session) {
-      return true;
-    }
-    try {
-      const result = await postgresQuery(`
-        select status, count(*) as cnt,
-               count(*) filter (where latitude is not null and longitude is not null) as with_coords
-        from tms_address_cache
-        group by status
-      `);
-      const sample = await postgresQuery(`
-        select address_name, latitude, longitude, status, fetched_at
-        from tms_address_cache
-        order by last_seen_at desc
-        limit 30
-      `);
-      sendJson(res, 200, { ok: true, stats: result.rows, sample: sample.rows });
-    } catch (error) {
-      sendApiError(res, error, 'Address cache stats gagal.');
-    }
-    return true;
-  }
 
   if (pathname === '/api/tms/config' && method === 'GET') {
     const session = await requireAdminSession(req, res);
