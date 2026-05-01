@@ -30,6 +30,7 @@ export function TripMonitorPanel({
   tmsForm,
   range,
   onRefreshBoard,
+  onRefresh,
   onSyncTms,
   onOpenDetail,
   isAdmin,
@@ -44,6 +45,10 @@ export function TripMonitorPanel({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [subView, setSubView] = useState({ type: 'board', context: null });
   const [statusFilter, setStatusFilter] = useState('all');
+  const [addJoOpen, setAddJoOpen] = useState(false);
+  const [addJoValue, setAddJoValue] = useState('');
+  const [addJoLoading, setAddJoLoading] = useState(false);
+  const [addJoError, setAddJoError] = useState('');
   const filters = tripMonitorFilters || {};
   const summary = tripMonitorSummary || {};
   const visibleRows = tripMonitorVisibleRows || [];
@@ -86,6 +91,66 @@ export function TripMonitorPanel({
     setSubView({ type: 'board', context: null });
   };
 
+  const handleOpenAddJo = () => {
+    setAddJoError('');
+    setAddJoOpen(true);
+  };
+
+  const handleCloseAddJo = () => {
+    if (addJoLoading) return;
+    setAddJoOpen(false);
+    setAddJoValue('');
+    setAddJoError('');
+  };
+
+  const handleSubmitAddJo = async (event) => {
+    event.preventDefault();
+    const joId = addJoValue.trim();
+
+    if (!joId) {
+      setAddJoError('JO number wajib diisi');
+      return;
+    }
+
+    setAddJoLoading(true);
+    setAddJoError('');
+
+    try {
+      const response = await fetch('/api/tms/board/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+          Referer: window.location.href,
+        },
+        body: JSON.stringify({ joId }),
+      });
+
+      if (response.ok) {
+        setAddJoOpen(false);
+        setAddJoValue('');
+        setAddJoError('');
+        onRefreshBoard?.();
+        onRefresh?.();
+        return;
+      }
+
+      if (response.status === 409) {
+        setAddJoError('JO sudah ada di board');
+      } else if (response.status === 404) {
+        setAddJoError('JO tidak ditemukan di TMS');
+      } else if (response.status === 422) {
+        setAddJoError('Unit tidak terdaftar di Solofleet');
+      } else {
+        setAddJoError('Gagal menambahkan JO');
+      }
+    } catch (error) {
+      setAddJoError('Gagal menambahkan JO');
+    } finally {
+      setAddJoLoading(false);
+    }
+  };
+
   const totalCount = severityCounts.total || 0;
   const criticalCount = severityCounts.bySeverity?.critical || 0;
   const warningCount = severityCounts.bySeverity?.warning || 0;
@@ -111,6 +176,13 @@ export function TripMonitorPanel({
           </p>
         </div>
         <div className="tm-page-hero-actions">
+          <button
+            type="button"
+            className="sf-btn sf-btn-bordered tm-add-jo-btn"
+            onClick={handleOpenAddJo}
+          >
+            + Add JO
+          </button>
           <button
             type="button"
             className="sf-btn sf-btn-bordered tm-refresh-btn"
@@ -233,6 +305,94 @@ export function TripMonitorPanel({
 
           <div className="tm-filter-context">
             TMS window: {summary.windowStart || '-'} to {summary.windowEnd || '-'} · Topbar range: {range?.startDate || '-'} to {range?.endDate || '-'} · Last sync: {lastSyncLabel} · Rows: {visibleRows.length}
+          </div>
+        </div>
+      ) : null}
+
+      {addJoOpen ? (
+        <div
+          className="tm-add-jo-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 80,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={handleCloseAddJo}
+          role="presentation"
+        >
+          <div
+            className="tm-add-jo-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tm-add-jo-title"
+            style={{
+              width: 'min(100%, 360px)',
+              background: 'var(--tm-panel-bg, #fff)',
+              border: '1px solid var(--tm-border, rgba(148, 163, 184, 0.25))',
+              borderRadius: '14px',
+              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.2)',
+              padding: '16px',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <form onSubmit={handleSubmitAddJo} className="tm-add-jo-form">
+              <div className="tm-add-jo-header" style={{ marginBottom: '12px' }}>
+                <div id="tm-add-jo-title" className="tm-add-jo-title" style={{ fontWeight: 700 }}>
+                  Add Job Order
+                </div>
+                <div className="tm-add-jo-subtitle" style={{ fontSize: '12px', opacity: 0.75 }}>
+                  Tambah JO manual ke board TMS
+                </div>
+              </div>
+
+              <label className="tm-add-jo-field" style={{ display: 'grid', gap: '6px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>JO Number</span>
+                <input
+                  type="text"
+                  value={addJoValue}
+                  onChange={(event) => setAddJoValue(event.target.value)}
+                  placeholder="JO-XXXXX"
+                  autoFocus
+                  className="tm-add-jo-input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148, 163, 184, 0.35)',
+                    background: 'transparent',
+                  }}
+                />
+              </label>
+
+              {addJoError ? (
+                <div className="tm-add-jo-error" style={{ marginTop: '10px', color: '#dc2626', fontSize: '12px' }}>
+                  {addJoError}
+                </div>
+              ) : null}
+
+              <div className="tm-add-jo-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  className="sf-btn sf-btn-bordered tm-add-jo-cancel"
+                  onClick={handleCloseAddJo}
+                  disabled={addJoLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="sf-btn sf-btn-primary tm-add-jo-submit"
+                  disabled={addJoLoading}
+                >
+                  {addJoLoading ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

@@ -5488,6 +5488,7 @@ function mapTmsMonitorRowForStorage(row) {
     incident_codes: row.incidentCodes,
     incident_summary: row.incidentSummary,
     unmatched_reason: row.unmatchedReason,
+    source: String(row.source || 'auto').trim() || 'auto',
     metadata: row.metadata || {},
     updated_at: new Date().toISOString(),
   };
@@ -5527,6 +5528,7 @@ function parseTmsMonitorStoredRow(row) {
     incidentCodes: Array.isArray(row.incident_codes) ? row.incident_codes : [],
     incidentSummary: String(row.incident_summary || ''),
     unmatchedReason: String(row.unmatched_reason || ''),
+    source: String(row.source || 'auto'),
     metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
   };
 }
@@ -5538,7 +5540,7 @@ async function upsertTmsMonitorRows(rows) {
   return postgresUpsertRows(
     'tms_monitor_rows',
     rows.map(mapTmsMonitorRowForStorage),
-    ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'metadata', 'updated_at'],
+    ['row_id', 'day', 'tenant_label', 'customer_name', 'unit_key', 'unit_id', 'unit_label', 'normalized_plate', 'severity', 'board_status', 'job_order_id', 'job_order_count', 'origin_name', 'destination_name', 'temp_min', 'temp_max', 'eta_origin', 'eta_destination', 'driver_app_status', 'incident_codes', 'incident_summary', 'unmatched_reason', 'source', 'metadata', 'updated_at'],
     ['row_id'],
     { touchUpdatedAt: false },
   );
@@ -6457,7 +6459,7 @@ async function listTmsMonitorRows(searchParams) {
   const fleetIndex = buildFleetPlateIndex(now);
   const tmsRuntime = getTmsConfig();
   const params = [window.startDay, window.endDay];
-  let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata, updated_at from tms_monitor_rows where day >= $1 and day <= $2`;
+  let query = `select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, source, metadata, updated_at from tms_monitor_rows where day >= $1 and day <= $2`;
   const customer = String(searchParams.get('customer') || '').trim();
   if (customer) {
     params.push(customer);
@@ -6499,6 +6501,7 @@ async function listTmsMonitorRows(searchParams) {
       incidentCodes: Array.isArray(row.incident_codes) ? row.incident_codes : [],
       incidentSummary: String(row.incident_summary || ''),
       unmatchedReason: String(row.unmatched_reason || ''),
+      source: String(row.source || 'auto'),
       metadata: row.metadata && typeof row.metadata === 'object' ? row.metadata : {},
     }, fleetIndex, tmsRuntime, now, overrideMap);
   });
@@ -11050,6 +11053,89 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (pathname === '/api/tms/board/add' && method === 'POST') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const joId = typeof body?.joId === 'string' ? body.joId.trim() : '';
+      if (!joId) {
+        const error = new Error('joId wajib diisi.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const duplicateResult = await postgresQuery(
+        'select row_id from tms_monitor_rows where job_order_id = $1 limit 1',
+        [joId],
+      );
+      if (duplicateResult.rows.length) {
+        const error = new Error('Job Order sudah ada di Trip Monitor board.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      let doc = null;
+      try {
+        doc = await fetchTmsJobOrderDoc(joId);
+      } catch (fetchError) {
+        const error = new Error(`Job Order ${joId} tidak ditemukan di TMS.`);
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const tmsConfig = getTmsConfig();
+      const addressNames = collectTmsAddressNamesFromDoc(doc);
+      const resolvedAddresses = await resolveTmsAddressEntries(addressNames, tmsConfig.tenantLabel);
+      const snapshot = buildTmsJobSnapshotFromDoc(doc, tmsConfig.tenantLabel, resolvedAddresses.byKey);
+
+      const overridesResult = await postgresQuery(
+        'SELECT * FROM tms_jo_overrides WHERE job_order_id = $1',
+        [snapshot.jobOrderId],
+      );
+      const overrideRow = overridesResult.rows[0] || null;
+      const overrideMap = new Map();
+      if (overrideRow) {
+        overrideMap.set(snapshot.jobOrderId, overrideRow);
+        applyJoOverrides(snapshot, overrideRow);
+      }
+
+      const now = Date.now();
+      const fleetIndex = buildFleetPlateIndex(now);
+      const fleetContext = (snapshot.plateCandidates || []).map(function (candidate) {
+        return fleetIndex.byPlate.get(candidate);
+      }).find(Boolean) || (snapshot.normalizedPlate ? fleetIndex.byPlate.get(snapshot.normalizedPlate) : null);
+      if (!fleetContext?.row) {
+        const error = new Error('Nopol TMS tidak cocok dengan unit Solofleet yang terkonfigurasi.');
+        error.statusCode = 422;
+        throw error;
+      }
+
+      const rows = buildTmsMonitorRows([snapshot], fleetIndex, tmsConfig, now, overrideMap);
+      const row = rows[0] || null;
+      if (!row) {
+        const error = new Error('Job Order tidak menghasilkan row Trip Monitor.');
+        error.statusCode = 422;
+        throw error;
+      }
+      row.source = 'manual';
+      await upsertTmsMonitorRows([row]);
+      console.log(`[TMS] Manual board add by ${session.username || session.user?.username || session.id || 'unknown-user'} | JO ${joId} | row ${row.rowId}`);
+      sendJson(res, 200, {
+        ok: true,
+        rowId: row.rowId,
+      });
+    } catch (error) {
+      sendApiError(res, error, 'Trip Monitor manual add gagal diproses.', error.statusCode || 500);
+    }
+    return true;
+  }
+
   if (pathname === '/api/tms/board' && method === 'GET') {
     const session = await requireWebSession(req, res);
     if (!session) {
@@ -11109,7 +11195,7 @@ async function handleApi(req, res, url) {
       if (!rowId) {
         throw new Error('rowId wajib diisi.');
       }
-      const result = await postgresQuery('select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
+      const result = await postgresQuery('select row_id, day::text as day, tenant_label, customer_name, unit_key, unit_id, unit_label, normalized_plate, severity, board_status, job_order_id, job_order_count, origin_name, destination_name, temp_min, temp_max, eta_origin, eta_destination, driver_app_status, incident_codes, incident_summary, unmatched_reason, source, metadata from tms_monitor_rows where row_id = $1 limit 1', [rowId]);
       const storedRow = result.rows[0];
       if (!storedRow) {
         console.warn(`[TMS] Detail miss for row ${rowId}`);
@@ -11139,6 +11225,7 @@ async function handleApi(req, res, url) {
         incidentCodes: Array.isArray(storedRow.incident_codes) ? storedRow.incident_codes : [],
         incidentSummary: String(storedRow.incident_summary || ''),
         unmatchedReason: String(storedRow.unmatched_reason || ''),
+        source: String(storedRow.source || 'auto'),
         metadata: storedRow.metadata && typeof storedRow.metadata === 'object' ? storedRow.metadata : {},
       };
       const jobOrderIds = (Array.isArray(row.metadata?.jobOrders) ? row.metadata.jobOrders : [])
