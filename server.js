@@ -6074,7 +6074,7 @@ async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
     return { snapshotsSaved: 0, rowsSaved: 0 };
   }
   await postgresQuery('delete from tms_job_order_snapshots where day >= $1 and day <= $2', [window.startDay, window.endDay]);
-  await postgresQuery('delete from tms_monitor_rows where day >= $1 and day <= $2', [window.startDay, window.endDay]);
+  await postgresQuery('delete from tms_monitor_rows where day >= $1 and day <= $2 and (source is null or source != \'manual\')', [window.startDay, window.endDay]);
 
   let snapshotsSaved = 0;
   let rowsSaved = 0;
@@ -7190,6 +7190,79 @@ async function ensurePostgresSchema() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists tms_master_data (
+      jo_id text primary key,
+      day text not null,
+      tenant_label text not null default '',
+      customer_name text not null default '',
+      plate text not null default '',
+      normalized_plate text not null default '',
+      driver_1_name text not null default '',
+      driver_2_name text not null default '',
+      origin_name text not null default '',
+      destination_name text not null default '',
+      stop_count integer not null default 0,
+      trip_start_at bigint,
+      trip_end_at bigint,
+      total_duration_min real,
+      actual_distance_km real,
+      planned_distance_km real,
+      route_efficiency real,
+      temp_min real,
+      temp_max real,
+      temp_avg real,
+      breach_count integer not null default 0,
+      breach_total_min real not null default 0,
+      temp_compliant boolean not null default true,
+      incident_count integer not null default 0,
+      incident_codes text[] not null default '{}',
+      total_idle_min real not null default 0,
+      speed_violation_count integer not null default 0,
+      status text not null default 'in_progress',
+      finalized_at bigint,
+      expires_at bigint,
+      warning_shown boolean not null default false,
+      metadata jsonb not null default '{}',
+      created_at bigint not null,
+      updated_at bigint not null
+    );
+
+    create table if not exists tms_master_data_stops (
+      id serial primary key,
+      jo_id text not null references tms_master_data(jo_id) on delete cascade,
+      stop_idx integer not null,
+      stop_type text not null default 'unload',
+      stop_label text not null default '',
+      address_name text not null default '',
+      latitude real,
+      longitude real,
+      geofence_arrival_at bigint,
+      geofence_departure_at bigint,
+      dwell_time_min real,
+      leg_temp_min real,
+      leg_temp_max real,
+      leg_temp_avg real,
+      leg_breach_count integer not null default 0,
+      leg_distance_km real,
+      eta bigint,
+      ata_geofence bigint,
+      on_time boolean,
+      metadata jsonb not null default '{}',
+      created_at bigint not null,
+      updated_at bigint not null
+    );
+
+    create table if not exists tms_master_data_gps_points (
+      id bigserial primary key,
+      jo_id text not null references tms_master_data(jo_id) on delete cascade,
+      timestamp_ms bigint not null,
+      latitude real not null,
+      longitude real not null,
+      speed real,
+      temperature real,
+      created_at bigint not null
+    );
+
     create table if not exists tms_monitor_incidents (
       id text primary key,
       tenant_label text,
@@ -7292,11 +7365,22 @@ async function ensurePostgresSchema() {
     alter table tms_jo_overrides
       add column if not exists shipping_status_override jsonb;
 
+    alter table tms_monitor_rows
+      add column if not exists source text not null default 'auto';
+
     create index if not exists idx_tms_job_order_snapshots_day on tms_job_order_snapshots(day desc);
     create index if not exists idx_tms_job_order_snapshots_plate on tms_job_order_snapshots(normalized_plate);
     create index if not exists idx_tms_monitor_rows_day on tms_monitor_rows(day desc);
     create index if not exists idx_tms_monitor_rows_severity on tms_monitor_rows(severity);
     create index if not exists idx_tms_monitor_rows_customer on tms_monitor_rows(customer_name);
+    create index if not exists idx_master_data_day on tms_master_data(day);
+    create index if not exists idx_master_data_status on tms_master_data(status);
+    create index if not exists idx_master_data_customer on tms_master_data(customer_name);
+    create index if not exists idx_master_data_expires on tms_master_data(expires_at);
+    create index if not exists idx_master_stops_jo on tms_master_data_stops(jo_id);
+    create index if not exists idx_master_stops_address on tms_master_data_stops(address_name);
+    create index if not exists idx_master_gps_jo on tms_master_data_gps_points(jo_id);
+    create index if not exists idx_master_gps_ts on tms_master_data_gps_points(jo_id, timestamp_ms);
     create index if not exists idx_tms_monitor_incidents_job on tms_monitor_incidents(job_order_id);
     create index if not exists idx_tms_monitor_incidents_status on tms_monitor_incidents(event_status);
     create index if not exists idx_tms_monitor_incidents_unit on tms_monitor_incidents(unit_key, normalized_plate);
