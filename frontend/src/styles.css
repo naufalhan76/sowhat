@@ -12964,7 +12964,7 @@ body.fleet-workspace-resizing * {
 }
 .astro-filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -12979,7 +12979,26 @@ body.fleet-workspace-resizing * {
   color: var(--text-muted);
 }
 .astro-filter-field input,
-.astro-filter-field select { height: 34px; font-size: 12.5px; }
+.astro-filter-field select { 
+  height: 40px; 
+  font-size: 13px; 
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  border-radius: 6px;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+.astro-filter-field input:hover,
+.astro-filter-field select:hover {
+  border-color: var(--button-border-strong);
+}
+.astro-filter-field input:focus,
+.astro-filter-field select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+  outline: none;
+}
 
 .astro-warnings {
   display: grid;
@@ -13004,7 +13023,7 @@ body.fleet-workspace-resizing * {
 
 @media (max-width: 960px) {
   .astro-page-hero { flex-direction: column; gap: 10px; }
-  .astro-filter-grid { grid-template-columns: 1fr 1fr; }
+  .astro-filter-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 600px) {
   .astro-metrics-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }

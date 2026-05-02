@@ -18,6 +18,7 @@ export function AstroReportPanel({
   astroRoutes,
   astroLocations,
   astroReportAccountOptions,
+  astroReportWhOptions,
   astroReportVisibleRouteOptions,
   astroReportColumns,
   astroReportTableRows,
@@ -127,7 +128,8 @@ export function AstroReportPanel({
               <span>End date</span>
               <input type="date" value={astroReportFilters.endDate} onChange={(event) => setAstroReportFilters((current) => ({ ...current, endDate: event.target.value }))} />
             </label>
-            <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', routeId: '' }))} placeholder="Search account..." />
+            <SearchableSelect label="Account" value={astroReportFilters.accountId} options={astroReportAccountOptions} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, accountId: nextValue || 'all', whLocationId: '', routeId: '' }))} placeholder="Search account..." />
+            <SearchableSelect label="Warehouse" value={astroReportFilters.whLocationId} options={astroReportWhOptions || []} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, whLocationId: nextValue || '', routeId: '' }))} placeholder="Search warehouse..." />
             <SearchableSelect label="Nopol route" value={astroReportFilters.routeId} options={[{ value: '', label: 'All configured routes', preview: 'Show all active configured routes for the selected account.' }, ...astroReportVisibleRouteOptions]} onChange={(nextValue) => setAstroReportFilters((current) => ({ ...current, routeId: nextValue || '' }))} placeholder="Search route..." />
           </div>
         </div>

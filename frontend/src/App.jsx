@@ -952,7 +952,7 @@ export default function App() {
   const [selectedUnitCategoryIds, setSelectedUnitCategoryIds] = useState([]);
   const [unitCategoryBulkValue, setUnitCategoryBulkValue] = useState('uncategorized');
   const [unitCategoryCsvText, setUnitCategoryCsvText] = useState('');
-  const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', routeId: '' });
+  const [astroReportFilters, setAstroReportFilters] = useState({ startDate: today(-1), endDate: today(0), accountId: 'all', whLocationId: '', routeId: '' });
   const [astroReportMode, setAstroReportMode] = useState('plain');
   const [astroReport, setAstroReport] = useState(null);
   const [astroDiagnosticsOpen, setAstroDiagnosticsOpen] = useState(false);
@@ -1122,7 +1122,19 @@ export default function App() {
       preview: `${routePreview}\nStatus: ${statusLabel}${route.rit1Start && route.rit1End ? `\nRit 1: ${route.rit1Start} to ${route.rit1End}` : ''}${route.rit2Enabled && route.rit2Start && route.rit2End ? `\nRit 2: ${route.rit2Start} to ${route.rit2End}` : ''}`,
     };
   }).sort((left, right) => left.label.localeCompare(right.label)), [astroRoutes, availableAccounts, astroUnitLabelByKey, astroLocations]);
-  const astroReportVisibleRouteOptions = useMemo(() => astroReportUnitOptions.filter((option) => option.isActive && (astroReportFilters.accountId === 'all' || option.accountId === astroReportFilters.accountId)), [astroReportUnitOptions, astroReportFilters.accountId]);
+  const astroReportWhOptions = useMemo(() => {
+    const whMap = new Map();
+    astroRoutes.forEach((route) => {
+      const whId = route.whLocationId;
+      const whName = astroLocations.find((loc) => loc.id === whId)?.name || '';
+      if (whId && whName && !whMap.has(whId)) {
+        whMap.set(whId, { value: whId, label: whName });
+      }
+    });
+    return [{ value: '', label: 'All warehouses' }, ...Array.from(whMap.values()).sort((a, b) => a.label.localeCompare(b.label))];
+  }, [astroRoutes, astroLocations]);
+
+  const astroReportVisibleRouteOptions = useMemo(() => astroReportUnitOptions.filter((option) => option.isActive && (astroReportFilters.accountId === 'all' || option.accountId === astroReportFilters.accountId) && (!astroReportFilters.whLocationId || option.whLocationId === astroReportFilters.whLocationId)), [astroReportUnitOptions, astroReportFilters.accountId, astroReportFilters.whLocationId]);
   useEffect(() => {
     if (!astroReportFilters.routeId) return;
     const selectedOption = astroReportUnitOptions.find((option) => option.value === astroReportFilters.routeId);
@@ -3811,6 +3823,7 @@ export default function App() {
             astroRoutes={astroRoutes}
             astroLocations={astroLocations}
             astroReportAccountOptions={astroReportAccountOptions}
+            astroReportWhOptions={astroReportWhOptions}
             astroReportVisibleRouteOptions={astroReportVisibleRouteOptions}
             astroReportColumns={astroReportColumns}
             astroReportTableRows={astroReportTableRows}
