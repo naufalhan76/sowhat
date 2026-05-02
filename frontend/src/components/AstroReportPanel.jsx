@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BarChart3, Download, AlertTriangle, RefreshCw, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
-import { Surface, SurfaceHeader, SurfaceBody, Action, Pill } from './index.js';
+import { Surface, SurfaceHeader, SurfaceBody, Action, Pill, ModalPortal } from './index.js';
 
 const Card = React.forwardRef(({ children, className = '', ...props }, ref) => (
   <Surface ref={ref} className={`sf-card-compat ${className}`.trim()} {...props}>{children}</Surface>
@@ -167,30 +167,32 @@ export function AstroReportPanel({
 
       {/* Diagnostics modal */}
       {astroDiagnosticsOpen ? (
-        <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}>
-          <Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}>
-            <CardHeader className="panel-card-header">
-              <div>
-                <p className="eyebrow local-eyebrow">Astro Diagnostics</p>
-                <h2>Tanggal yang tidak complete</h2>
-                <p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p>
-              </div>
-              <div className="inline-buttons">
-                <button type="button" className="sf-btn sf-btn-bordered" onClick={() => setAstroDiagnosticsOpen(false)}>
-                  <X size={14} /> Close
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
-                columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']}
-                rows={astroDiagnosticRows}
-                emptyMessage="Belum ada tanggal error untuk report ini."
-              />
-            </CardContent>
-          </Card>
-        </div>
+        <ModalPortal>
+          <div className="auth-modal-backdrop" onClick={() => setAstroDiagnosticsOpen(false)}>
+            <Card className="auth-modal-card diagnostic-modal-card" onClick={(event) => event.stopPropagation()}>
+              <CardHeader className="panel-card-header">
+                <div>
+                  <p className="eyebrow local-eyebrow">Astro Diagnostics</p>
+                  <h2>Tanggal yang tidak complete</h2>
+                  <p>Lihat tanggal yang gagal dan requirement yang belum terpenuhi.</p>
+                </div>
+                <div className="inline-buttons">
+                  <button type="button" className="sf-btn sf-btn-bordered" onClick={() => setAstroDiagnosticsOpen(false)}>
+                    <X size={14} /> Close
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  pagination={{ initialRowsPerPage: 10, rowsPerPageOptions: [10, 20, 50] }}
+                  columns={['Service date', 'Rit', 'Nopol', 'Status', 'Requirement not met']}
+                  rows={astroDiagnosticRows}
+                  emptyMessage="Belum ada tanggal error untuk report ini."
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </ModalPortal>
       ) : null}
     </section>
   );

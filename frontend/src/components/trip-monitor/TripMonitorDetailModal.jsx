@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, Clock3, Route, Truck, X, FileText, AlertTriangle, FileEdit } from 'lucide-react';
-import { Surface, SurfaceHeader, SurfaceBody, Action, Pill } from '../index.js';
+import { Surface, SurfaceHeader, SurfaceBody, Action, Pill, ModalPortal } from '../index.js';
 import {
   tmsSeverityLabel, tmsSeverityTone, tmsIncidentLabel,
   dedupeTripMonitorIncidentCodes, normalizeTemperatureRange,
@@ -471,34 +471,36 @@ export function TripMonitorDetailModal({
   if (mode === 'floating') return <>{body}{selesaiOverlay}</>;
 
   return (
-    <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
-      <div className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
-        <TripMonitorDetailHeader
-          detail={detail}
-          headlineJob={headlineJob}
-          shippingStatus={shippingStatus}
-          eta={detail.eta}
-          overrideActive={detail.overrideActive}
-          isStale={detail.isStale}
-          refreshing={detail.refreshing}
-          onClose={onClose}
-          onRefresh={detail.onRefresh}
-          onForceClose={detail.onForceClose}
-          onOverrideBadge={detail.onOverrideBadge}
-          onWaDriver={detail.onWaDriver}
-          onShippingStatusOverride={detail.onShippingStatusOverride}
-          displayUnitLabel={displayUnitLabel}
-          driver1Name={driver1Name}
-          driver2Name={driver2Name}
-          routeSummary={routeSummary}
-          severityKey={severityKey}
-          customerName={detail.customerName}
-          tmsSeverityLabel={tmsSeverityLabel}
-        />
-        {body}
+    <ModalPortal>
+      <div className="tm-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Trip detail drawer">
+        <div className={`tm-drawer-panel trip-monitor-detail-modal tm-drawer-cardstack severity-${severityKey}`} onClick={(event) => event.stopPropagation()}>
+          <TripMonitorDetailHeader
+            detail={detail}
+            headlineJob={headlineJob}
+            shippingStatus={shippingStatus}
+            eta={detail.eta}
+            overrideActive={detail.overrideActive}
+            isStale={detail.isStale}
+            refreshing={detail.refreshing}
+            onClose={onClose}
+            onRefresh={detail.onRefresh}
+            onForceClose={detail.onForceClose}
+            onOverrideBadge={detail.onOverrideBadge}
+            onWaDriver={detail.onWaDriver}
+            onShippingStatusOverride={detail.onShippingStatusOverride}
+            displayUnitLabel={displayUnitLabel}
+            driver1Name={driver1Name}
+            driver2Name={driver2Name}
+            routeSummary={routeSummary}
+            severityKey={severityKey}
+            customerName={detail.customerName}
+            tmsSeverityLabel={tmsSeverityLabel}
+          />
+          {body}
+        </div>
+        {selesaiOverlay}
       </div>
-      {selesaiOverlay}
-    </div>
+    </ModalPortal>
   );
 }
 

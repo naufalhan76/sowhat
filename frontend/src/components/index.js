@@ -1,3 +1,10 @@
+import { createPortal } from 'react-dom';
+
+export const ModalPortal = ({ children }) => {
+  if (typeof document === 'undefined') return children;
+  return createPortal(children, document.body);
+};
+
 export { Surface, SurfaceHeader, SurfaceBody, SurfaceFooter } from './Surface.jsx';
 export { Action, ActionGroup } from './Action.jsx';
 export { Pill, PillGroup } from './Pill.jsx';
