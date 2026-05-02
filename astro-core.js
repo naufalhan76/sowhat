@@ -1081,8 +1081,9 @@ function buildRouteReportRows(route, locations, records) {
   return rows;
 }
 
-function buildAstroColumns(rows) {
-  const maxPods = Math.max(0, ...((rows || []).map((row) => Math.max((row.pods || []).length, Number(row.expectedPodCount || 0)))));
+function buildAstroColumns(rows, options = {}) {
+  const globalMaxPods = Number(options.globalMaxPods || 0);
+  const maxPods = Math.max(0, globalMaxPods, ...((rows || []).map((row) => Math.max((row.pods || []).length, Number(row.expectedPodCount || 0)))));
   const columns = [
     { key: 'serviceDate', label: 'Service date' },
     { key: 'rit', label: 'Rit' },

@@ -9524,7 +9524,10 @@ async function buildAstroReportPayload(searchParams) {
       || String(left.rit || '').localeCompare(String(right.rit || ''));
   });
 
-  const columnMeta = astroCore.buildAstroColumns(rows);
+  const globalMaxPods = Math.max(0, ...activeRoutes.map(function (route) {
+    return (route.podSequence || []).length;
+  }));
+  const columnMeta = astroCore.buildAstroColumns(rows, { globalMaxPods });
   const kpiSummary = buildAstroKpiSummary(rows);
   const flatRows = rows.map(function (row) {
     return astroCore.flattenAstroRow(row, { maxPods: columnMeta.maxPods });
