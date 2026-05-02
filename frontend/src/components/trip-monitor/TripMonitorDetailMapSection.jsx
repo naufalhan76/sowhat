@@ -318,8 +318,8 @@ export default function TripMonitorDetailMapSection({
               <span>Temp Range</span>
               {editMode && (
                 <div className="tm-inline-edit-actions">
-                  <button type="button" className="tm-inline-action-btn save-btn" onClick={handleSaveTempRange} disabled={isSaving} title="Save">
-                    <Check size={14} />
+                  <button type="button" className="tm-inline-action-btn save-btn" onClick={handleSaveTempRange} disabled={isSaving} title="Save" style={{ backgroundColor: 'var(--brand-primary, #06b6d4)', color: 'white', padding: '2px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
+                    <Check size={14} /> Save
                   </button>
                   <button type="button" className="tm-inline-action-btn cancel-btn" onClick={() => { setEditMode(false); setMinValue(defaultMin); setMaxValue(defaultMax); }} disabled={isSaving} title="Cancel">
                     <X size={14} />
@@ -335,9 +335,9 @@ export default function TripMonitorDetailMapSection({
             <div className="tm-schedule-value" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
               {editMode ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <input type="number" className="tm-temp-input" value={minValue} onChange={e => setMinValue(e.target.value)} disabled={isSaving} step="1" />
+                  <input type="number" className="tm-temp-input" value={minValue} onChange={e => setMinValue(e.target.value)} disabled={isSaving} step="1" onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTempRange(); else if (e.key === 'Escape') { setEditMode(false); setMinValue(defaultMin); setMaxValue(defaultMax); } }} />
                   <span style={{ color: 'var(--text-muted)' }}>-</span>
-                  <input type="number" className="tm-temp-input" value={maxValue} onChange={e => setMaxValue(e.target.value)} disabled={isSaving} step="1" />
+                  <input type="number" className="tm-temp-input" value={maxValue} onChange={e => setMaxValue(e.target.value)} disabled={isSaving} step="1" onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTempRange(); else if (e.key === 'Escape') { setEditMode(false); setMinValue(defaultMin); setMaxValue(defaultMax); } }} />
                 </div>
               ) : (
                 <>
