@@ -6123,9 +6123,10 @@ async function replaceTmsSnapshotWindow(window, jobSnapshots, rows) {
 }
 
 function resolveTmsMasterDataDriverNames(snapshot) {
-  const drivers = Array.isArray(snapshot?.driverAssign) ? snapshot.driverAssign : [];
+  const drivers = normalizeTmsDriverAssign(snapshot?.driverAssign);
   return drivers.slice(0, 2).map(function (driver) {
     return firstNonEmptyText(
+      driver?.nama_lengkap,
       driver?.driver_name,
       driver?.driverName,
       driver?.full_name,
@@ -6135,6 +6136,59 @@ function resolveTmsMasterDataDriverNames(snapshot) {
       driver?.driver,
     );
   });
+}
+
+function normalizeTmsDriverAssign(driverAssign) {
+  if (Array.isArray(driverAssign)) {
+    return driverAssign.filter(function (driver) { return driver && typeof driver === 'object'; });
+  }
+  if (typeof driverAssign === 'string' && driverAssign.trim()) {
+    try {
+      const parsed = JSON.parse(driverAssign);
+      return Array.isArray(parsed) ? parsed.filter(function (driver) { return driver && typeof driver === 'object'; }) : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function parseTmsJsonArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function buildMasterDataSnapshotLikeFromSnapshotRow(row) {
+  const taskList = parseTmsJsonArray(row?.task_list);
+  return {
+    name: String(row?.job_order_id || '').trim(),
+    jobOrderId: String(row?.job_order_id || '').trim(),
+    day: String(row?.day || '').trim(),
+    tenantLabel: String(row?.tenant_label || '').trim(),
+    customerName: String(row?.customer_name || '').trim(),
+    normalizedPlate: firstNonEmptyText(row?.normalized_plate, normalizePlateKey(row?.plate_raw)),
+    plateCandidates: collectPlateCandidates(row?.plate_raw, row?.normalized_plate),
+    plateRaw: String(row?.plate_raw || '').trim(),
+    unitLabel: String(row?.unit_label || row?.plate_raw || '').trim(),
+    jobOrderStatus: String(row?.job_order_status || '').trim(),
+    originName: String(row?.origin_name || '').trim(),
+    destinationName: String(row?.destination_name || '').trim(),
+    tempMin: toNumber(row?.temp_min),
+    tempMax: toNumber(row?.temp_max),
+    stops: null,
+    taskList,
+    driverAssign: normalizeTmsDriverAssign(row?.driver_assign),
+  };
 }
 
 async function populateMasterDataFromSync(row, snapshot, fleetContext, now) {
@@ -11677,6 +11731,150 @@ async function handleApi(req, res, url) {
       });
     } catch (error) {
       sendApiError(res, error, 'Master Data export gagal diproses.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/backfill' && method === 'POST') {
+    const session = await requireWebSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      if (!getPostgresConfig().enabled) {
+        throw new Error('PostgreSQL wajib aktif untuk Master Data backfill.');
+      }
+
+      const body = await readRequestBody(req);
+      const requestedDays = body?.days === undefined || body?.days === null || body?.days === '' ? 7 : Number(body.days);
+      if (!Number.isFinite(requestedDays) || requestedDays <= 0) {
+        const error = new Error('days harus berupa angka positif.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const days = Math.min(14, Math.floor(requestedDays));
+      const now = Date.now();
+      const cutoffDay = formatLocalDay(now - (days * 24 * 60 * 60 * 1000));
+      const snapshotResult = await postgresQuery(
+        `SELECT s.*, m.jo_id AS existing_master_jo_id
+         FROM tms_job_order_snapshots s
+         LEFT JOIN tms_master_data m ON m.jo_id = s.job_order_id
+         WHERE s.day >= $1
+         ORDER BY s.day ASC, s.job_order_id ASC`,
+        [cutoffDay],
+      );
+      const snapshots = snapshotResult.rows || [];
+      console.log(`[TMS] Backfill: processing ${snapshots.length} snapshots`);
+
+      const fleetIndex = buildFleetPlateIndex(now);
+      const batchSize = snapshots.length > 100 ? 50 : Math.max(snapshots.length, 1);
+      let processed = 0;
+      let populated = 0;
+      let finalized = 0;
+      let skipped = 0;
+
+      for (let offset = 0; offset < snapshots.length; offset += batchSize) {
+        const batch = snapshots.slice(offset, offset + batchSize);
+        for (const row of batch) {
+          processed += 1;
+          const joId = String(row?.job_order_id || '').trim();
+          try {
+            if (!joId || row?.existing_master_jo_id) {
+              skipped += 1;
+              continue;
+            }
+
+            const snapshotLike = buildMasterDataSnapshotLikeFromSnapshotRow(row);
+            const stops = getTripMonitorSnapshotStops(snapshotLike);
+            const driverNames = resolveTmsMasterDataDriverNames(snapshotLike);
+            const fleetContext = resolveFleetContextForTripMonitor(snapshotLike, fleetIndex);
+            const fleetRow = fleetContext?.row || null;
+            const normalizedPlate = firstNonEmptyText(row?.normalized_plate, snapshotLike.normalizedPlate);
+            const plate = firstNonEmptyText(row?.plate_raw, row?.unit_label, fleetRow?.alias, fleetRow?.label, fleetContext?.unitState?.vehicle);
+
+            await postgresUpsertRows(
+              'tms_master_data',
+              [{
+                jo_id: joId,
+                day: firstNonEmptyText(row?.day, formatLocalDay(now)),
+                tenant_label: firstNonEmptyText(row?.tenant_label),
+                customer_name: firstNonEmptyText(row?.customer_name),
+                plate,
+                normalized_plate: normalizedPlate,
+                driver_1_name: driverNames[0] || '',
+                driver_2_name: driverNames[1] || '',
+                origin_name: firstNonEmptyText(row?.origin_name),
+                destination_name: firstNonEmptyText(row?.destination_name),
+                stop_count: stops.length,
+                temp_min: toNumber(row?.temp_min),
+                temp_max: toNumber(row?.temp_max),
+                status: 'in_progress',
+                metadata: {
+                  source: 'snapshot_backfill',
+                  unitId: firstNonEmptyText(fleetRow?.id),
+                  unitKey: firstNonEmptyText(fleetRow?.rowKey),
+                },
+                created_at: now,
+                updated_at: now,
+              }],
+              ['jo_id', 'day', 'tenant_label', 'customer_name', 'plate', 'normalized_plate', 'driver_1_name', 'driver_2_name', 'origin_name', 'destination_name', 'stop_count', 'temp_min', 'temp_max', 'status', 'metadata', 'created_at', 'updated_at'],
+              ['jo_id'],
+              { touchUpdatedAt: false },
+            );
+            await populateMasterDataStops(joId, snapshotLike, now);
+            populated += 1;
+
+            let gpsPointCount = 0;
+            if (fleetRow?.id) {
+              const accountConfig = getAllAccountConfigs().find(function (cfg) {
+                return cfg.id === (fleetRow.accountId || 'primary');
+              }) || getAllAccountConfigs()[0];
+              if (accountConfig) {
+                const accountState = ensureAccountState(accountConfig.id);
+                gpsPointCount = await accumulateGpsPoints(joId, fleetRow.id, accountState, now);
+              }
+            }
+
+            const statusKey = String(row?.job_order_status || '').trim().toLowerCase();
+            if (statusKey === 'closed' || statusKey === 'fully delivered') {
+              if (gpsPointCount > 0) {
+                if (await finalizeMasterDataJo(joId, now)) {
+                  finalized += 1;
+                }
+              } else {
+                await postgresQuery(
+                  `UPDATE tms_master_data
+                   SET actual_distance_km = NULL,
+                       planned_distance_km = NULL,
+                       route_efficiency = NULL,
+                       temp_avg = NULL,
+                       total_duration_min = NULL,
+                       status = 'completed',
+                       finalized_at = $1,
+                       expires_at = $2,
+                       updated_at = $1
+                   WHERE jo_id = $3 AND status = 'in_progress'`,
+                  [now, now + (34 * 24 * 60 * 60 * 1000), joId],
+                );
+                finalized += 1;
+              }
+            }
+          } catch (joError) {
+            console.warn(`[TMS] Backfill failed for ${joId || 'unknown'}: ${joError.message || joError}`);
+          }
+        }
+        if (snapshots.length > 100 && offset + batchSize < snapshots.length) {
+          await new Promise(function (resolve) { setImmediate(resolve); });
+        }
+      }
+
+      sendJson(res, 200, { ok: true, processed, populated, finalized, skipped });
+    } catch (error) {
+      sendApiError(res, error, 'Master Data backfill gagal diproses.');
     }
     return true;
   }
