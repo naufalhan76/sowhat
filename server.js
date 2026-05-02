@@ -9350,6 +9350,7 @@ async function buildAstroReportPayload(searchParams) {
   const accountId = String(searchParams.get('accountId') || 'all').trim() || 'all';
   const routeId = String(searchParams.get('routeId') || '').trim();
   const unitId = String(searchParams.get('unitId') || '').trim().toUpperCase();
+  const whLocationId = String(searchParams.get('whLocationId') || '').trim();
   const summaryOnly = String(searchParams.get('summaryOnly') || '').trim() === '1';
   const activeRoutes = (config.astroRoutes || []).filter(function (route) {
     if (routeId && String(route.id || '').trim() !== routeId) {
@@ -9362,6 +9363,9 @@ async function buildAstroReportPayload(searchParams) {
       return false;
     }
     if (unitId && String(route.unitId || '').trim().toUpperCase() !== unitId) {
+      return false;
+    }
+    if (whLocationId && String(route.whLocationId || '').trim() !== whLocationId) {
       return false;
     }
     return true;

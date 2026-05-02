@@ -1117,6 +1117,7 @@ export default function App() {
     return {
       value: route.id,
       accountId,
+      whLocationId: route.whLocationId || '',
       isActive: route.isActive !== false,
       label: `${routePreview}${route.isActive === false ? ' | Inactive' : ''}`,
       preview: `${routePreview}\nStatus: ${statusLabel}${route.rit1Start && route.rit1End ? `\nRit 1: ${route.rit1Start} to ${route.rit1End}` : ''}${route.rit2Enabled && route.rit2Start && route.rit2End ? `\nRit 2: ${route.rit2Start} to ${route.rit2End}` : ''}`,
@@ -3236,6 +3237,7 @@ export default function App() {
     try {
       const query = new URLSearchParams({ startDate: astroReportFilters.startDate, endDate: astroReportFilters.endDate });
       if (astroReportFilters.accountId && astroReportFilters.accountId !== 'all') query.set('accountId', astroReportFilters.accountId);
+      if (astroReportFilters.whLocationId) query.set('whLocationId', astroReportFilters.whLocationId);
       if (astroReportFilters.routeId) {
         const selectedRoute = astroRoutes.find((route) => route.id === astroReportFilters.routeId);
         if (selectedRoute?.accountId) query.set('accountId', selectedRoute.accountId);
@@ -3258,6 +3260,7 @@ export default function App() {
       const query = new URLSearchParams({ startDate: astroReportFilters.startDate, endDate: astroReportFilters.endDate });
       let nopolPrefix = '';
       if (astroReportFilters.accountId && astroReportFilters.accountId !== 'all') query.set('accountId', astroReportFilters.accountId);
+      if (astroReportFilters.whLocationId) query.set('whLocationId', astroReportFilters.whLocationId);
       if (astroReportFilters.routeId) {
         const selectedRoute = astroRoutes.find((route) => route.id === astroReportFilters.routeId);
         if (selectedRoute?.accountId) query.set('accountId', selectedRoute.accountId);
