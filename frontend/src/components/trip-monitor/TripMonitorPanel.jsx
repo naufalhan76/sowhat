@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, RefreshCw, ArrowUpDown, ChevronDown } from 'lucide-react';
 
-import { Action, Spinner } from '../index.js';
+import { Action, Spinner, ModalPortal } from '../index.js';
 import { TMS_BOARD_COLUMNS, TMS_INCIDENT_LEGEND_CODES, tmsIncidentLabel } from './helpers.jsx';
 import { TripMonitorIncidentLegend } from './TripMonitorIncidentLegend.jsx';
 import { TripMonitorKanban } from './TripMonitorKanban.jsx';
@@ -310,37 +310,20 @@ export function TripMonitorPanel({
       ) : null}
 
       {addJoOpen ? (
-        <div
-          className="tm-add-jo-overlay"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 80,
-            background: 'rgba(15, 23, 42, 0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-          }}
-          onClick={handleCloseAddJo}
-          role="presentation"
-        >
+        <ModalPortal>
           <div
-            className="tm-add-jo-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tm-add-jo-title"
-            style={{
-              width: 'min(100%, 360px)',
-              background: 'var(--tm-panel-bg, #fff)',
-              border: '1px solid var(--tm-border, rgba(148, 163, 184, 0.25))',
-              borderRadius: '14px',
-              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.2)',
-              padding: '16px',
-            }}
-            onClick={(event) => event.stopPropagation()}
+            className="auth-modal-backdrop"
+            onClick={handleCloseAddJo}
+            role="presentation"
           >
-            <form onSubmit={handleSubmitAddJo} className="tm-add-jo-form">
+            <div
+              className="auth-modal-card tm-add-jo-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tm-add-jo-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <form onSubmit={handleSubmitAddJo} className="tm-add-jo-form">
               <div className="tm-add-jo-header" style={{ marginBottom: '12px' }}>
                 <div id="tm-add-jo-title" className="tm-add-jo-title" style={{ fontWeight: 700 }}>
                   Add Job Order
@@ -393,8 +376,9 @@ export function TripMonitorPanel({
                 </button>
               </div>
             </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       ) : null}
 
       {/* ── Main Content Area ── */}
