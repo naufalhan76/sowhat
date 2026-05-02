@@ -15,6 +15,58 @@ import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
 import TripMonitorDetailMapSection from './TripMonitorDetailMapSection.jsx';
 import { TripMonitorIncidentComments } from './TripMonitorIncidentComments.jsx';
 
+export function TripMonitorDetailSkeleton() {
+  return (
+    <div className="tm-detail-modal-body is-skeleton">
+      <div className="tm-stack">
+        <div className="tm-status-section">
+          <div className="tm-status-row">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '100px' }} />
+            <div className="tm-skeleton tm-skeleton-pill" style={{ width: '140px', height: '28px' }} />
+          </div>
+        </div>
+
+        <div className="tm-order-detail">
+          <div className="tm-order-row">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '80px' }} />
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '120px' }} />
+          </div>
+          <div className="tm-order-row">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '60px' }} />
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '200px' }} />
+          </div>
+          <div className="tm-order-row">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '80px' }} />
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '150px' }} />
+          </div>
+        </div>
+
+        <div className="tm-stack-section tm-section-collapsible">
+          <div className="tm-section-summary">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '100px' }} />
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '24px' }} />
+          </div>
+          <div className="tm-section-content" style={{ padding: '12px' }}>
+            <div className="tm-skeleton tm-skeleton-block" style={{ height: '200px', borderRadius: '8px' }} />
+          </div>
+        </div>
+
+        <div className="tm-stack-section tm-section-collapsible">
+          <div className="tm-section-summary">
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '90px' }} />
+            <div className="tm-skeleton tm-skeleton-text" style={{ width: '24px' }} />
+          </div>
+          <div className="tm-section-content" style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+             <div className="tm-skeleton tm-skeleton-block" style={{ height: '40px', borderRadius: '6px' }} />
+             <div className="tm-skeleton tm-skeleton-block" style={{ height: '40px', borderRadius: '6px' }} />
+             <div className="tm-skeleton tm-skeleton-block" style={{ height: '40px', borderRadius: '6px' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function useIsVisible(options = {}) {
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef(null);
@@ -251,7 +303,7 @@ export function TripMonitorDetailModal({
 
   const body = (
     <div className="tm-detail-modal-body">
-      {busy ? <div className="empty-state">Loading detail...</div> : (
+      {busy ? <TripMonitorDetailSkeleton /> : (
         <div className="tm-stack">
           <div className="tm-status-section">
             <div className="tm-status-row">

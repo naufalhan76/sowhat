@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { tmsSeverityLabel, pickFirstText, normalizeTmsDriverAssign, extractTmsDriverName, normalizeTemperatureRange } from './helpers.jsx';
-import { TripMonitorDetailModal } from './TripMonitorDetailModal.jsx';
+import { TripMonitorDetailModal, TripMonitorDetailSkeleton } from './TripMonitorDetailModal.jsx';
 import { TripMonitorDetailHeader } from './TripMonitorDetailHeader.jsx';
 
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -256,7 +256,7 @@ export function TripMonitorFloatingPanel({
 
       <div className="tm-float-body" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
         {panel.detailBusy ? (
-          <div className="empty-state">Loading detail...</div>
+          <TripMonitorDetailSkeleton />
         ) : panel.detailError ? (
           <div className="empty-state" style={{ color: 'var(--danger)', padding: '24px', textAlign: 'center' }}>
             <p style={{ fontWeight: 600, marginBottom: '8px' }}>Gagal memuat detail</p>

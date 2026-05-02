@@ -13968,11 +13968,40 @@ body.fleet-workspace-resizing * {
 .tm-stack {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
-  padding: 0;
-  background: var(--background-color, #fafafa);
+  gap: 12px;
+  padding: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Trip Monitor Detail Skeleton */
+.is-skeleton {
+  opacity: 0.8;
+  pointer-events: none;
+}
+.tm-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-raised) 0px,
+    var(--surface-hover) 40px,
+    var(--surface-raised) 80px
+  );
+  background-size: 200% 100%;
+  animation: tm-skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+.tm-skeleton-text {
+  height: 14px;
+}
+.tm-skeleton-pill {
+  border-radius: 16px;
+}
+.tm-skeleton-block {
+  width: 100%;
+}
+@keyframes tm-skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* Only enable scroll on tm-stack when used in drawer mode */
