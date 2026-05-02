@@ -322,6 +322,13 @@ export function TripMonitorPanel({
               aria-modal="true"
               aria-labelledby="tm-add-jo-title"
               onClick={(event) => event.stopPropagation()}
+              style={{
+                background: 'var(--surface)',
+                borderRadius: 'var(--radius-xl)',
+                padding: '24px',
+                color: 'var(--text-main)',
+                boxShadow: 'var(--modal-shadow)',
+              }}
             >
               <form onSubmit={handleSubmitAddJo} className="tm-add-jo-form">
               <div className="tm-add-jo-header" style={{ marginBottom: '12px' }}>
