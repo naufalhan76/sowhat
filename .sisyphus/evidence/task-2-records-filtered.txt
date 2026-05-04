@@ -1,0 +1,15 @@
+Task 2 verification evidence - 2026-05-04
+
+grep "[TMS Geofence] Job" server.js:
+4558: console.log(`[TMS Geofence] Job ${jobId}: cutoff=${new Date(geofenceCutoffMs).toISOString()}, records: ${records.length} total, ${filteredRecords.length} after filter`);
+
+grep "filteredRecords" server.js:
+4555: const filteredRecords = records.filter(r => r.timestamp >= geofenceCutoffMs);
+4558: console.log(`[TMS Geofence] Job ${jobId}: cutoff=${new Date(geofenceCutoffMs).toISOString()}, records: ${records.length} total, ${filteredRecords.length} after filter`);
+4577: const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(filteredRecords, stop, radius);
+
+grep "extractGeofenceVisitStats(filteredRecords" server.js:
+4577: const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(filteredRecords, stop, radius);
+
+lsp_diagnostics server.js:
+No diagnostics found

@@ -4551,8 +4551,11 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   const liveLat = toNumber(fleetRow?.latitude);
   const liveLng = toNumber(fleetRow?.longitude);
   const { records } = buildRealtimeRecordSeries(unitState, snapshot, now);
+  const geofenceCutoffMs = computeGeofenceCutoffMs(snapshot, now);
+  const filteredRecords = records.filter(r => r.timestamp >= geofenceCutoffMs);
 
   const jobId = snapshot.jobOrderId || 'unknown';
+  console.log(`[TMS Geofence] Job ${jobId}: cutoff=${new Date(geofenceCutoffMs).toISOString()}, records: ${records.length} total, ${filteredRecords.length} after filter`);
   if (records.length > 0) {
     console.log(`[TMS Geofence] Unit ${fleetRow?.label || snapshot?.unitId || '-'} (Job: ${jobId}) dievaluasi dengan ${records.length} titik GPS historis (Paling lama: ${new Date(records[0].timestamp).toLocaleString()})`);
   }
@@ -4571,7 +4574,7 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   return stops.map(function (stop, index) {
     const distanceMeters = distanceMetersBetween(liveLat, liveLng, stop.latitude, stop.longitude);
     const insideRadius = distanceMeters !== null && distanceMeters <= radius;
-    const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(records, stop, radius);
+    const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(filteredRecords, stop, radius);
 
     let arrivedAt = null;
     let departedAt = null;
