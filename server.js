@@ -4537,7 +4537,7 @@ function computeGeofenceCutoffMs(snapshot, now) {
   } else {
     cutoff = parseSolofleetDateInputStart(snapshot?.day);
   }
-  if (cutoff === null) {
+  if (cutoff === null || !Number.isFinite(cutoff)) {
     cutoff = now - (2 * 60 * 60 * 1000);
   }
   if (cutoff > now) cutoff = now;
@@ -4562,11 +4562,6 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
 
   if (unitState) {
     unitState.tmsGeofence = unitState.tmsGeofence || {};
-    for (const key of Object.keys(unitState.tmsGeofence)) {
-      if (key !== jobId) {
-        delete unitState.tmsGeofence[key];
-      }
-    }
     unitState.tmsGeofence[jobId] = unitState.tmsGeofence[jobId] || {};
   }
   const geoMemory = unitState?.tmsGeofence?.[jobId] || {};

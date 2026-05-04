@@ -1,0 +1,8 @@
+Task 4 QA evidence: defensive cutoff fallback added
+
+grep: if (cutoff === null || !Number.isFinite(cutoff))
+result: server.js:4540 if (cutoff === null || !Number.isFinite(cutoff)) {
+
+Placement: fallback remains after etaOrigin / parseSolofleetDateInputStart resolution and before the future cutoff clamp.
+
+lsp_diagnostics server.js: No diagnostics found
