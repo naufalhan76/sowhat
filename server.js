@@ -5341,6 +5341,10 @@ function refreshTripMonitorStoredRow(row, fleetIndex, tmsConfig, now, overrideMa
     severity = 'warning';
     boardStatus = 'warning';
   }
+  const effectiveShippingKey = shippingStatus?.key;
+  if (effectiveShippingKey === 'selesai-pengiriman' || effectiveShippingKey === 'selesai') {
+    boardStatus = 'closed';
+  }
 
   const driver = (headline.item.driverAssign || [])[0] || null;
   return {
