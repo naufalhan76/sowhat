@@ -1179,6 +1179,7 @@ export default function App() {
     const q = String(tripMonitorFilters.search || '').trim().toLowerCase();
     const appNeedle = String(tripMonitorFilters.appStatus || '').trim().toLowerCase();
     return tripMonitorRows.filter((row) => {
+      if (row.boardStatus === 'closed') return false;
       if (tripMonitorFilters.customer !== 'all' && row.customerName !== tripMonitorFilters.customer) return false;
       if (tripMonitorFilters.incidentCode !== 'all' && !(row.incidentCodes || []).includes(tripMonitorFilters.incidentCode)) return false;
       if (appNeedle && appNeedle !== 'all' && !String(row.driverAppStatus || '').toLowerCase().includes(appNeedle)) return false;
