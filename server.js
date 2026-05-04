@@ -4576,6 +4576,21 @@ function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
     const insideRadius = distanceMeters !== null && distanceMeters <= radius;
     const { firstInside, lastInside, minDistance } = extractGeofenceVisitStats(filteredRecords, stop, radius);
 
+    // Invalidate geoMemory entries that were recorded before cutoff
+    if (unitState && geoMemory[index]) {
+      if (geoMemory[index].arrivedAt && geoMemory[index].arrivedAt < geofenceCutoffMs) {
+        // This arrival was detected from records before JO relevance window
+        delete geoMemory[index].arrivedAt;
+        delete geoMemory[index].arrivedSource;
+        console.log(`[TMS Geofence] Job ${jobId} stop ${index}: invalidated stale arrivedAt (before cutoff)`);
+      }
+      if (geoMemory[index].departedAt && geoMemory[index].departedAt < geofenceCutoffMs) {
+        delete geoMemory[index].departedAt;
+        delete geoMemory[index].departedSource;
+        console.log(`[TMS Geofence] Job ${jobId} stop ${index}: invalidated stale departedAt (before cutoff)`);
+      }
+    }
+
     let arrivedAt = null;
     let departedAt = null;
     let arrivalSource = null;

@@ -1,0 +1,14 @@
+Task 3 geoMemory invalidation verification — 2026-05-04
+
+Change evidence:
+- Added invalidation logic inside buildTripMonitorStopProgress() stops.map() loop at the start of the loop body.
+- Invalidation runs before the existing geoMemory reads at server.js:4599 (`geoMemory[index]?.arrivedAt`).
+- Only stale arrivedAt/arrivedSource and departedAt/departedSource fields are deleted; geoMemory[index] is preserved.
+
+Required grep evidence:
+- grep "invalidated stale arrivedAt": server.js:4585 console.log(`[TMS Geofence] Job ${jobId} stop ${index}: invalidated stale arrivedAt (before cutoff)`);
+- grep "invalidated stale departedAt": server.js:4590 console.log(`[TMS Geofence] Job ${jobId} stop ${index}: invalidated stale departedAt (before cutoff)`);
+- grep "geoMemory[index].arrivedAt < geofenceCutoffMs": server.js:4581 if (geoMemory[index].arrivedAt && geoMemory[index].arrivedAt < geofenceCutoffMs) {
+
+Diagnostics evidence:
+- lsp_diagnostics on server.js: No diagnostics found.
