@@ -6160,12 +6160,13 @@ function resolveTmsMasterDataDriverNames(snapshot) {
   return drivers.slice(0, 2).map(function (driver) {
     return firstNonEmptyText(
       driver?.nama_lengkap,
+      driver?.nama,
       driver?.driver_name,
       driver?.driverName,
       driver?.full_name,
       driver?.fullName,
       driver?.employee_name,
-      driver?.name,
+      driver?.employee_full_name,
       driver?.driver,
     );
   });
@@ -6367,6 +6368,23 @@ async function accumulateGpsPoints(joId, unitId, accountState, now) {
     `insert into tms_master_data_gps_points (${columns.join(', ')}) values ${valueRows.join(', ')}`,
     params,
   );
+
+  // Update trip_start_at / trip_end_at from accumulated GPS points
+  await postgresQuery(
+    `UPDATE tms_master_data
+     SET trip_start_at = sub.min_ts,
+         trip_end_at = sub.max_ts,
+         updated_at = $2
+     FROM (
+       SELECT MIN(timestamp_ms) AS min_ts, MAX(timestamp_ms) AS max_ts
+       FROM tms_master_data_gps_points
+       WHERE jo_id = $1
+     ) sub
+     WHERE tms_master_data.jo_id = $1
+       AND tms_master_data.status = 'in_progress'`,
+    [resolvedJoId, resolvedNow],
+  );
+
   return newPoints.length;
 }
 
@@ -11771,6 +11789,29 @@ async function handleApi(req, res, url) {
       });
     } catch (error) {
       sendApiError(res, error, 'Master Data export gagal diproses.');
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tms/master-data/purge' && method === 'POST') {
+    const session = await requireAdminSession(req, res);
+    if (!session) {
+      return true;
+    }
+    if (!requireTrustedApiMutation(req, res)) {
+      return true;
+    }
+    try {
+      if (!getPostgresConfig().enabled) {
+        throw new Error('PostgreSQL wajib aktif untuk Master Data purge.');
+      }
+      await postgresQuery('DELETE FROM tms_master_data_gps_points');
+      await postgresQuery('DELETE FROM tms_master_data_stops');
+      await postgresQuery('DELETE FROM tms_master_data');
+      console.log('[TMS] Master data purged — all rows deleted.');
+      sendJson(res, 200, { ok: true, message: 'All master data purged. Run backfill or wait for next sync to re-populate.' });
+    } catch (error) {
+      sendApiError(res, error, 'Purge gagal.');
     }
     return true;
   }
