@@ -1,0 +1,2 @@
+Verified `computeGeofenceCutoffMs(snapshot, now)` exists in `server.js` before `buildTripMonitorStopProgress`.
+Verified body includes `snapshot?.etaOrigin`, `parseSolofleetDateInputStart(snapshot?.day)`, `2 * 60 * 60 * 1000`, and `if (cutoff > now) cutoff = now`.

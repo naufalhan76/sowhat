@@ -4528,6 +4528,22 @@ function extractGeofenceVisitStats(records, stop, radius) {
   return { firstInside, lastInside, minDistance };
 }
 
+function computeGeofenceCutoffMs(snapshot, now) {
+  now = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+  const etaOrigin = toTimestampMaybe(snapshot?.etaOrigin);
+  let cutoff = null;
+  if (etaOrigin !== null) {
+    cutoff = etaOrigin - (2 * 60 * 60 * 1000);
+  } else {
+    cutoff = parseSolofleetDateInputStart(snapshot?.day);
+  }
+  if (cutoff === null) {
+    cutoff = now - (2 * 60 * 60 * 1000);
+  }
+  if (cutoff > now) cutoff = now;
+  return cutoff;
+}
+
 function buildTripMonitorStopProgress(snapshot, fleetRow, unitState, options) {
   const stops = getTripMonitorSnapshotStops(snapshot);
   const radius = Math.max(50, Number(options?.radiusMeters || DEFAULT_TMS_CONFIG.geofenceRadiusMeters));
